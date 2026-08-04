@@ -64,7 +64,7 @@ features below.
 
 <!-- gen-features:start -->
 
-Default features: `egc`, `indexed-quant`, `std`.
+Default features: `egc`, `std`.
 
 ### `dev`
 
@@ -80,19 +80,6 @@ Can be used so an optimized build still reports development diagnostics (see the
 
 Enables grapheme-cluster-aware text handling (via `unicode-segmentation`) for EGC-correct cell
 diffing and layout.
-
-### `indexed-quant`
-
-🟢 Enabled by default.
-
-Gates perceptual (Oklab) RGB → Indexed/ANSI quantization (`gem/space`) and `Color`'s `gem`-space
-conversions (`to_srgb`/`from_srgb`/`lerp`/`from_hex`).
-
-Without it, `Color::to_indexed`/ `Color::to_ansi` fall back to euclidean RGB cube-mapping instead of
-failing to compile.
-
-This is a capability flag, not a backend: it only turns on `gem`'s `space` module, whose float math
-the crate's mandatory `std`-or-`libm` backend already supplies.
 
 ### `libm`
 

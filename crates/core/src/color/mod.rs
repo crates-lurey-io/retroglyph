@@ -12,13 +12,12 @@
 mod ansi;
 mod convert;
 mod named;
-#[cfg(feature = "indexed-quant")]
 mod palette_oklab;
 mod parse;
 mod style;
 mod tint;
 
-pub use ansi::{AnsiColor, InvalidAnsiIndex};
+pub use ansi::{AnsiColor, InvalidAnsiIndex, Quantize};
 pub use parse::ParseColorError;
 pub use style::Style;
 pub use tint::Tint;

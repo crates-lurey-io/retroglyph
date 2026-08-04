@@ -54,7 +54,6 @@ fn to_indexed(c: &mut Criterion) {
     group.finish();
 }
 
-#[cfg(feature = "indexed-quant")]
 fn lerp(c: &mut Criterion) {
     let mut group = c.benchmark_group("color/lerp");
     group.throughput(Throughput::Elements(SAMPLES as u64));
@@ -120,7 +119,6 @@ fn blend_modes(c: &mut Criterion) {
 
 fn color(c: &mut Criterion) {
     to_indexed(c);
-    #[cfg(feature = "indexed-quant")]
     lerp(c);
     blend_modes(c);
 }

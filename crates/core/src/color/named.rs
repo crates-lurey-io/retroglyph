@@ -1,7 +1,6 @@
 //! `Color`'s string-name/hex constructors: [`Color::from_named`] (the CSS named-color table) and
-//! [`Color::from_hex`], both `gem`-backed and gated on the `indexed-quant` feature.
+//! [`Color::from_hex`], both `gem`-backed.
 
-#[cfg(feature = "indexed-quant")]
 use gem::space::Srgb;
 
 use super::Color;
@@ -22,7 +21,6 @@ impl Color {
     ///
     /// assert_eq!(Color::from_named("not-a-color"), None);
     /// ```
-    #[cfg(feature = "indexed-quant")]
     #[must_use]
     #[allow(clippy::too_many_lines)]
     pub fn from_named(name: &str) -> Option<Self> {
@@ -195,7 +193,6 @@ impl Color {
     /// # run().unwrap();
     /// # }
     /// ```
-    #[cfg(feature = "indexed-quant")]
     #[must_use]
     pub fn from_hex(hex: &str) -> Option<Self> {
         Srgb::from_hex(hex).map(Self::from_srgb)
@@ -206,7 +203,6 @@ impl Color {
 mod tests {
     use super::*;
 
-    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_from_named_color() {
         let gold = Color::from_named("gold").expect("gold is a named color");
@@ -220,20 +216,17 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_from_named_color_case_insensitive() {
         let red = Color::from_named("RED").expect("should match uppercase");
         assert_eq!(red, Color::Rgb { r: 255, g: 0, b: 0 });
     }
 
-    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_from_named_color_invalid() {
         assert_eq!(Color::from_named("not-a-color"), None);
     }
 
-    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_from_hex_full() {
         let c = Color::from_hex("#ff8000").expect("valid hex");
@@ -247,7 +240,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_from_hex_short() {
         let c = Color::from_hex("#f80").expect("valid short hex");
@@ -261,14 +253,12 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_from_hex_invalid() {
         assert_eq!(Color::from_hex("xyz"), None);
         assert_eq!(Color::from_hex("#xyz"), None);
     }
 
-    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_gray_grey_synonyms() {
         assert_eq!(Color::from_named("gray"), Color::from_named("grey"));

@@ -19,7 +19,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = ["std", "egc", "indexed-quant"]
+default = ["std", "egc"]
 # Forces `BuildMode::Dev` on in a build that would otherwise resolve to `Release`.
 #
 # Can be used so an optimized build still reports development diagnostics (see the [`dev`]
@@ -28,16 +28,6 @@ dev = []
 # Enables grapheme-cluster-aware text handling (via `unicode-segmentation`) for EGC-correct cell
 # diffing and layout.
 egc = ["dep:unicode-segmentation"]
-# Gates perceptual (Oklab) RGB → Indexed/ANSI quantization (`gem/space`) and [`Color`]'s
-# `gem`-space conversions (`to_srgb`/`from_srgb`/`lerp`/`from_hex`).
-#
-# Without it, [`Color::to_indexed`](color::Color::to_indexed)/
-# [`Color::to_ansi`](color::Color::to_ansi) fall back to euclidean RGB cube-mapping instead of
-# failing to compile.
-#
-# This is a capability flag, not a backend: it only turns on `gem`'s `space` module, whose float
-# math the crate's mandatory `std`-or-`libm` backend already supplies.
-indexed-quant = ["gem/space"]
 # Uses `libm`'s software float implementation (`roundf`/`fmaf`/`sinf`/`cosf`/`powf`) for
 # `animate`'s easing curves and the separable [`BlendMode`] channel math, via this crate's own
 # `math` shim -- the `no_std` side of that split. See `std` below for the alternative that prefers
@@ -73,11 +63,10 @@ testing = []
 
 [dependencies]
 # `default-features = false` so gem's float backend is picked by this crate's own `std`/`libm`
-# (which forward `gem/std`/`gem/libm`) rather than by gem's defaults, and so `gem/space`
-# (perceptual color spaces, the named-color table) stays behind `indexed-quant`. gem prefers
-# std's float intrinsics over libm when both are present, so a `std` build gets std math with
-# libm sitting inert. The pixel-format layer (`rgb`/`gray`/`alpha`/`channel`: const integer
-# channel math and the 8-bit color formats) needs no backend and is always available.
+# (which forward `gem/std`/`gem/libm`) rather than by gem's defaults. gem prefers std's float
+# intrinsics over libm when both are present, so a `std` build gets std math with libm sitting
+# inert. `gem/space` (perceptual color spaces, the named-color table) arrives either way: both
+# `gem/std` and `gem/libm` list it, and one of this crate's `std`/`libm` is mandatory.
 gem = { version = "0.2.2", default-features = false }
 # SCREEN/DODGE/BURN/OVERLAY/MULTIPLY blend modes for `Grid::blit_alpha` (see `BlendMode`); linear
 # blending stays on `gem::Mix`/`gem::rgb::Rgb888::mix_u8` above and needs no math backend.

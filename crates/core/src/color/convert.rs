@@ -1,20 +1,16 @@
 //! `Color`'s inherent methods: named constants, RGB resolution, and the `gem`-backed color-space
-//! conversions (`indexed-quant` feature). See `named` for the string-name/hex constructors
-//! (`Color::from_named`, `Color::from_hex`).
+//! conversions. See `named` for the string-name/hex constructors (`Color::from_named`,
+//! `Color::from_hex`).
 
-#[cfg(feature = "indexed-quant")]
 use gem::Mix as _;
-#[cfg(feature = "indexed-quant")]
 use gem::rgb::Rgb888;
-#[cfg(feature = "indexed-quant")]
 use gem::space::Srgb;
 
 use super::Color;
 use super::ansi::AnsiColor;
 use super::ansi::indexed_to_rgb;
-#[cfg(feature = "indexed-quant")]
 use super::ansi::rgb_to_srgb;
-use super::ansi::{rgb_to_ansi, rgb_to_indexed};
+use super::ansi::{Quantize, rgb_to_ansi, rgb_to_indexed};
 
 impl Color {
     /// Standard Black (ANSI).
@@ -86,7 +82,6 @@ impl Color {
     /// Converts an `Rgb` variant to `gem::space::Srgb`.
     ///
     /// Returns `None` for non-RGB variants (`Default`, `Ansi`, `Indexed`).
-    #[cfg(feature = "indexed-quant")]
     #[must_use]
     pub fn to_srgb(self) -> Option<Srgb> {
         match self {
@@ -101,7 +96,6 @@ impl Color {
     /// zero), via `gem::rgb::Rgb888`'s own `Srgb` conversion, the same round-to-nearest rule
     /// every other integer channel operation in this crate follows (see
     /// `tests/rounding_conformance.rs`).
-    #[cfg(feature = "indexed-quant")]
     #[must_use]
     pub fn from_srgb(srgb: Srgb) -> Self {
         let (r, g, b) = Rgb888::from(srgb).to_rgb();
@@ -114,7 +108,6 @@ impl Color {
     /// non-`Rgb` variants (`Ansi`, `Indexed`) contribute their real color rather than being
     /// skipped. [`Color::Default`] has no intrinsic RGB value, so it falls back to
     /// `(0, 0, 0)` when it appears as `a` and `(255, 255, 255)` when it appears as `b`.
-    #[cfg(feature = "indexed-quant")]
     #[must_use]
     pub fn lerp(a: Self, b: Self, t: f32) -> Self {
         let (r1, g1, b1) = a.resolve_rgb((0, 0, 0));
@@ -131,7 +124,6 @@ impl Color {
     /// `gem::space::Hsl` method `f` calls. Non-`Rgb` variants are resolved to `(r, g, b)` via
     /// [`Color::resolve_rgb`] before the transform is applied, rather than being returned
     /// unchanged. [`Color::Default`] has no intrinsic RGB value, so it resolves to `(0, 0, 0)`.
-    #[cfg(feature = "indexed-quant")]
     fn map_hsl(self, f: impl FnOnce(gem::space::Hsl) -> gem::space::Hsl) -> Self {
         let (r, g, b) = self.resolve_rgb((0, 0, 0));
         let hsl = gem::space::Hsl::from(rgb_to_srgb(r, g, b));
@@ -143,7 +135,6 @@ impl Color {
     /// Non-`Rgb` variants are resolved to `(r, g, b)` via [`Color::resolve_rgb`] before the
     /// transform is applied, rather than being returned unchanged. [`Color::Default`] has no
     /// intrinsic RGB value, so it resolves to `(0, 0, 0)`.
-    #[cfg(feature = "indexed-quant")]
     #[must_use]
     pub fn lighten(self, amount: f32) -> Self {
         self.map_hsl(|hsl| hsl.lighten(amount))
@@ -154,7 +145,6 @@ impl Color {
     /// Non-`Rgb` variants are resolved to `(r, g, b)` via [`Color::resolve_rgb`] before the
     /// transform is applied, rather than being returned unchanged. [`Color::Default`] has no
     /// intrinsic RGB value, so it resolves to `(0, 0, 0)`.
-    #[cfg(feature = "indexed-quant")]
     #[must_use]
     pub fn darken(self, amount: f32) -> Self {
         self.map_hsl(|hsl| hsl.darken(amount))
@@ -165,7 +155,6 @@ impl Color {
     /// Non-`Rgb` variants are resolved to `(r, g, b)` via [`Color::resolve_rgb`] before the
     /// transform is applied, rather than being returned unchanged. [`Color::Default`] has no
     /// intrinsic RGB value, so it resolves to `(0, 0, 0)`.
-    #[cfg(feature = "indexed-quant")]
     #[must_use]
     pub fn saturate(self, amount: f32) -> Self {
         self.map_hsl(|hsl| hsl.saturate(amount))
@@ -176,7 +165,6 @@ impl Color {
     /// Non-`Rgb` variants are resolved to `(r, g, b)` via [`Color::resolve_rgb`] before the
     /// transform is applied, rather than being returned unchanged. [`Color::Default`] has no
     /// intrinsic RGB value, so it resolves to `(0, 0, 0)`.
-    #[cfg(feature = "indexed-quant")]
     #[must_use]
     pub fn desaturate(self, amount: f32) -> Self {
         self.map_hsl(|hsl| hsl.desaturate(amount))
@@ -187,24 +175,16 @@ impl Color {
     /// Non-`Rgb` variants are resolved to `(r, g, b)` via [`Color::resolve_rgb`] before the
     /// transform is applied, rather than being returned unchanged. [`Color::Default`] has no
     /// intrinsic RGB value, so it resolves to `(0, 0, 0)`.
-    #[cfg(feature = "indexed-quant")]
     #[must_use]
     pub fn complement(self) -> Self {
         self.map_hsl(gem::space::Hsl::complement)
     }
 
-    /// Quantizes an RGB color to the nearest entry in the standard 256-color palette.
+    /// Quantizes an RGB color to the nearest entry in the standard 256-color palette, by
+    /// perceptual (Oklab) distance.
     ///
-    /// - `Color::Rgb` inputs are converted to the nearest 256-color palette index (0–255).
-    ///   With the `indexed-quant` feature (default), perceptual distance in the Oklab color space is
-    ///   used, which better matches human color perception than raw RGB distance. Without
-    ///   `gem`, euclidean RGB distance is used instead, computed against the 6×6×6 color
-    ///   cube (indices 16–231), supplemented by the grayscale ramp (232–255) and the 16
-    ///   ANSI colors (0–15).
-    /// - `Color::Default`, `Color::Ansi`, and `Color::Indexed` are returned unchanged: this
-    ///   method only downgrades `Rgb` colors.
-    /// - Ties (multiple equidistant palette entries) are resolved by preferring the lower
-    ///   index.
+    /// Equivalent to [`to_indexed_with(Quantize::Perceptual)`](Self::to_indexed_with); see there
+    /// for the full contract and for the euclidean alternative.
     ///
     /// # Examples
     ///
@@ -223,21 +203,42 @@ impl Color {
     /// its own. See [`Color::to_ansi`] to quantize to the smaller 16-color ANSI palette.
     #[must_use]
     pub fn to_indexed(self) -> Self {
+        self.to_indexed_with(Quantize::Perceptual)
+    }
+
+    /// Quantizes an RGB color to the nearest entry in the standard 256-color palette, under
+    /// `metric`.
+    ///
+    /// - `Color::Rgb` inputs are converted to the nearest 256-color palette index (0–255),
+    ///   searching the 16 ANSI colors (0–15), the 6×6×6 color cube (16–231), and the grayscale
+    ///   ramp (232–255).
+    /// - `Color::Default`, `Color::Ansi`, and `Color::Indexed` are returned unchanged: this
+    ///   method only downgrades `Rgb` colors.
+    /// - Ties (multiple equidistant palette entries) are resolved by preferring the lower
+    ///   index.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::{Color, Quantize};
+    ///
+    /// let salmon = Color::Rgb { r: 250, g: 128, b: 114 };
+    /// assert_eq!(salmon.to_indexed_with(Quantize::Perceptual), Color::Indexed(210));
+    /// assert_eq!(salmon.to_indexed_with(Quantize::Euclidean), Color::Indexed(209));
+    /// ```
+    #[must_use]
+    pub fn to_indexed_with(self, metric: Quantize) -> Self {
         match self {
-            Self::Rgb { r, g, b } => Self::Indexed(rgb_to_indexed(r, g, b)),
+            Self::Rgb { r, g, b } => Self::Indexed(rgb_to_indexed(r, g, b, metric)),
             other => other,
         }
     }
 
-    /// Quantizes an RGB color to the nearest of the 16 standard ANSI palette colors.
+    /// Quantizes an RGB color to the nearest of the 16 standard ANSI palette colors, by
+    /// perceptual (Oklab) distance.
     ///
-    /// - `Color::Rgb` inputs are converted to the nearest of the 16 standard ANSI colors.
-    ///   With the `indexed-quant` feature (default), perceptual distance in the Oklab color space is
-    ///   used. Without `gem`, euclidean RGB distance is used instead.
-    /// - `Color::Default`, `Color::Ansi`, and `Color::Indexed` are returned unchanged: this
-    ///   method only downgrades `Rgb` colors.
-    /// - Ties (multiple equidistant palette entries) are resolved by preferring the lower
-    ///   ANSI index.
+    /// Equivalent to [`to_ansi_with(Quantize::Perceptual)`](Self::to_ansi_with); see there for the
+    /// full contract and for the euclidean alternative.
     ///
     /// # Examples
     ///
@@ -256,8 +257,32 @@ impl Color {
     /// larger 256-color palette instead.
     #[must_use]
     pub fn to_ansi(self) -> Self {
+        self.to_ansi_with(Quantize::Perceptual)
+    }
+
+    /// Quantizes an RGB color to the nearest of the 16 standard ANSI palette colors, under
+    /// `metric`.
+    ///
+    /// - `Color::Rgb` inputs are converted to the nearest of the 16 standard ANSI colors.
+    /// - `Color::Default`, `Color::Ansi`, and `Color::Indexed` are returned unchanged: this
+    ///   method only downgrades `Rgb` colors.
+    /// - Ties (multiple equidistant palette entries) are resolved by preferring the lower
+    ///   ANSI index.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::{AnsiColor, Color, Quantize};
+    ///
+    /// // Euclidean RGB distance over-weights green, so this reddish brown lands on yellow.
+    /// let chocolate = Color::Rgb { r: 210, g: 105, b: 30 };
+    /// assert_eq!(chocolate.to_ansi_with(Quantize::Perceptual), Color::Ansi(AnsiColor::BrightRed));
+    /// assert_eq!(chocolate.to_ansi_with(Quantize::Euclidean), Color::Ansi(AnsiColor::Yellow));
+    /// ```
+    #[must_use]
+    pub fn to_ansi_with(self, metric: Quantize) -> Self {
         match self {
-            Self::Rgb { r, g, b } => Self::Ansi(rgb_to_ansi(r, g, b)),
+            Self::Rgb { r, g, b } => Self::Ansi(rgb_to_ansi(r, g, b, metric)),
             other => other,
         }
     }
@@ -395,7 +420,89 @@ mod tests {
         assert!(matches!(gray.to_indexed(), Color::Indexed(_)));
     }
 
-    #[cfg(feature = "indexed-quant")]
+    #[test]
+    fn test_to_indexed_and_to_ansi_default_to_perceptual() {
+        // The no-argument forms are the `Quantize::Perceptual` ones, not merely "whichever
+        // metric happens to be compiled in".
+        for (r, g, b) in [
+            (210, 105, 30),
+            (250, 128, 114),
+            (135, 206, 235),
+            (0, 128, 128),
+        ] {
+            let c = Color::Rgb { r, g, b };
+            assert_eq!(c.to_indexed(), c.to_indexed_with(Quantize::Perceptual));
+            assert_eq!(c.to_ansi(), c.to_ansi_with(Quantize::Perceptual));
+        }
+    }
+
+    #[test]
+    fn test_quantize_metrics_disagree() {
+        // Guards the point of the knob: if these ever agreed everywhere, one metric would be
+        // dead weight.
+        let chocolate = Color::Rgb {
+            r: 210,
+            g: 105,
+            b: 30,
+        };
+        assert_eq!(
+            chocolate.to_ansi_with(Quantize::Perceptual),
+            Color::Ansi(AnsiColor::BrightRed)
+        );
+        assert_eq!(
+            chocolate.to_ansi_with(Quantize::Euclidean),
+            Color::Ansi(AnsiColor::Yellow)
+        );
+
+        let salmon = Color::Rgb {
+            r: 250,
+            g: 128,
+            b: 114,
+        };
+        assert_eq!(
+            salmon.to_indexed_with(Quantize::Perceptual),
+            Color::Indexed(210)
+        );
+        assert_eq!(
+            salmon.to_indexed_with(Quantize::Euclidean),
+            Color::Indexed(209)
+        );
+    }
+
+    #[test]
+    fn test_quantize_non_rgb_passthrough_under_every_metric() {
+        for metric in [Quantize::Perceptual, Quantize::Euclidean] {
+            for color in [
+                Color::Default,
+                Color::Ansi(AnsiColor::Green),
+                Color::Indexed(42),
+            ] {
+                assert_eq!(color.to_indexed_with(metric), color, "{color:?} {metric:?}");
+                assert_eq!(color.to_ansi_with(metric), color, "{color:?} {metric:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn test_quantize_default_is_perceptual() {
+        assert_eq!(Quantize::default(), Quantize::Perceptual);
+    }
+
+    #[test]
+    fn test_every_metric_maps_each_ansi_reference_color_to_itself() {
+        for metric in [Quantize::Perceptual, Quantize::Euclidean] {
+            for ansi in ANSI_COLORS {
+                let (r, g, b) = ansi.to_rgb();
+                let c = Color::Rgb { r, g, b };
+                assert_eq!(
+                    c.to_ansi_with(metric),
+                    Color::Ansi(ansi),
+                    "ansi color {ansi:?} under {metric:?}"
+                );
+            }
+        }
+    }
+
     #[test]
     fn test_lerp() {
         let red = Color::Rgb { r: 255, g: 0, b: 0 };
@@ -412,7 +519,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_lerp_resolves_non_rgb() {
         let red = Color::Rgb { r: 255, g: 0, b: 0 };
@@ -444,7 +550,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_lighten_rgb() {
         let c = Color::Rgb {
@@ -456,7 +561,6 @@ mod tests {
         assert_ne!(lighter, c);
     }
 
-    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_lighten_resolves_non_rgb() {
         assert_ne!(Color::Default.lighten(0.5), Color::Default);
@@ -467,7 +571,6 @@ mod tests {
         assert_ne!(Color::BLACK.lighten(0.5), Color::BLACK);
     }
 
-    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_darken_rgb() {
         let c = Color::Rgb {
@@ -479,7 +582,6 @@ mod tests {
         assert_ne!(darker, c);
     }
 
-    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_darken_resolves_non_rgb() {
         // `Color::Default` resolves to `(0, 0, 0)`, which darkening leaves at black.
@@ -492,7 +594,6 @@ mod tests {
         assert_eq!(Color::BLACK.darken(0.5), Color::Rgb { r: 0, g: 0, b: 0 });
     }
 
-    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_complement_red() {
         let red = Color::Rgb { r: 255, g: 0, b: 0 };
@@ -501,7 +602,6 @@ mod tests {
         assert!(cyan.to_srgb().is_some_and(|c| c.b > 0.9));
     }
 
-    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_to_srgb_conversion() {
         let c = Color::Rgb {
@@ -515,7 +615,6 @@ mod tests {
         assert!((srgb.b - 50.0 / 255.0).abs() < 1e-6);
     }
 
-    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_to_srgb_non_rgb_returns_none() {
         assert_eq!(Color::Default.to_srgb(), None);
@@ -523,7 +622,6 @@ mod tests {
         assert_eq!(Color::Indexed(42).to_srgb(), None);
     }
 
-    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_from_srgb_roundtrip() {
         let srgb = Srgb::new(0.8, 0.4, 0.2);
@@ -534,7 +632,6 @@ mod tests {
         assert!((back.b - 0.2).abs() < 1.1 / 255.0);
     }
 
-    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_saturate_desaturate() {
         let c = Color::Rgb {
@@ -558,7 +655,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_saturate_desaturate_resolves_non_rgb() {
         // Gray-ish ANSI colors have a saturation to increase/decrease; black (`Color::Default`'s
@@ -578,7 +674,6 @@ mod tests {
         assert_ne!(red.desaturate(0.5), red);
     }
 
-    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_complement_resolves_non_rgb() {
         // Black's complement (in this HSL model) is still black, but it's computed through a
@@ -595,7 +690,6 @@ mod tests {
         assert!(red_via_ansi.to_srgb().is_some_and(|c| c.b > 0.5));
     }
 
-    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_lerp_endpoints() {
         let red = Color::Rgb { r: 255, g: 0, b: 0 };
@@ -604,7 +698,6 @@ mod tests {
         assert_eq!(Color::lerp(red, blue, 1.0), blue);
     }
 
-    #[cfg(feature = "indexed-quant")]
     #[test]
     fn test_darken_black_is_black() {
         let black = Color::Rgb { r: 0, g: 0, b: 0 };
