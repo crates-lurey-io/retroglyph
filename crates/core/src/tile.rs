@@ -37,8 +37,7 @@ bitflags::bitflags! {
         /// This flag is authoritative for whether extra text exists: code
         /// that reads a tile's grapheme must check this bit first and treat
         /// the side-table as backing storage only, never the other way
-        /// around. `Tile` cannot carry the string itself and stay small (see
-        /// [`Grid::grapheme`](crate::grid::Grid::grapheme)); the split is
+        /// around. `Tile` cannot carry the string itself and stay small; the split is
         /// what keeps the common single-codepoint tile compact.
         const HAS_EXTRA         = 0b0000_1000;
         /// This tile is the top-left anchor of a multi-cell span: it occupies
@@ -72,7 +71,8 @@ bitflags::bitflags! {
 /// [`TileFlags::HAS_EXTRA`]): that lives in a sparse side-table on the owning
 /// [`Grid`](crate::grid::Grid), keeping every `Tile` a small, fully `Copy`
 /// value regardless of whether the `egc` feature is enabled. Read it back via
-/// [`Grid::grapheme`](crate::grid::Grid::grapheme).
+/// [`DrawCell::grapheme`](crate::backend::DrawCell::grapheme), streamed off
+/// [`Grid::layers`](crate::grid::Grid::layers).
 ///
 /// # Examples
 ///

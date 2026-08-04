@@ -242,7 +242,7 @@ impl Grid {
     /// coordinates outside the grid or on an unallocated layer.
     ///
     /// A tint is grid state rather than [`Tile`] state, for the same reason a multi-codepoint
-    /// grapheme is (see [`grapheme`](Self::grapheme)): it is rare per cell and `Tile` has no room
+    /// grapheme is: it is rare per cell and `Tile` has no room
     /// left. So it is read here, not through [`Tile::style`].
     ///
     /// Cell backends have no sprite to recolour and ignore this entirely.
@@ -587,8 +587,7 @@ impl Grid {
 
     /// Yield a [`DrawCell`] for every allocated cell across all layers, in
     /// layer-major (0 → `max_layer`) then row-major order. `grapheme` is
-    /// `Some` only when [`TileFlags::HAS_EXTRA`] is set (see
-    /// [`grapheme`](Self::grapheme)).
+    /// `Some` only when [`TileFlags::HAS_EXTRA`] is set.
     ///
     /// Unallocated layers are skipped. This is used by backends that need
     /// the full frame on every draw (see [`crate::Output::needs_full_frame`]).
@@ -936,7 +935,7 @@ mod tests {
         assert_eq!(g.layers.len(), 1);
         assert!(g.layer(255).is_none());
         assert!(g.tile(255, (0, 0)).is_none());
-        assert!(g.grapheme(255, 0, 0).is_none());
+        assert!(crate::grid::grapheme_at(&g, 255, 0, 0).is_none());
     }
 
     #[test]
@@ -1461,7 +1460,7 @@ mod tests {
 
         g.fill_region(0, Rect::new(0, 0, 4, 4), Tile::new('#', Style::default()));
 
-        assert_eq!(g.grapheme(0, 1, 1), None);
+        assert_eq!(crate::grid::grapheme_at(&g, 0, 1, 1), None);
         assert_eq!(g.tint(0, 2, 2), Tint::None);
     }
 
@@ -1544,12 +1543,12 @@ mod tests {
         g.set_tint(0, 1, 1, Tint::multiply(128, 128, 128));
 
         // Both members survive: `set_tint` preserves the grapheme already stored.
-        assert_eq!(g.grapheme(0, 1, 1), Some("e\u{0301}"));
+        assert_eq!(crate::grid::grapheme_at(&g, 0, 1, 1), Some("e\u{0301}"));
         assert_eq!(g.tint(0, 1, 1), Tint::multiply(128, 128, 128));
 
         // Clearing the tint leaves the grapheme, and so leaves the entry in place.
         g.set_tint(0, 1, 1, Tint::None);
-        assert_eq!(g.grapheme(0, 1, 1), Some("e\u{0301}"));
+        assert_eq!(crate::grid::grapheme_at(&g, 0, 1, 1), Some("e\u{0301}"));
         assert_eq!(g.tint(0, 1, 1), Tint::None);
     }
 
@@ -1562,7 +1561,7 @@ mod tests {
 
         // HAS_EXTRA is now set for a cell with no grapheme text. `grapheme` must still say None
         // rather than reaching into the entry and finding an empty slot.
-        assert_eq!(g.grapheme(0, 1, 1), None);
+        assert_eq!(crate::grid::grapheme_at(&g, 0, 1, 1), None);
         assert_eq!(g.tint(0, 1, 1), Tint::multiply(128, 128, 128));
     }
 
@@ -1575,7 +1574,7 @@ mod tests {
         let mut dst = Grid::new(2, 2);
         dst.blit(0, &src, Rect::new(0, 0, 2, 2), 0, 0);
         assert_eq!(dst[Pos::new(0, 0)].glyph, 'e');
-        assert_eq!(dst.grapheme(0, 0, 0), Some("e\u{0301}"));
+        assert_eq!(crate::grid::grapheme_at(&dst, 0, 0, 0), Some("e\u{0301}"));
     }
 
     #[test]
@@ -1922,7 +1921,10 @@ mod tests {
         let mut g = Grid::new(2, 2);
         g.write_grapheme(0, 0, 0, "e\u{0301}", Style::default());
         let cloned = g.clone();
-        assert_eq!(cloned.grapheme(0, 0, 0), Some("e\u{0301}"));
+        assert_eq!(
+            crate::grid::grapheme_at(&cloned, 0, 0, 0),
+            Some("e\u{0301}")
+        );
     }
 
     #[cfg(feature = "egc")]
@@ -1933,7 +1935,10 @@ mod tests {
         let mut flattened = Grid::new(2, 2);
         g.flatten_into(&mut flattened);
         assert_eq!(flattened[Pos::new(0, 0)].glyph, 'e');
-        assert_eq!(flattened.grapheme(0, 0, 0), Some("e\u{0301}"));
+        assert_eq!(
+            crate::grid::grapheme_at(&flattened, 0, 0, 0),
+            Some("e\u{0301}")
+        );
     }
 
     #[test]

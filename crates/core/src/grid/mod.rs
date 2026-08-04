@@ -6,7 +6,7 @@
 //! A [`Grid`] holds up to 256 independent layers (`u8` ids `0..=255`), one
 //! [`Tile`] per cell on each. Layer 0 is always allocated; layers 1-255 are
 //! allocated lazily, on first write to that layer (see
-//! [`put_tile`](Grid::put_tile), [`cells_mut_or_alloc`](Grid::cells_mut_or_alloc)): a
+//! [`put_tile`](Grid::put_tile)): a
 //! single-layer game pays zero overhead for layers it never writes to. This is the
 //! crate's most distinctive feature and the one most worth understanding
 //! before reaching for a second layer.
@@ -89,8 +89,7 @@
 //! ([`put_tile`](Grid::put_tile), [`write_grapheme`](Grid::write_grapheme))
 //! clears the entire span first, so an anchor can never be left claiming cells it no longer owns.
 //! The exceptions are the escape hatches that hand out a `&mut Tile` directly
-//! ([`tile_mut`](Grid::tile_mut), [`cells_mut`](Grid::cells_mut),
-//! [`cells_mut_or_alloc`](Grid::cells_mut_or_alloc), `IndexMut`), which cannot intercept the
+//! ([`tile_mut`](Grid::tile_mut), `IndexMut`), which cannot intercept the
 //! write; use [`clear_span`](Grid::clear_span) first if you reach for one of those on a grid
 //! that uses spans.
 //!
@@ -288,56 +287,6 @@ fn flat_index_to_xy(i: usize, width: usize) -> (u16, u16) {
 }
 
 // ---------------------------------------------------------------------------
-// Grid iterators
-// ---------------------------------------------------------------------------
-
-/// Iterator over all cells with their `(x, y)` coordinates.
-pub struct Cells<'a> {
-    iter: core::iter::Enumerate<core::slice::Iter<'a, Tile>>,
-    width: usize,
-}
-
-impl<'a> Iterator for Cells<'a> {
-    type Item = (u16, u16, &'a Tile);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().map(|(i, tile)| {
-            let (x, y) = flat_index_to_xy(i, self.width);
-            (x, y, tile)
-        })
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.iter.size_hint()
-    }
-}
-
-impl ExactSizeIterator for Cells<'_> {}
-
-/// Mutable iterator over all cells with their `(x, y)` coordinates.
-pub struct CellsMut<'a> {
-    iter: core::iter::Enumerate<core::slice::IterMut<'a, Tile>>,
-    width: usize,
-}
-
-impl<'a> Iterator for CellsMut<'a> {
-    type Item = (u16, u16, &'a mut Tile);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().map(|(i, tile)| {
-            let (x, y) = flat_index_to_xy(i, self.width);
-            (x, y, tile)
-        })
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.iter.size_hint()
-    }
-}
-
-impl ExactSizeIterator for CellsMut<'_> {}
-
-// ---------------------------------------------------------------------------
 // LayerBuf: a single layer's flat buffer
 // ---------------------------------------------------------------------------
 
@@ -350,12 +299,12 @@ pub(crate) struct LayerBuf {
     pub(crate) buf: GridBuf<Tile, Vec<Tile>, RowMajor>,
     /// Sparse side-table: flat row-major index -> the cell's out-of-line data, for tiles with
     /// [`TileFlags::HAS_EXTRA`] set. Empty until something writes a multi-codepoint grapheme or
-    /// a tint, which is what keeps [`Tile`] itself small (see [`Grid::grapheme`] and
-    /// [`Grid::tint`]).
+    /// a tint, which is what keeps [`Tile`] itself small (see [`DrawCell::grapheme`](crate::backend::DrawCell::grapheme)
+    /// and [`Grid::tint`]).
     ///
     /// The `HAS_EXTRA` flag is authoritative: readers must check it before
     /// consulting this map, since some write paths (`put_tile`,
-    /// `IndexMut`, `cells_mut`, `cells_mut_or_alloc`) can leave a stale entry behind when they
+    /// `IndexMut`) can leave a stale entry behind when they
     /// overwrite a tile that used to carry extra data without an explicit
     /// cleanup call. Since those paths only ever hand out or store tiles
     /// with `HAS_EXTRA` clear, a stale entry is harmless: it is simply
@@ -588,6 +537,16 @@ impl Grid {
         }
         self.has_spans |= src.has_spans;
     }
+}
+
+/// Test-only readback for a tile's grapheme text, standing in for the removed
+/// `Grid::grapheme` (see retroglyph#1016): every real consumer reads this off the
+/// [`DrawCell`](crate::backend::DrawCell) stream returned by [`Grid::layers`], so tests do too.
+#[cfg(test)]
+pub(crate) fn grapheme_at(grid: &Grid, layer: u8, x: u16, y: u16) -> Option<&str> {
+    grid.layers()
+        .find(|c| c.layer == layer && c.pos == Pos::new(x, y))
+        .and_then(|c| c.grapheme)
 }
 
 #[cfg(test)]
