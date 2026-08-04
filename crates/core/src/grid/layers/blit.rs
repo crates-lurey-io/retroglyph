@@ -1024,6 +1024,46 @@ mod tests {
         );
     }
 
+    #[test]
+    fn blit_degrades_a_wide_char_pair_clipped_by_the_destinations_edge() {
+        // retroglyph#1087: unlike the `_clipped_by_src_rect` tests above, `src_rect` here covers
+        // the *whole* pair (both halves are present and in-bounds on the source side); it's the
+        // destination that's too narrow to hold both, so the lead lands in the last dst column
+        // with no room for a spacer beside it. `blit_with`'s `partner_survived` check for the
+        // `WIDE_CHAR` half includes `usize::from(dx) + 1 < dst_width` precisely so this case
+        // degrades the same way as a source-side clip, instead of writing a dangling lead with no
+        // spacer.
+        let mut src = Grid::new(4, 1);
+        src.put_tile(0, (0, 0), Tile::new('\u{4e2d}', Style::default()));
+
+        let mut dst = Grid::new(1, 1);
+        dst.blit(0, &src, Rect::new(0, 0, 2, 1), 0, 0);
+
+        assert!(!dst[Pos::new(0, 0)].flags().contains(TileFlags::WIDE_CHAR));
+    }
+
+    #[test]
+    fn blit_alpha_degrades_a_wide_char_pair_clipped_by_the_destinations_edge() {
+        // Same as `blit_degrades_a_wide_char_pair_clipped_by_the_destinations_edge`, but through
+        // `blit_alpha`'s separate copy path.
+        let mut src = Grid::new(4, 1);
+        src.put_tile(0, (0, 0), Tile::new('\u{4e2d}', Style::default()));
+
+        let mut dst = Grid::new(1, 1);
+        dst.blit_alpha(
+            0,
+            &src,
+            Rect::new(0, 0, 2, 1),
+            0,
+            0,
+            BlendMode::Linear,
+            1.0,
+            1.0,
+        );
+
+        assert!(!dst[Pos::new(0, 0)].flags().contains(TileFlags::WIDE_CHAR));
+    }
+
     /// A single `blit`-vs-`copy_rect_clamped` comparison case for
     /// `blit_clamp_matches_grixys_copy_rect_clamped_on_shared_clipped_rect_cases`.
     struct BlitClampCase {
