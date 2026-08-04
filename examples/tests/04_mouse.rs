@@ -24,12 +24,7 @@ use retroglyph_core::{Frame, Headless, Pos, Terminal};
 use retroglyph_examples::{Example, HEADLESS_FRAME_DELTA};
 
 const fn mouse_event(kind: MouseEventKind, x: u16, y: u16) -> Event {
-    Event::Mouse(MouseEvent {
-        kind,
-        position: Pos { x, y },
-        pixel_position: None,
-        modifiers: KeyModifiers::NONE,
-    })
+    Event::Mouse(MouseEvent::new(kind, Pos { x, y }, KeyModifiers::NONE))
 }
 
 /// Drives `Mouse` through `events` (one per tick, `None` meaning "tick with no input"),

@@ -467,12 +467,11 @@ mod tests {
     use crate::widget::Widget;
 
     fn move_pointer(interaction: &mut Interaction<Id>, pos: Pos) {
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Moved,
-            position: pos,
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Moved,
+            pos,
+            KeyModifiers::NONE,
+        )));
     }
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -592,18 +591,16 @@ mod tests {
         });
 
         // A press-then-release inside `area`, fed in between frames.
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Down(retroglyph_core::MouseButton::Left),
-            position: Pos::new(1, 1),
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Up(retroglyph_core::MouseButton::Left),
-            position: Pos::new(1, 1),
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Down(retroglyph_core::MouseButton::Left),
+            Pos::new(1, 1),
+            KeyModifiers::NONE,
+        )));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Up(retroglyph_core::MouseButton::Left),
+            Pos::new(1, 1),
+            KeyModifiers::NONE,
+        )));
 
         // Frame 2, if `frame` ran begin/end exactly once, resolves the click against frame 1's
         // registration and reports it.
@@ -630,18 +627,16 @@ mod tests {
             let _ = re_enabled.show(area, Id::Button, &Dot);
         });
 
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Down(retroglyph_core::MouseButton::Left),
-            position: Pos::new(0, 0),
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Up(retroglyph_core::MouseButton::Left),
-            position: Pos::new(0, 0),
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Down(retroglyph_core::MouseButton::Left),
+            Pos::new(0, 0),
+            KeyModifiers::NONE,
+        )));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Up(retroglyph_core::MouseButton::Left),
+            Pos::new(0, 0),
+            KeyModifiers::NONE,
+        )));
 
         let response = interaction.frame(&mut Surface::new(&mut grid, area, 0), |ui| {
             let mut disabled = ui.enabled(false);

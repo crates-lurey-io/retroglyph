@@ -51,6 +51,7 @@ pub enum MouseEventKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 /// Mouse input event.
 ///
 /// Does not derive `Eq`/`Hash`: [`MouseEventKind`] does not (its `Scroll` variant's `f32`

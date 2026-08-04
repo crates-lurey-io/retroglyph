@@ -81,12 +81,11 @@ fn moved_burst(len: usize) -> Vec<Event> {
         .map(|i| {
             #[allow(clippy::cast_possible_truncation)]
             let x = (i % usize::from(u16::MAX)) as u16;
-            Event::Mouse(MouseEvent {
-                kind: MouseEventKind::Moved,
-                position: Pos { x, y: 0 },
-                pixel_position: None,
-                modifiers: KeyModifiers::NONE,
-            })
+            Event::Mouse(MouseEvent::new(
+                MouseEventKind::Moved,
+                Pos { x, y: 0 },
+                KeyModifiers::NONE,
+            ))
         })
         .collect()
 }

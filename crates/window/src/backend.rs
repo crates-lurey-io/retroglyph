@@ -284,12 +284,11 @@ mod tests {
     }
 
     fn moved(x: u16) -> Event {
-        Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Moved,
-            position: Pos { x, y: 0 },
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        })
+        Event::Mouse(MouseEvent::new(
+            MouseEventKind::Moved,
+            Pos { x, y: 0 },
+            KeyModifiers::NONE,
+        ))
     }
 
     /// Regression test for retroglyph#294: a burst of consecutive `Moved` events must coalesce
@@ -312,12 +311,11 @@ mod tests {
         let mut backend = WindowBackend::new(NullPresenter);
         backend.push_event(moved(1));
         backend.push_event(moved(2));
-        backend.push_event(Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Down(MouseButton::Left),
-            position: Pos { x: 2, y: 0 },
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
+        backend.push_event(Event::Mouse(MouseEvent::new(
+            MouseEventKind::Down(MouseButton::Left),
+            Pos { x: 2, y: 0 },
+            KeyModifiers::NONE,
+        )));
         backend.push_event(moved(3));
         assert_eq!(backend.events.len(), 3);
         assert_eq!(backend.poll_event(Duration::ZERO), Some(moved(2)));

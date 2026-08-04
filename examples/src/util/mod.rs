@@ -191,12 +191,11 @@ pub mod wasm_pointer {
             KIND_SCROLL_DOWN => MouseEventKind::Scroll { dx: 0.0, dy: -1.0 },
             _ => return None,
         };
-        Some(Event::Mouse(MouseEvent {
+        Some(Event::Mouse(MouseEvent::new(
             kind,
-            position: Pos { x, y },
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }))
+            Pos { x, y },
+            KeyModifiers::NONE,
+        )))
     }
 
     #[cfg(test)]

@@ -53,12 +53,7 @@ fn drive(events: &[&[Event]]) -> String {
 }
 
 const fn mouse_event(kind: MouseEventKind, x: u16, y: u16) -> Event {
-    Event::Mouse(MouseEvent {
-        kind,
-        position: Pos { x, y },
-        pixel_position: None,
-        modifiers: KeyModifiers::NONE,
-    })
+    Event::Mouse(MouseEvent::new(kind, Pos { x, y }, KeyModifiers::NONE))
 }
 
 const fn key(code: KeyCode) -> Event {

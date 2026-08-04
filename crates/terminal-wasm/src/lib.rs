@@ -634,12 +634,11 @@ pub fn decode_mouse_event(
         _ => return None,
     };
 
-    Some(retroglyph_core::event::MouseEvent {
+    Some(retroglyph_core::event::MouseEvent::new(
         kind,
-        position: Pos { x, y },
-        pixel_position: None,
-        modifiers: decode_key_modifiers(mods),
-    })
+        Pos { x, y },
+        decode_key_modifiers(mods),
+    ))
 }
 
 const fn decode_mouse_button(button: u8) -> Option<retroglyph_core::event::MouseButton> {
@@ -1341,12 +1340,11 @@ mod tests {
 
         let mut backend = TerminalWasm::new(80, 24);
         for x in 0..200u16 {
-            backend.push_event(Event::Mouse(MouseEvent {
-                kind: MouseEventKind::Moved,
-                position: Pos { x, y: 0 },
-                pixel_position: None,
-                modifiers: KeyModifiers::NONE,
-            }));
+            backend.push_event(Event::Mouse(MouseEvent::new(
+                MouseEventKind::Moved,
+                Pos { x, y: 0 },
+                KeyModifiers::NONE,
+            )));
         }
 
         // All 200 `Moved` pushes collapsed into a single queued event, holding only the latest
@@ -1354,29 +1352,26 @@ mod tests {
         assert_eq!(backend.event_queue.len(), 1);
         assert_eq!(
             Input::poll_event(&mut backend, Duration::ZERO),
-            Some(Event::Mouse(MouseEvent {
-                kind: MouseEventKind::Moved,
-                position: Pos { x: 199, y: 0 },
-                pixel_position: None,
-                modifiers: KeyModifiers::NONE,
-            }))
+            Some(Event::Mouse(MouseEvent::new(
+                MouseEventKind::Moved,
+                Pos { x: 199, y: 0 },
+                KeyModifiers::NONE,
+            )))
         );
         assert_eq!(Input::poll_event(&mut backend, Duration::ZERO), None);
 
         // A non-`Moved` mouse event breaks the coalescing run: it queues alongside, not merged
         // into, a preceding `Moved`.
-        backend.push_event(Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Moved,
-            position: Pos { x: 1, y: 1 },
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
-        backend.push_event(Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Down(MouseButton::Left),
-            position: Pos { x: 1, y: 1 },
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
+        backend.push_event(Event::Mouse(MouseEvent::new(
+            MouseEventKind::Moved,
+            Pos { x: 1, y: 1 },
+            KeyModifiers::NONE,
+        )));
+        backend.push_event(Event::Mouse(MouseEvent::new(
+            MouseEventKind::Down(MouseButton::Left),
+            Pos { x: 1, y: 1 },
+            KeyModifiers::NONE,
+        )));
         assert_eq!(backend.event_queue.len(), 2);
     }
 
@@ -1398,12 +1393,11 @@ mod tests {
             backend.push_event(key.clone());
             expected.push(key);
 
-            let click = Event::Mouse(MouseEvent {
-                kind: MouseEventKind::Down(MouseButton::Left),
-                position: Pos { x: i, y: i },
-                pixel_position: None,
-                modifiers: KeyModifiers::NONE,
-            });
+            let click = Event::Mouse(MouseEvent::new(
+                MouseEventKind::Down(MouseButton::Left),
+                Pos { x: i, y: i },
+                KeyModifiers::NONE,
+            ));
             backend.push_event(click.clone());
             expected.push(click);
 
