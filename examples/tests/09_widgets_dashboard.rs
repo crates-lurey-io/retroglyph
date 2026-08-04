@@ -26,12 +26,7 @@ const fn key(code: KeyCode) -> Event {
 }
 
 const fn mouse_event(kind: MouseEventKind, x: u16, y: u16) -> Event {
-    Event::Mouse(MouseEvent {
-        kind,
-        position: Pos { x, y },
-        pixel_position: None,
-        modifiers: KeyModifiers::NONE,
-    })
+    Event::Mouse(MouseEvent::new(kind, Pos { x, y }, KeyModifiers::NONE))
 }
 
 /// Drives `Dashboard` through `events` (one batch of zero or more events per tick), returning

@@ -305,18 +305,16 @@ mod tests {
         let _ = interaction.interact(area, Id::Save, InteractiveWidget::<Id>::sense(&button));
         interaction.end_frame();
 
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Down(MouseButton::Left),
-            position: Pos::new(2, 0),
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Up(MouseButton::Left),
-            position: Pos::new(2, 0),
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Down(MouseButton::Left),
+            Pos::new(2, 0),
+            KeyModifiers::NONE,
+        )));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Up(MouseButton::Left),
+            Pos::new(2, 0),
+            KeyModifiers::NONE,
+        )));
 
         interaction.begin_frame();
         let response =

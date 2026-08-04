@@ -104,23 +104,21 @@ fn scrolling_the_log_shows_earlier_messages() {
 /// (see `Pointer::handle_event`'s `dy` sign convention: negative `dy` accumulates a positive
 /// `Response::scroll_delta`, which `ScrollState::apply` feeds into `scroll_by_wheel` as-is).
 const fn wheel_scroll(x: u16, y: u16) -> Event {
-    Event::Mouse(MouseEvent {
-        kind: MouseEventKind::Scroll { dx: 0.0, dy: -1.0 },
-        position: Pos { x, y },
-        pixel_position: None,
-        modifiers: KeyModifiers::NONE,
-    })
+    Event::Mouse(MouseEvent::new(
+        MouseEventKind::Scroll { dx: 0.0, dy: -1.0 },
+        Pos { x, y },
+        KeyModifiers::NONE,
+    ))
 }
 
 /// A harmless pointer-move at `pos`: advances a frame without adding any new wheel input, so a
 /// run of these isolates however much of `ScrollState`'s momentum is still decaying on its own.
 const fn idle_at(x: u16, y: u16) -> Event {
-    Event::Mouse(MouseEvent {
-        kind: MouseEventKind::Moved,
-        position: Pos { x, y },
-        pixel_position: None,
-        modifiers: KeyModifiers::NONE,
-    })
+    Event::Mouse(MouseEvent::new(
+        MouseEventKind::Moved,
+        Pos { x, y },
+        KeyModifiers::NONE,
+    ))
 }
 
 /// Proves the wheel path end to end: `Interaction` resolves the wheel input into a `Response`,

@@ -227,6 +227,7 @@ pub enum KeyLocation {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 /// Keyboard input event.
 pub struct KeyEvent {
     /// The key code.
