@@ -296,7 +296,7 @@ impl Camera {
             .viewport
             .height()
             .min(self.world.height().saturating_sub(self.origin.y));
-        Rect::new(self.origin.x, self.origin.y, w, h)
+        Rect::from_tl_size(self.origin, Size::new(w, h))
     }
 
     /// Map a world position to its screen position, or `None` if it is outside

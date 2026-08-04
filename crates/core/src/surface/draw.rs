@@ -50,7 +50,7 @@ impl Surface<'_> {
         if self.origin_offset != (0, 0) {
             return None;
         }
-        let local = rect.intersect(Rect::new(0, 0, self.area.width(), self.area.height()));
+        let local = rect.intersect(self.area.to_rect());
         if local.is_empty() {
             return None;
         }

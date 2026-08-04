@@ -158,7 +158,7 @@ impl Grid {
     /// assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
     /// ```
     pub fn fill_region(&mut self, layer: u8, rect: Rect, mut tile: Tile) {
-        let bounds = Rect::new(0, 0, self.width, self.height);
+        let bounds = self.rect();
         let rect = rect.intersect(bounds);
         if rect.is_empty() {
             return;
