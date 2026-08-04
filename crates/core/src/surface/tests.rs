@@ -823,6 +823,29 @@ fn put_does_not_tint_a_foreign_tile_when_put_tile_refuses_the_write() {
     assert_eq!(grid.tint(0, 3, 0), Tint::multiply(128, 64, 32));
 }
 
+// egc counterpart of the non-egc test above (retroglyph#1090): under `egc`, `put` goes through
+// `write_grapheme_at`/`Grid::write_grapheme` instead of `Grid::put_tile`, which had the same
+// unfixed shape. As above, the clip is wider than the grid, so `wide_spacer_fits` passes and it
+// is `Grid::write_grapheme`'s own out-of-bounds refusal that has to stop `apply_tint` from
+// re-tinting the existing tile.
+#[test]
+#[cfg(feature = "egc")]
+fn put_does_not_tint_a_foreign_tile_when_write_grapheme_refuses_the_write() {
+    let mut grid = Grid::new(4, 1);
+    {
+        let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 8, 1), 0);
+        surface
+            .with_tint(Tint::multiply(128, 64, 32))
+            .put((3, 0), 'X', Style::default());
+        surface
+            .with_tint(Tint::multiply(1, 2, 3))
+            .put((3, 0), '\u{6f22}', Style::default());
+    }
+
+    assert_eq!(grid[Pos::new(3, 0)].glyph(), 'X');
+    assert_eq!(grid.tint(0, 3, 0), Tint::multiply(128, 64, 32));
+}
+
 #[test]
 fn clip_intersects_rather_than_replaces_so_it_cannot_widen() {
     let mut grid = Grid::new(8, 4);

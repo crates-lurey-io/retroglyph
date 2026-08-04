@@ -251,8 +251,10 @@ impl Grid {
     ///   [`DrawCell::grapheme`](crate::backend::DrawCell::grapheme), streamed off
     ///   [`Grid::layers`](Self::layers).
     ///
-    /// Also does nothing if the grapheme has zero display width, or if a 2-column wide character
-    /// would overflow the grid (the last column needs both its own cell and a spacer).
+    /// Does nothing, and returns `false`, if the grapheme has zero display width, `(x, y)` is out
+    /// of bounds, or a 2-column wide character would overflow the grid (the last column needs
+    /// both its own cell and a spacer). Returns `true` otherwise, once the write has landed: the
+    /// same success/refusal split [`put_tile`](Self::put_tile) reports via `Option`.
     ///
     /// # Panics
     ///
@@ -261,16 +263,23 @@ impl Grid {
     ///
     /// Only present when the `egc` feature is enabled.
     #[cfg(feature = "egc")]
-    pub fn write_grapheme(&mut self, layer: u8, x: u16, y: u16, grapheme: &str, style: Style) {
+    pub fn write_grapheme(
+        &mut self,
+        layer: u8,
+        x: u16,
+        y: u16,
+        grapheme: &str,
+        style: Style,
+    ) -> bool {
         use unicode_width::UnicodeWidthStr;
 
         let width = u16::try_from(grapheme.width()).expect("grapheme width exceeds u16");
         if width == 0 {
-            return;
+            return false;
         }
 
         if x >= self.width || y >= self.height {
-            return;
+            return false;
         }
 
         // Capture dimensions as plain values to avoid borrow conflicts.
@@ -278,13 +287,13 @@ impl Grid {
         let cap = w * usize::from(self.height);
         let idx = usize::from(y) * w + usize::from(x);
         if idx >= cap {
-            return;
+            return false;
         }
 
         // A 2-column char needs a spacer at x+1. If that's out of bounds,
         // silently refuse rather than leaving an orphaned primary cell.
         if width == 2 && x.saturating_add(1) as usize >= w {
-            return;
+            return false;
         }
 
         // Clear any wide-char cell, or any multi-cell span, that would be partially overwritten.
@@ -348,6 +357,8 @@ impl Grid {
                 lb.extras.remove(&spacer_idx);
             }
         }
+
+        true
     }
 
     /// Clears wide-character cells that would be partially overwritten by a
@@ -519,10 +530,20 @@ mod tests {
     #[test]
     fn write_grapheme_y_past_height_is_refused() {
         let mut grid = Grid::new(10, 10);
-        grid.write_grapheme(0, 0, 12, "A", Style::default()); // y = 12 on a 10-tall grid
+        assert!(!grid.write_grapheme(0, 0, 12, "A", Style::default())); // y = 12 on a 10-tall grid
         for y in 0..10 {
             assert_eq!(grid[Pos::new(0, y)].glyph(), ' ');
         }
+    }
+
+    #[cfg(feature = "egc")]
+    #[test]
+    fn write_grapheme_zero_width_is_refused() {
+        let mut grid = Grid::new(10, 10);
+        // A lone combining mark, with no base character in front of it, has zero display width
+        // on its own.
+        assert!(!grid.write_grapheme(0, 2, 1, "\u{0301}", Style::default()));
+        assert_eq!(grid[Pos::new(2, 1)].glyph(), ' ');
     }
 
     #[cfg(feature = "egc")]
