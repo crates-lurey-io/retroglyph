@@ -80,7 +80,10 @@ impl Surface<'_> {
     /// Returns whether the write actually landed, so a caller that also needs to touch the
     /// written tile afterward (e.g. [`put_offset`](Self::put_offset) setting a pixel offset)
     /// can tell a refused write apart from a successful one instead of blindly poking whatever
-    /// tile is already at `(x, y)`.
+    /// tile is already at `(x, y)`. [`Grid::write_grapheme`] can refuse on its own (e.g. `(x, y)`
+    /// outside the grid, reachable when this surface's clip/area is wider than the grid itself),
+    /// distinct from the clip check above, so `apply_tint` is gated on its own `bool` too rather
+    /// than assumed to always land once `wide_spacer_fits` passes.
     #[cfg(feature = "egc")]
     pub(super) fn write_grapheme_at(
         &mut self,
@@ -94,9 +97,11 @@ impl Surface<'_> {
         if !self.wide_spacer_fits(x, y, grapheme.width()) {
             return false;
         }
-        self.grid.write_grapheme(self.layer, x, y, grapheme, style);
-        self.apply_tint(x, y);
-        true
+        let wrote = self.grid.write_grapheme(self.layer, x, y, grapheme, style);
+        if wrote {
+            self.apply_tint(x, y);
+        }
+        wrote
     }
 
     /// `true` unless `width` is 2 and the spacer cell it would need at `x + 1` falls outside

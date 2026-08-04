@@ -158,7 +158,7 @@ impl Grid {
     /// assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
     /// ```
     pub fn fill_region(&mut self, layer: u8, rect: Rect, mut tile: Tile) {
-        let bounds = Rect::new(0, 0, self.width, self.height);
+        let bounds = self.size().to_rect();
         let rect = rect.intersect(bounds);
         if rect.is_empty() {
             return;
@@ -237,6 +237,20 @@ impl Grid {
             .as_mut()?
             .buf
             .get_mut(pos)
+    }
+
+    /// [`tile_mut`](Self::tile_mut), allocating `layer` if it is not allocated yet.
+    ///
+    /// `None` only when `pos` is out of bounds, which (as in [`set_extra`](Self::set_extra))
+    /// leaves `layer` unallocated rather than allocating a buffer nothing can be written to.
+    /// Shares `tile_mut`'s caveat: this is a raw `&mut Tile`, so it performs none of
+    /// [`put_tile`](Self::put_tile)'s span or overlap repair.
+    pub(crate) fn tile_mut_or_alloc(&mut self, layer: u8, pos: Pos) -> Option<&mut Tile> {
+        if pos.x >= self.width || pos.y >= self.height {
+            return None;
+        }
+        let gpos = to_grixy_pos(pos);
+        self.layer_or_alloc(layer).buf.get_mut(gpos)
     }
 
     /// Deallocates `layer`, freeing its buffer entirely rather than clearing its content in
