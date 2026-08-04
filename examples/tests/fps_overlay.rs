@@ -10,8 +10,9 @@
 //!
 //! The toggle key cycles `Off -> Compact -> Full -> Off`
 //! ([`retroglyph_widgets::PerfOverlayMode`]); the PTY tests below only prove the first step of
-//! that cycle in each direction (real key presses through a live terminal are the thing worth
-//! end-to-end coverage, not an exhaustive re-walk of the state machine, which
+//! that cycle from both the hidden (`Off`) and visible (`Compact`) default starting states (real
+//! key presses through a live terminal are the thing worth end-to-end coverage, not an
+//! exhaustive re-walk of the state machine, which
 //! `retroglyph_widgets`'s own `perf` unit tests already cover deterministically).
 //! `svg_snapshot_compact`/`svg_snapshot_full` and `png_snapshot_compact`/`png_snapshot_full`
 //! commit reviewable artifacts (`tests/snapshots/fps_overlay_*.svg`, insta-managed PNGs) of both
