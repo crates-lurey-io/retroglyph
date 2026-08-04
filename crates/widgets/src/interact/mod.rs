@@ -68,9 +68,10 @@ pub use shortcuts::Shortcuts;
 use alloc::vec::Vec;
 use core::time::Duration;
 
-use retroglyph_core::{Event, Frame, KeyCode, MouseButton, Pos, Rect, Surface, Tween};
+use retroglyph_core::{Event, Frame, KeyCode, MouseButton, Pos, Rect, Surface};
 
 use crate::Ui;
+use crate::animate::Tween;
 
 /// Default [`Interaction::with_drag_threshold`].
 ///
@@ -493,7 +494,7 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
     /// at rest at its current target, so this doesn't grow unbounded across a long-running app
     /// with many transient `Id`s (an overlay's per-item ids, say).
     ///
-    /// The bridge from [`Response`] to [`retroglyph_core::animate`](retroglyph_core): a widget's
+    /// The bridge from [`Response`] to [`crate::animate`]: a widget's
     /// `render` (already handed a `Response`) calls this once per frame with, say,
     /// `response.hovered()` as `target`, and blends its idle/hover style by the result, without
     /// declaring a `Tween` field of its own or hand-diffing this frame's `hovered()` against
@@ -1652,7 +1653,7 @@ mod tests {
     }
 
     // Exact float equality is intentional in the `animate_*` tests below, mirroring
-    // `retroglyph_core::animate::tween`'s own tests: every value under test is produced by
+    // `animate::tween`'s own tests: every value under test is produced by
     // `Easing::Linear` (`Tween`'s default) at exactly-representable fractions of `duration`, not
     // an accumulated or transcendental result where an epsilon comparison would be appropriate.
     #[test]

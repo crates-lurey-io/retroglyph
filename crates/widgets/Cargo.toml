@@ -27,9 +27,9 @@ dev = ["retroglyph-core/dev"]
 #
 # Upgrades [`Paragraph`]'s word-wrap (always available) to grapheme-cluster-aware correctness.
 egc = ["retroglyph-core/egc"]
-# Uses `retroglyph-core`'s `libm` feature (the `no_std` float backend: scrollbar geometry,
-# gauge/sparkline/bar percentage rounding, scroll momentum decay) instead of `std`'s own float
-# intrinsics. See `std` below; a build needs exactly one of the two.
+# Uses `retroglyph-core`'s `libm` feature (the `no_std` float backend: easing curves and
+# tweens, scrollbar geometry, gauge/sparkline/bar percentage rounding, scroll momentum decay)
+# instead of `std`'s own float intrinsics. See `std` below; a build needs exactly one of the two.
 libm = ["retroglyph-core/libm"]
 # Adds `Serialize`/`Deserialize` impls for [`Theme`] and `Density`, forwarding to
 # `retroglyph-core`'s `serde` feature.

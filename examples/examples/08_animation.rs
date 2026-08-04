@@ -36,11 +36,9 @@
 //! The ball travels automatically. Keys: `q` or `Escape` quits, or close the window.
 
 use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::{
-    AnsiColor, Backend, Color, Easing, Frame, FrameClock, Style, Terminal, Tween,
-    oscillate_with_phase,
-};
+use retroglyph_core::{AnsiColor, Backend, Color, Frame, FrameClock, Style, Terminal};
 use retroglyph_examples::Example;
+use retroglyph_widgets::{Easing, Tween, oscillate_with_phase};
 use std::time::Duration;
 
 /// Row the ball travels along.

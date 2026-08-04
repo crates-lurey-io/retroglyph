@@ -160,7 +160,7 @@ impl WindowConfig {
     ///     [`Frame::delta`](retroglyph_core::Frame::delta), which will render one frame and then
     ///     sit still until the next stray event.
     ///   - `false` is **continuous**: a frame is rendered every tick whether or not anything
-    ///     happened, which is what a [`Tween`](retroglyph_core::Tween)/
+    ///     happened, which is what a `retroglyph_widgets::Tween`/
     ///     [`FrameClock`](retroglyph_core::FrameClock)-driven app needs.
     ///
     /// The two combine independently: `(Some(fps), false)` is the common capped-animation shape

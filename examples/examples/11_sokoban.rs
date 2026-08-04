@@ -30,11 +30,9 @@
 use std::time::Duration;
 
 use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::{
-    AnsiColor, Backend, Color, Easing, Frame, Grid, Rect, Style, Terminal, Tile, Tween,
-};
+use retroglyph_core::{AnsiColor, Backend, Color, Frame, Grid, Rect, Style, Terminal, Tile};
 use retroglyph_examples::Example;
-use retroglyph_widgets::{Constraint, Panel, Widget, split_h, split_v};
+use retroglyph_widgets::{Constraint, Easing, Panel, Tween, Widget, split_h, split_v};
 
 /// The level, hand-designed to be solvable with the two boxes pushed one at a time: `#` wall,
 /// `.` floor, `o` goal, `$` a box (on plain floor), `@` the player's start. Both `o` cells are

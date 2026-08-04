@@ -180,7 +180,7 @@ pub trait Measure {
 /// Like [`StatefulWidget`], but for widgets whose state evolves with wall-clock time.
 ///
 /// Covers state like [`crate::ScrollState`]'s momentum/rubber-band physics or a
-/// [`Tween`](retroglyph_core::Tween)-driven transition, which advance on their own rather than
+/// [`Tween`](crate::animate::Tween)-driven transition, which advance on their own rather than
 /// only in response to input.
 ///
 /// [`StatefulWidget`] has no way to reach the [`Frame`] an [`App`](retroglyph_core::App) already

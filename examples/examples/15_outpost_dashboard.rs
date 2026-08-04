@@ -46,12 +46,11 @@
 
 use retroglyph_core::event::{Event, KeyCode, MouseButton, MouseEventKind};
 use retroglyph_core::{
-    Backend, Camera, Color, Easing, Frame, HasSize, Pos, Rect, Size, Style, Surface, Terminal,
-    Tween,
+    Backend, Camera, Color, Frame, HasSize, Pos, Rect, Size, Style, Surface, Terminal,
 };
 use retroglyph_examples::Example;
 use retroglyph_widgets::{
-    Align, Constraint, draw_clipped, split_h, split_h_spaced, split_v, truncate,
+    Align, Constraint, Easing, Tween, draw_clipped, split_h, split_h_spaced, split_v, truncate,
 };
 
 // ── Breakpoints ────────────────────────────────────────────────────────────

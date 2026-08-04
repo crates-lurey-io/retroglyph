@@ -85,10 +85,10 @@ diffing and layout.
 
 ⚪ Optional.
 
-Uses `libm`'s software float implementation (`roundf`/`fmaf`/`sinf`/`cosf`/`powf`) for `animate`'s
-easing curves and the separable `BlendMode` channel math, via this crate's own `math` shim -- the
-`no_std` side of that split. See `std` below for the alternative that prefers the platform's own
-float intrinsics when available; a build needs exactly one of the two.
+Uses `libm`'s software float implementation (`roundf`/`fmaf`/`sinf`/`cosf`/`powf`) for the separable
+`BlendMode` channel math, via this crate's own `math` shim -- the `no_std` side of that split. See
+`std` below for the alternative that prefers the platform's own float intrinsics when available; a
+build needs exactly one of the two.
 
 ### `serde`
 
@@ -106,8 +106,7 @@ rather than a derived structural form, so hand-edited TOML/JSON stays legible.
 🟢 Enabled by default.
 
 Enables `gem/std` and `alpha-blend/std`, and uses `std`'s float intrinsics (via this crate's `math`
-shim) instead of `libm`'s software implementation for `animate` and the separable `BlendMode`
-channel math.
+shim) instead of `libm`'s software implementation for the separable `BlendMode` channel math.
 
 Disabling this feature (`--no-default-features`) builds this crate `no_std`, and then needs `libm`
 above as the float backend instead: see the crate-level `compile_error!` in `src/lib.rs`.
