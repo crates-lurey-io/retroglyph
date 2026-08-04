@@ -20,6 +20,16 @@
 //!
 //! ## Draw order
 //!
+//! ```text
+//!   painted last  ->  layer 3   UI / effects     (topmost)
+//!                     layer 2   actors
+//!                     layer 1   items
+//!   painted first ->  layer 0   terrain          (always allocated)
+//!
+//!                     ascending id == ascending z; no separate depth field.
+//!                     each layer holds one Tile per cell of the whole grid.
+//! ```
+//!
 //! Layers composite bottom-to-top, in ascending id order: 0 first, then every
 //! allocated layer up to [`max_layer`](crate::grid::Grid::max_layer), each painted over
 //! whatever the layers below it produced. Layer id *is* z-order: there is
