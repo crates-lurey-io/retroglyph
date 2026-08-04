@@ -620,6 +620,58 @@ impl Grid {
         }
     }
 
+    /// Deallocates `layer`, freeing its buffer entirely rather than clearing its content in
+    /// place.
+    ///
+    /// Unlike [`clear_all`](Self::clear_all) (and a per-layer clear via [`cells_mut`](Self::cells_mut)),
+    /// which empty a layer's cells but leave it allocated, this drops the [`LayerBuf`] itself, the
+    /// same table slot [`layer_or_alloc`](Self::layer_or_alloc) fills in on first write. That
+    /// matters because [`max_layer`](Self::max_layer) only ever grows on write (see its own doc):
+    /// a layer that is merely cleared still counts toward it, while a deallocated one does not,
+    /// letting `max_layer` fall back down once every layer above it is also gone. This is what lets
+    /// [`crate::Terminal::drop_layer`] undo a layer's permanent allocation and, once every layer
+    /// above 0 is dropped, put [`crate::Terminal::present`] back on its single-layer fast path
+    /// (retroglyph#1028).
+    ///
+    /// If `layer` was the current `max_layer`, the table is rescanned downward for the next
+    /// highest still-allocated layer, `O(max_layer)` in the worst case; deallocating any other
+    /// layer is `O(1)`. Deallocating an already-unallocated layer (or one past the table's
+    /// current length) is a no-op.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `layer` is 0: layer 0 is always allocated (see [`Grid::new`]) and can never be
+    /// deallocated.
+    pub(crate) fn deallocate_layer(&mut self, layer: u8) {
+        assert_ne!(
+            layer, 0,
+            "layer 0 is always allocated and cannot be deallocated"
+        );
+        let idx = usize::from(layer);
+        if idx >= self.layers.len() {
+            return;
+        }
+        self.layers[idx] = None;
+        if layer == self.max_layer {
+            self.max_layer = (0..layer)
+                .rev()
+                .find(|&id| self.layers[usize::from(id)].is_some())
+                .unwrap_or(0);
+        }
+    }
+
+    /// Whether `layer` is unallocated, or allocated but every tile on it is untouched (see
+    /// [`Tile::is_empty`]).
+    ///
+    /// Used by [`crate::Terminal::drop_layer`]'s deferred deallocation to tell a layer that is
+    /// still genuinely empty (safe to free) apart from one that was redrawn after the drop was
+    /// requested (some tile is no longer empty), which must cancel the drop instead of silently
+    /// discarding content the app just wrote.
+    pub(crate) fn layer_is_empty(&self, layer: u8) -> bool {
+        self.layer(layer)
+            .is_none_or(|lb| lb.buf.as_ref().iter().all(Tile::is_empty))
+    }
+
     /// Composites every allocated layer into `dst`'s layer 0, one tile per cell.
     ///
     /// Used by [`crate::Terminal::present`] for backends that do not composite
@@ -917,6 +969,68 @@ mod tests {
         g.set_tint(200, 99, 99, Tint::multiply(1, 2, 3));
         assert_eq!(g.max_layer(), 0);
         assert!(g.layer(200).is_none());
+    }
+
+    #[test]
+    #[should_panic(expected = "layer 0 is always allocated")]
+    fn test_grid_deallocate_layer_zero_panics() {
+        let mut g = Grid::new(4, 4);
+        g.deallocate_layer(0);
+    }
+
+    #[test]
+    fn test_grid_deallocate_layer_the_top_layer_lowers_max_layer() {
+        let mut g = Grid::new(4, 4);
+        g.put_tile(3, (0, 0), Tile::new('@', Style::default()));
+        assert_eq!(g.max_layer(), 3);
+
+        g.deallocate_layer(3);
+        assert_eq!(g.max_layer(), 0);
+        assert!(g.layer(3).is_none());
+    }
+
+    #[test]
+    fn test_grid_deallocate_layer_rescans_down_to_the_next_allocated_layer() {
+        let mut g = Grid::new(4, 4);
+        g.put_tile(2, (0, 0), Tile::new('a', Style::default()));
+        g.put_tile(5, (0, 0), Tile::new('b', Style::default()));
+        assert_eq!(g.max_layer(), 5);
+
+        g.deallocate_layer(5);
+        assert_eq!(g.max_layer(), 2);
+        assert!(g.layer(5).is_none());
+        assert!(g.layer(2).is_some());
+    }
+
+    #[test]
+    fn test_grid_deallocate_layer_below_the_top_leaves_max_layer_unchanged() {
+        let mut g = Grid::new(4, 4);
+        g.put_tile(2, (0, 0), Tile::new('a', Style::default()));
+        g.put_tile(5, (0, 0), Tile::new('b', Style::default()));
+
+        g.deallocate_layer(2);
+        assert_eq!(g.max_layer(), 5);
+        assert!(g.layer(2).is_none());
+        assert!(g.layer(5).is_some());
+    }
+
+    #[test]
+    fn test_grid_deallocate_layer_reads_back_as_unallocated() {
+        let mut g = Grid::new(4, 4);
+        g.put_tile(1, (0, 0), Tile::new('@', Style::default()));
+        g.deallocate_layer(1);
+        assert!(g.tile(1, (0, 0)).is_none());
+    }
+
+    #[test]
+    fn test_grid_deallocate_layer_already_unallocated_is_a_no_op() {
+        let mut g = Grid::new(4, 4);
+        g.deallocate_layer(1);
+        assert_eq!(g.max_layer(), 0);
+
+        // Past the table's current length entirely.
+        g.deallocate_layer(200);
+        assert_eq!(g.max_layer(), 0);
     }
 
     #[test]
