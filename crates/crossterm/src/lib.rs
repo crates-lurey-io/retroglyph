@@ -671,53 +671,6 @@ impl Crossterm {
     pub fn with_options(options: CrosstermOptions) -> Result<Self, std::io::Error> {
         options.build()
     }
-
-    /// Creates a crossterm terminal and drives `app` with the blocking loop until
-    /// it returns [`Flow::Exit`](retroglyph_core::Flow).
-    ///
-    /// This is a thin wrapper over the generic
-    /// [`run_blocking`](retroglyph_core::run_blocking); the terminal is restored on the
-    /// way out via `Drop`, so raw mode and the alternate screen are left intact
-    /// until the loop actually returns. Event-driven by default (see
-    /// [`RunOptions::default`](retroglyph_core::RunOptions)): an app that returns
-    /// [`Flow::Idle`](retroglyph_core::Flow::Idle) blocks on input rather than spinning. Use
-    /// [`Crossterm::run_with`] to pass different [`RunOptions`](retroglyph_core::RunOptions),
-    /// for example [`RunOptions::animated`](retroglyph_core::RunOptions::animated) for a
-    /// continuously-rendering app.
-    ///
-    /// # Errors
-    ///
-    /// Returns an `std::io::Error` if the terminal fails to initialize, or if a frame present
-    /// fails while `app` is running.
-    pub fn run<A>(app: A) -> Result<(), std::io::Error>
-    where
-        A: retroglyph_core::App<Self>,
-    {
-        Self::run_with(app, retroglyph_core::RunOptions::default())
-    }
-
-    /// Creates a crossterm terminal and drives `app` with the blocking loop, per `options`, until
-    /// it returns [`Flow::Exit`](retroglyph_core::Flow).
-    ///
-    /// This is a thin wrapper over the generic
-    /// [`run_blocking_with`](retroglyph_core::run_blocking_with); see [`Crossterm::run`] for the
-    /// zero-config equivalent, and [`RunOptions`](retroglyph_core::RunOptions) for the available
-    /// pacing and idle-blocking controls. Reaching this method is the intended way to opt into
-    /// [`RunOptions::animated`](retroglyph_core::RunOptions::animated) or a custom
-    /// [`RunOptions::idle_wake`](retroglyph_core::RunOptions) without hand-building a
-    /// [`Terminal`](retroglyph_core::Terminal) and calling `run_blocking_with` directly.
-    ///
-    /// # Errors
-    ///
-    /// Returns an `std::io::Error` if the terminal fails to initialize, or if a frame present
-    /// fails while `app` is running.
-    pub fn run_with<A>(app: A, options: retroglyph_core::RunOptions) -> Result<(), std::io::Error>
-    where
-        A: retroglyph_core::App<Self>,
-    {
-        let term = retroglyph_core::Terminal::new(Self::new()?);
-        retroglyph_core::run_blocking_with(term, app, options)
-    }
 }
 
 impl<W: std::io::Write> Crossterm<W> {

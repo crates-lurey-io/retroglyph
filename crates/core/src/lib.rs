@@ -183,7 +183,7 @@ pub mod tile;
 pub use animate::{Easing, Tween, oscillate, oscillate_with_phase};
 pub use app::{App, Flow, Frame};
 #[cfg(feature = "std")]
-pub use app::{RunOptions, run_blocking, run_blocking_with};
+pub use app::{RunOptions, run, run_blocking, run_blocking_with, run_with};
 pub use backend::{Backend, Cursor, CursorStyle, DrawCell, Headless, Input, Output};
 pub use camera::Camera;
 pub use color::{AnsiColor, Color, InvalidAnsiIndex, ParseColorError, Quantize, Style, Tint};
