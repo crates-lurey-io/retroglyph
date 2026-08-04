@@ -2080,9 +2080,9 @@ mod world {
 
 use hexal::{Direction, OddR, OffsetHex};
 use retroglyph_core::event::{Event, KeyCode, KeyModifiers, MouseButton, MouseEventKind};
-use retroglyph_core::{Backend, Camera, Color, Frame, HasSize, Pos, Rect, Size, Style, Terminal};
+use retroglyph_core::{Backend, Color, Frame, HasSize, Pos, Rect, Size, Style, Terminal};
 use retroglyph_examples::Example;
-use retroglyph_widgets::{Constraint, Panel, Surface, Widget, split_h, truncate};
+use retroglyph_widgets::{Camera, Constraint, Panel, Surface, Widget, split_h, truncate};
 
 use world::{TILE_H, TILE_W, TileMap, World};
 pub use world::{WORLD_H, WORLD_W};

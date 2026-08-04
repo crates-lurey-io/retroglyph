@@ -57,9 +57,10 @@
 
 use retroglyph_core::event::{Event, KeyCode, KeyLocation, KeyState};
 use retroglyph_core::{
-    AnsiColor, Backend, Camera, Color, Frame, Grid, Layer, Pos, Rect, Size, Style, Terminal, Tile,
+    AnsiColor, Backend, Color, Frame, Grid, Layer, Pos, Rect, Size, Style, Terminal, Tile,
 };
 use retroglyph_examples::Example;
+use retroglyph_widgets::Camera;
 
 /// World dimensions: comfortably larger than the 50x24 viewport in both axes, so the camera
 /// actually has room to scroll and clamp at every edge as the player crosses the map.

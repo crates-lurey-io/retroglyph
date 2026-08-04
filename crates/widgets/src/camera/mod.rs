@@ -1,7 +1,7 @@
 //! A scrolling viewport into a world larger than the screen.
 //!
 //! [`Camera`] is pure geometry: it converts between world coordinates (cells in
-//! some large space) and screen coordinates (cells in a [`Rect`] on the
+//! some large space) and screen coordinates (cells in a [`Rect`](retroglyph_core::Rect) on the
 //! terminal), and reports which world cells are currently visible. It holds no
 //! rendering opinion, so it works with any drawing style and is testable
 //! without a backend.
@@ -19,7 +19,7 @@
 //! See the `12_dungeon_scroll` example for `Camera` in action:
 //! <https://main.retroglyph.dev/examples/12_dungeon_scroll/terminal/>.
 //!
-//! [`Grid::from_charmap`](crate::Grid::from_charmap) builds a styled grid from an ASCII map or
+//! [`Grid::from_charmap`](retroglyph_core::Grid::from_charmap) builds a styled grid from an ASCII map or
 //! level string, one tile per character; combined with a [`Camera`] and multi-layer compositing,
 //! this is how a scrolling roguelike loads and follows a map larger than the screen (see the
 //! `11_sokoban` example for `from_charmap` itself, and `15_outpost_dashboard` for a `Camera` used
@@ -28,7 +28,8 @@
 //! # Example
 //!
 //! ```
-//! use retroglyph_core::{Camera, Pos, Rect, Size};
+//! use retroglyph_core::{Pos, Rect, Size};
+//! use retroglyph_widgets::Camera;
 //!
 //! // A 10x10 viewport onto a 100x100 world.
 //! let mut cam = Camera::new(Rect::new(0, 0, 10, 10), Size::new(100, 100));
@@ -40,10 +41,10 @@
 //! assert_eq!(cam.origin(), Pos::new(0, 0));
 //! ```
 
-mod transform;
-
-use crate::grid::{Pos, Rect, Size};
 use ixy::HasSize;
+use retroglyph_core::{Pos, Rect, Size};
+
+mod transform;
 
 /// A rectangular viewport onto a larger world, with world/screen conversions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -108,7 +109,8 @@ impl Camera {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Camera, Pos, Rect, Size};
+    /// use retroglyph_core::{Pos, Rect, Size};
+    /// use retroglyph_widgets::Camera;
     ///
     /// let mut cam = Camera::new(Rect::new(0, 0, 10, 10), Size::new(100, 100));
     /// cam.center_on(Pos::new(50, 50));
@@ -148,7 +150,8 @@ impl Camera {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Camera, Pos, Rect, Size};
+    /// use retroglyph_core::{Pos, Rect, Size};
+    /// use retroglyph_widgets::Camera;
     ///
     /// // A 20x20 viewport at (2, 2) over a 5x5 world: the effective viewport shrinks to 5x5
     /// // and centers within the given rect, instead of pinning to (2, 2).
@@ -201,7 +204,8 @@ impl Camera {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Camera, Pos, Rect, Size};
+    /// use retroglyph_core::{Pos, Rect, Size};
+    /// use retroglyph_widgets::Camera;
     ///
     /// let mut cam = Camera::new(Rect::new(0, 0, 10, 10), Size::new(100, 100));
     /// cam.set_origin(Pos::new(50, 50));
@@ -236,7 +240,8 @@ impl Camera {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Camera, Pos, Rect, Size};
+    /// use retroglyph_core::{Pos, Rect, Size};
+    /// use retroglyph_widgets::Camera;
     ///
     /// let mut cam = Camera::new(Rect::new(0, 0, 10, 10), Size::new(100, 100));
     /// cam.scroll_by(5, 3);

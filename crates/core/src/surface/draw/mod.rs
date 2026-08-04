@@ -19,8 +19,8 @@ impl Surface<'_> {
     /// area's own top-left, matching [`put_signed`](Self::put_signed)'s convention), not an
     /// absolute grid coordinate: a local check against `(0, 0)..(width, height)` here, followed
     /// by re-adding [`area`](Self::area)'s own top-left, so a clipped area that does not itself
-    /// start at grid `(0, 0)` (e.g. [`Camera::surface`](crate::Camera::surface)'s
-    /// `clip_translate`) still resolves to the right absolute cell. The result is then checked
+    /// start at grid `(0, 0)` (e.g. a scrolling-camera widget's `clip_translate`-based
+    /// `surface` method) still resolves to the right absolute cell. The result is then checked
     /// against [`clip_rect`](Self::clip_rect), not `area`, since the clip, never the area, is
     /// what decides whether a write lands.
     pub(super) fn shift(&self, x: u16, y: u16) -> Option<(u16, u16)> {

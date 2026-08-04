@@ -1,9 +1,8 @@
 //! Coordinate conversions between world and screen space.
 
 use super::Camera;
-use crate::grid::{Pos, Rect};
-use crate::surface::Surface;
 use ixy::HasSize;
+use retroglyph_core::{Pos, Rect, Surface};
 
 impl Camera {
     /// The world rectangle currently visible, clamped to world bounds.
@@ -15,7 +14,8 @@ impl Camera {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Camera, Pos, Rect, Size};
+    /// use retroglyph_core::{Pos, Rect, Size};
+    /// use retroglyph_widgets::Camera;
     ///
     /// // A 10x10 viewport near the bottom-right corner of a 12x12 world: the origin clamps
     /// // to (2, 2), so the visible rect is narrower than the viewport rather than reading
@@ -69,7 +69,8 @@ impl Camera {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Camera, Pos, Rect, Size};
+    /// use retroglyph_core::{Pos, Rect, Size};
+    /// use retroglyph_widgets::Camera;
     ///
     /// let mut cam = Camera::new(Rect::new(0, 0, 10, 10), Size::new(100, 100));
     /// cam.center_on(Pos::new(50, 50));
@@ -115,7 +116,8 @@ impl Camera {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Camera, Grid, Pos, Rect, Size, Style, Surface};
+    /// use retroglyph_core::{Grid, Pos, Rect, Size, Style, Surface};
+    /// use retroglyph_widgets::Camera;
     ///
     /// let mut grid = Grid::new(20, 20);
     /// let mut root = Surface::new(&mut grid, Rect::new(0, 0, 20, 20), 0);
@@ -137,7 +139,8 @@ impl Camera {
     /// dropped, not written past the world into unused grid cells.
     ///
     /// ```
-    /// use retroglyph_core::{Camera, Grid, Pos, Rect, Size, Style, Surface};
+    /// use retroglyph_core::{Grid, Pos, Rect, Size, Style, Surface};
+    /// use retroglyph_widgets::Camera;
     ///
     /// let mut grid = Grid::new(20, 20);
     /// let mut root = Surface::new(&mut grid, Rect::new(0, 0, 20, 20), 0);
@@ -172,7 +175,8 @@ impl Camera {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Camera, Pos, Rect, Size};
+    /// use retroglyph_core::{Pos, Rect, Size};
+    /// use retroglyph_widgets::Camera;
     ///
     /// let mut cam = Camera::new(Rect::new(5, 5, 10, 10), Size::new(100, 100));
     /// cam.center_on(Pos::new(50, 50));
@@ -213,7 +217,8 @@ impl Camera {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Camera, Pos, Rect, Size};
+    /// use retroglyph_core::{Pos, Rect, Size};
+    /// use retroglyph_widgets::Camera;
     ///
     /// let mut cam = Camera::new(Rect::new(5, 5, 10, 10), Size::new(100, 100));
     /// cam.center_on(Pos::new(50, 50));
@@ -256,7 +261,7 @@ impl Camera {
 mod tests {
     use super::super::cam;
     use super::*;
-    use crate::grid::Size;
+    use retroglyph_core::Size;
 
     #[test]
     fn screen_to_world_is_none_outside_the_viewport_or_past_the_world_edge() {
@@ -316,8 +321,7 @@ mod tests {
 
     #[test]
     fn surface_clips_to_the_letterboxed_viewport_after_set_viewport_fitted() {
-        use crate::color::Style;
-        use crate::grid::Grid;
+        use retroglyph_core::{Grid, Style};
 
         let mut grid = Grid::new(20, 20);
         let mut root = Surface::new(&mut grid, Rect::new(0, 0, 20, 20), 0);
@@ -412,8 +416,7 @@ mod tests {
 
     #[test]
     fn surface_draws_a_multi_cell_anchor_that_is_off_viewport() {
-        use crate::color::Style;
-        use crate::grid::Grid;
+        use retroglyph_core::{Grid, Style};
 
         // The scenario retroglyph#614 could not express: a two-cell-wide sprite whose anchor
         // sits one world column left of the visible range, so only its right half is on screen.
@@ -437,10 +440,9 @@ mod tests {
 
     #[test]
     fn surface_print_and_print_line_wrap_at_the_viewport_not_one_step_after_the_origin() {
-        use crate::color::Style;
-        use crate::grid::Grid;
-        use crate::text::{Line, Span};
         use alloc::vec;
+        use retroglyph_core::text::{Line, Span};
+        use retroglyph_core::{Grid, Style};
 
         // retroglyph#991: `print`/`print_line`'s wrap threshold used to compare a
         // translated-space column against an area-local one, so it fired one grapheme after
@@ -494,8 +496,7 @@ mod tests {
 
     #[test]
     fn surface_clips_to_the_world_not_the_viewport_when_the_world_is_smaller() {
-        use crate::color::Style;
-        use crate::grid::Grid;
+        use retroglyph_core::{Grid, Style};
 
         // A 20x20 viewport over a 5x5 world: `set_viewport` (not `set_viewport_fitted`) pins
         // the origin at (0, 0) and leaves the dead margin to the right and bottom of the world.

@@ -52,7 +52,7 @@ impl Surface<'_> {
         // `cx` is in the same (possibly translated) space as `pos.x` itself, since `shift()`
         // subtracts `origin_offset` from incoming coordinates before checking them against the
         // area (see `shift`'s doc). The wrap threshold has to live in that same space too, or a
-        // translated surface (any `Camera::surface`, or a plain `translate`) wraps early by
+        // translated surface (a scrolling-camera widget's `surface` method, or a plain `translate`) wraps early by
         // exactly the offset: fold `origin_offset.0` back in alongside translating
         // `clip.right()` out of absolute grid space.
         let right = i64::from(self.clip.right()) - i64::from(self.area.left())
@@ -87,7 +87,7 @@ impl Surface<'_> {
         // `cx` is in the same (possibly translated) space as `pos.x` itself, since `shift()`
         // subtracts `origin_offset` from incoming coordinates before checking them against the
         // area (see `shift`'s doc). The wrap threshold has to live in that same space too, or a
-        // translated surface (any `Camera::surface`, or a plain `translate`) wraps early by
+        // translated surface (a scrolling-camera widget's `surface` method, or a plain `translate`) wraps early by
         // exactly the offset: fold `origin_offset.0` back in alongside translating
         // `clip.right()` out of absolute grid space.
         let right = i64::from(self.clip.right()) - i64::from(self.area.left())
@@ -142,7 +142,7 @@ impl Surface<'_> {
         // `cx` is in the same (possibly translated) space as `pos.x` itself, since `shift()`
         // subtracts `origin_offset` from incoming coordinates before checking them against the
         // area (see `shift`'s doc). The span-skip threshold has to live in that same space too,
-        // or a translated surface (any `Camera::surface`, or a plain `translate`) skips every
+        // or a translated surface (a scrolling-camera widget's `surface` method, or a plain `translate`) skips every
         // span immediately: fold `origin_offset.0` back in alongside translating `clip.right()`
         // out of absolute grid space.
         let right = i64::from(self.clip.right()) - i64::from(self.area.left())

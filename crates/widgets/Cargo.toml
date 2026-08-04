@@ -45,6 +45,10 @@ std = ["retroglyph-core/std"]
 
 [dependencies]
 retroglyph-core = { path = "../core", version = "0.5.0", default-features = false }
+# `Camera::scroll_by`'s signed delta: `Pos<u16>::saturating_add_signed` takes a `Pos<i32>`, and
+# `retroglyph-core` only re-exports the `Pos<u16>` alias, so this needs the crate directly rather
+# than going through `retroglyph-core`.
+ixy = "0.8.0"
 # `Theme`/`Density`'s `serde` feature below. A separate optional dependency from
 # `retroglyph-core`'s own (rather than re-exported), matching how each crate here already
 # depends on `retroglyph-core` independently.

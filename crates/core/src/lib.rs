@@ -150,8 +150,6 @@ pub mod animate;
 pub mod app;
 /// Pluggable rendering backends.
 pub mod backend;
-/// A scrolling viewport into a world larger than the screen.
-pub mod camera;
 pub mod color;
 /// Which diagnostics a build compiles in.
 pub mod dev;
@@ -185,7 +183,6 @@ pub use app::{App, Flow, Frame};
 #[cfg(feature = "std")]
 pub use app::{RunOptions, run_blocking, run_blocking_with};
 pub use backend::{Backend, Cursor, CursorStyle, DrawCell, Headless, Input, Output};
-pub use camera::Camera;
 pub use color::{AnsiColor, Color, InvalidAnsiIndex, ParseColorError, Quantize, Style, Tint};
 pub use dev::{BuildMode, DEV};
 pub use event::{
