@@ -6,7 +6,7 @@
 //! A [`Grid`] holds up to 256 independent layers (`u8` ids `0..=255`), one
 //! [`Tile`] per cell on each. Layer 0 is always allocated; layers 1-255 are
 //! allocated lazily, on first write to that layer (see
-//! [`put_tile`](Grid::put_tile), [`cells_mut_or_alloc`](Grid::cells_mut_or_alloc)): a
+//! [`put_tile`](Grid::put_tile)): a
 //! single-layer game pays zero overhead for layers it never writes to. This is the
 //! crate's most distinctive feature and the one most worth understanding
 //! before reaching for a second layer.
@@ -89,8 +89,7 @@
 //! ([`put_tile`](Grid::put_tile), [`write_grapheme`](Grid::write_grapheme))
 //! clears the entire span first, so an anchor can never be left claiming cells it no longer owns.
 //! The exceptions are the escape hatches that hand out a `&mut Tile` directly
-//! ([`tile_mut`](Grid::tile_mut), [`cells_mut`](Grid::cells_mut),
-//! [`cells_mut_or_alloc`](Grid::cells_mut_or_alloc), `IndexMut`), which cannot intercept the
+//! ([`tile_mut`](Grid::tile_mut), `IndexMut`), which cannot intercept the
 //! write; use [`clear_span`](Grid::clear_span) first if you reach for one of those on a grid
 //! that uses spans.
 //!
@@ -228,6 +227,9 @@ pub type Rect = ixy::Rect<u16>;
 /// support sub-cell placement (e.g. `retroglyph-software`); it never changes which cell a glyph
 /// occupies, and cell-mode backends (e.g. `retroglyph-crossterm`) ignore it entirely.
 ///
+/// This crate's `serde` feature adds `Serialize`/`Deserialize` impls for `Offset` directly (unlike
+/// [`Size`]/[`Pos`]/[`Rect`], which forward to [`ixy`]'s own `serde` feature).
+///
 /// # Examples
 ///
 /// ```
@@ -238,6 +240,7 @@ pub type Rect = ixy::Rect<u16>;
 /// assert_eq!(offset.dy, -2);
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Offset {
     /// Horizontal pixel offset.
     pub dx: i16,
@@ -284,44 +287,6 @@ fn flat_index_to_xy(i: usize, width: usize) -> (u16, u16) {
 }
 
 // ---------------------------------------------------------------------------
-// Grid iterators
-// ---------------------------------------------------------------------------
-
-/// Iterator over all cells with their `(x, y)` coordinates.
-pub struct Cells<'a> {
-    iter: core::iter::Enumerate<core::slice::Iter<'a, Tile>>,
-    width: usize,
-}
-
-impl<'a> Iterator for Cells<'a> {
-    type Item = (u16, u16, &'a Tile);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().map(|(i, tile)| {
-            let (x, y) = flat_index_to_xy(i, self.width);
-            (x, y, tile)
-        })
-    }
-}
-
-/// Mutable iterator over all cells with their `(x, y)` coordinates.
-pub struct CellsMut<'a> {
-    iter: core::iter::Enumerate<core::slice::IterMut<'a, Tile>>,
-    width: usize,
-}
-
-impl<'a> Iterator for CellsMut<'a> {
-    type Item = (u16, u16, &'a mut Tile);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().map(|(i, tile)| {
-            let (x, y) = flat_index_to_xy(i, self.width);
-            (x, y, tile)
-        })
-    }
-}
-
-// ---------------------------------------------------------------------------
 // LayerBuf: a single layer's flat buffer
 // ---------------------------------------------------------------------------
 
@@ -334,12 +299,12 @@ pub(crate) struct LayerBuf {
     pub(crate) buf: GridBuf<Tile, Vec<Tile>, RowMajor>,
     /// Sparse side-table: flat row-major index -> the cell's out-of-line data, for tiles with
     /// [`TileFlags::HAS_EXTRA`] set. Empty until something writes a multi-codepoint grapheme or
-    /// a tint, which is what keeps [`Tile`] itself small (see [`Grid::grapheme`] and
-    /// [`Grid::tint`]).
+    /// a tint, which is what keeps [`Tile`] itself small (see [`DrawCell::grapheme`](crate::backend::DrawCell::grapheme)
+    /// and [`Grid::tint`]).
     ///
     /// The `HAS_EXTRA` flag is authoritative: readers must check it before
     /// consulting this map, since some write paths (`put_tile`,
-    /// `IndexMut`, `cells_mut`, `cells_mut_or_alloc`) can leave a stale entry behind when they
+    /// `IndexMut`) can leave a stale entry behind when they
     /// overwrite a tile that used to carry extra data without an explicit
     /// cleanup call. Since those paths only ever hand out or store tiles
     /// with `HAS_EXTRA` clear, a stale entry is harmless: it is simply
@@ -474,7 +439,7 @@ pub struct Grid {
 // ---------------------------------------------------------------------------
 
 impl Grid {
-    /// Borrow a specific layer, or `None` if unallocated.
+    /// Borrows a specific layer, or `None` if unallocated.
     ///
     /// `id` may be beyond the current layer-table `Vec`'s length: the table only grows as far
     /// as the highest layer id ever written (see [`layer_or_alloc`](Self::layer_or_alloc)), so an
@@ -483,7 +448,7 @@ impl Grid {
         self.layers.get(usize::from(id))?.as_ref()
     }
 
-    /// Borrow a specific layer mutably, allocating it if necessary.
+    /// Borrows a specific layer mutably, allocating it if necessary.
     ///
     /// Grows the layer-table `Vec` up to `id + 1` slots on demand, rather than the table always
     /// holding all 256 possible slots (see retroglyph#264): a `Grid` that only ever writes to
@@ -505,18 +470,24 @@ impl Grid {
         if id > self.max_layer {
             self.max_layer = id;
         }
-        self.layers[idx].as_mut().unwrap()
+        self.layers[idx]
+            .as_mut()
+            .expect("idx was just allocated above if it wasn't already Some")
     }
 
-    /// Borrow layer 0 (always allocated).
+    /// Borrows layer 0 (always allocated).
     fn layer0(&self) -> &LayerBuf {
-        // SAFETY: layer 0 is always `Some` (set in `new`).
-        self.layers[0].as_ref().unwrap()
+        // INVARIANT: layer 0 is always `Some` (set in `new`).
+        self.layers[0]
+            .as_ref()
+            .expect("layer 0 is always Some (set in Grid::new)")
     }
 
-    /// Borrow layer 0 mutably (always allocated).
+    /// Borrows layer 0 mutably (always allocated).
     fn layer0_mut(&mut self) -> &mut LayerBuf {
-        self.layers[0].as_mut().unwrap()
+        self.layers[0]
+            .as_mut()
+            .expect("layer 0 is always Some (set in Grid::new)")
     }
 
     /// Copy `layer` from `src` into `self` verbatim: the raw tile buffer (including every
@@ -566,6 +537,16 @@ impl Grid {
         }
         self.has_spans |= src.has_spans;
     }
+}
+
+/// Test-only readback for a tile's grapheme text, standing in for the removed
+/// `Grid::grapheme` (see retroglyph#1016): every real consumer reads this off the
+/// [`DrawCell`](crate::backend::DrawCell) stream returned by [`Grid::layers`], so tests do too.
+#[cfg(test)]
+pub(crate) fn grapheme_at(grid: &Grid, layer: u8, x: u16, y: u16) -> Option<&str> {
+    grid.layers()
+        .find(|c| c.layer == layer && c.pos == Pos::new(x, y))
+        .and_then(|c| c.grapheme)
 }
 
 #[cfg(test)]
@@ -694,6 +675,17 @@ mod tests {
         assert_eq!(
             serde_json::from_str::<Rect>(&json).expect("deserialize"),
             rect
+        );
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_offset_serializes_and_deserializes() {
+        let offset = Offset::new(3, -2);
+        let json = serde_json::to_string(&offset).expect("serialize");
+        assert_eq!(
+            serde_json::from_str::<Offset>(&json).expect("deserialize"),
+            offset
         );
     }
 }

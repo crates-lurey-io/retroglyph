@@ -19,7 +19,7 @@ use alpha_blend::channel::Channel;
 use grixy::ops::{ExactSizeGrid, GridRead, GridWrite};
 
 impl Grid {
-    /// Write a tile to `layer` at `pos`, honoring `tile`'s own precomputed
+    /// Writes a tile to `layer` at `pos`, honoring `tile`'s own precomputed
     /// [`width`](Tile::width): a fresh 2-column tile also gets a
     /// [`TileFlags::WIDE_CHAR_SPACER`] at `pos.x + 1`, the same pairing
     /// [`write_grapheme`](Self::write_grapheme) writes, on every feature combination (`Tile::width`
@@ -80,6 +80,12 @@ impl Grid {
             return None;
         }
 
+        // Refuse out-of-bounds before touching `clear_overlap`/`layer_or_alloc` below: neither
+        // should allocate the layer for a write that is about to be refused anyway (retroglyph#1012).
+        if pos.x >= self.width || pos.y >= self.height {
+            return None;
+        }
+
         self.clear_span_overlap(layer, pos.x, pos.y, width.max(1));
         if fresh {
             self.clear_overlap(layer, pos.x, pos.y, width.max(1));
@@ -91,9 +97,7 @@ impl Grid {
         let gpos = to_grixy_pos(pos);
         let idx = usize::from(pos.y) * grid_w + usize::from(pos.x);
         let lb = self.layer_or_alloc(layer);
-        if !lb.buf.contains(gpos) {
-            return None;
-        }
+        debug_assert!(lb.buf.contains(gpos), "bounds already checked above");
         lb.extras.remove(&idx);
         tile.flags.remove(TileFlags::HAS_EXTRA);
         tile.clear_span();
@@ -167,11 +171,14 @@ impl Grid {
             return;
         }
 
-        // Clear every span and every wide-char cell this fill would partially overwrite, one row
-        // at a time rather than one cell at a time: still O(rows), and a no-op on a grid that has
-        // never used spans (see `clear_span_overlap`).
+        // Clear every span this fill would partially overwrite in one pass over the whole rect
+        // (see `clear_span_overlap_rect`), rather than once per row: a span spanning several rows
+        // of `rect` would otherwise be collected, and fully reset, once per row it occupies
+        // (retroglyph#1020). A no-op on a grid that has never used spans.
+        self.clear_span_overlap_rect(layer, rect.left(), rect.top(), rect.width(), rect.height());
+        // Wide-char overlap has no region-scoped variant (yet): still one call per row, but that
+        // remains O(rows) since it never re-collects a growing anchor set.
         for y in rect.top()..rect.bottom() {
-            self.clear_span_overlap(layer, rect.left(), y, rect.width());
             self.clear_overlap(layer, rect.left(), y, rect.width());
         }
 
@@ -213,17 +220,18 @@ impl Grid {
     /// An empty entry is removed rather than stored, so the flag means exactly "an entry
     /// exists".
     pub(crate) fn set_extra(&mut self, layer: u8, x: u16, y: u16, extra: TileExtra) {
+        if x >= self.width || y >= self.height {
+            return;
+        }
         let pos = to_grixy_pos(Pos::new(x, y));
         let idx = usize::from(y) * usize::from(self.width) + usize::from(x);
         let lb = self.layer_or_alloc(layer);
-        if lb.buf.contains(pos) {
-            if extra.is_empty() {
-                lb.buf[pos].flags.remove(TileFlags::HAS_EXTRA);
-                lb.extras.remove(&idx);
-            } else {
-                lb.buf[pos].flags.insert(TileFlags::HAS_EXTRA);
-                lb.extras.insert(idx, extra);
-            }
+        if extra.is_empty() {
+            lb.buf[pos].flags.remove(TileFlags::HAS_EXTRA);
+            lb.extras.remove(&idx);
+        } else {
+            lb.buf[pos].flags.insert(TileFlags::HAS_EXTRA);
+            lb.extras.insert(idx, extra);
         }
     }
 
@@ -234,7 +242,7 @@ impl Grid {
     /// coordinates outside the grid or on an unallocated layer.
     ///
     /// A tint is grid state rather than [`Tile`] state, for the same reason a multi-codepoint
-    /// grapheme is (see [`grapheme`](Self::grapheme)): it is rare per cell and `Tile` has no room
+    /// grapheme is: it is rare per cell and `Tile` has no room
     /// left. So it is read here, not through [`Tile::style`].
     ///
     /// Cell backends have no sprite to recolour and ignore this entirely.
@@ -260,12 +268,12 @@ impl Grid {
     /// Setting [`Tint::None`] clears the tint, and drops the cell's side-table entry entirely if
     /// it held nothing else. Does nothing if `(x, y)` is out of bounds.
     pub fn set_tint(&mut self, layer: u8, x: u16, y: u16, tint: Tint) {
+        if x >= self.width || y >= self.height {
+            return;
+        }
         let idx = usize::from(y) * usize::from(self.width) + usize::from(x);
         let pos = to_grixy_pos(Pos::new(x, y));
         let lb = self.layer_or_alloc(layer);
-        if !lb.buf.contains(pos) {
-            return;
-        }
         // Preserve any grapheme already stored for this cell: the two members of the entry are
         // written by separate calls and neither should clobber the other.
         let grapheme = if lb.buf[pos].flags.contains(TileFlags::HAS_EXTRA) {
@@ -283,7 +291,7 @@ impl Grid {
         }
     }
 
-    /// Read a tile on `layer` at `pos`, or `None` if the layer is
+    /// Reads a tile on `layer` at `pos`, or `None` if the layer is
     /// unallocated or `pos` is out of bounds.
     #[must_use]
     pub fn tile(&self, layer: u8, pos: impl Into<Pos>) -> Option<&Tile> {
@@ -291,7 +299,7 @@ impl Grid {
         self.layer(layer)?.buf.get(pos)
     }
 
-    /// Mutably borrow a tile on `layer` at `pos`, or `None` if the layer is
+    /// Mutably borrows a tile on `layer` at `pos`, or `None` if the layer is
     /// unallocated or `pos` is out of bounds.
     ///
     /// This hands out a direct `&mut Tile`, so it cannot intercept a write the way
@@ -307,7 +315,7 @@ impl Grid {
             .get_mut(pos)
     }
 
-    /// Copy tiles from `src` within `src_rect` to `self` at `(dst_x, dst_y)`
+    /// Copies tiles from `src` within `src_rect` to `self` at `(dst_x, dst_y)`
     /// on `layer`. Empty tiles (nothing written; see [`Tile::is_empty`]) are
     /// treated as transparent and skipped. An explicit space is copied and
     /// overwrites the destination.
@@ -317,6 +325,13 @@ impl Grid {
     /// so a span degrades to exactly its text fallback. `src_rect` can clip a span in half, and
     /// half a span is not a thing the grid can represent; degrading to the fallback glyphs is
     /// both representable and the same content a cell backend would have drawn anyway.
+    ///
+    /// The same is true of wide-character pairs: `src_rect` clipping a lead from its spacer, or
+    /// the copy landing on only one half of a destination pair, both leave half a pair, which is
+    /// equally unrepresentable. Either case strips [`TileFlags::WIDE_CHAR`]/
+    /// [`TileFlags::WIDE_CHAR_SPACER`] from the surviving half (or clears the destination half
+    /// the copy overwrites), so a blit can never leave a dangling lead or an orphaned spacer
+    /// behind (retroglyph#1013).
     ///
     /// Walks `src`'s and `self`'s layer buffers directly by flat index instead of going through
     /// [`tile`](Self::tile)/[`put_tile`](Self::put_tile) per cell (see retroglyph#263):
@@ -426,8 +441,9 @@ impl Grid {
 
     /// Shared copy loop behind [`blit`](Self::blit), [`blit_alpha`](Self::blit_alpha), and
     /// [`blit_cross_layer`](Self::blit_cross_layer): clamps `src_rect` to `src`'s bounds, skips
-    /// the whole call if nothing in it is visible, clears any destination span the copy is about
-    /// to partially overwrite (retroglyph#710), and walks matching `src`/destination cells by
+    /// the whole call if nothing in it is visible, clears any destination span or wide-character
+    /// pair the copy is about to partially overwrite (retroglyph#710, retroglyph#1013), and walks
+    /// matching `src`/destination cells by
     /// flat index (retroglyph#262/#263), applying `transform` to each non-empty source tile
     /// (given the source tile and, for context, the destination tile it's about to replace)
     /// before writing it and fixing up grapheme extras. `dst_x`/`dst_y` saturate on overflow
@@ -478,33 +494,37 @@ impl Grid {
         let dst_height = usize::from(self.height);
 
         // A blit writes straight into the destination buffer below, bypassing `put_tile`, so it
-        // has to do `put_tile`'s `clear_span_overlap` call itself or a cell that used to anchor
-        // (or be covered by) a multi-cell span would keep claiming cells this blit just
-        // overwrote (retroglyph#710). Only the cells actually being overwritten (in bounds,
-        // non-empty source tile) are cleared: an empty source tile is transparent and leaves the
-        // destination untouched, so clearing a whole row's footprint up front would wipe out
-        // spans the blit never actually touches. Gated on `has_spans` so a grid that never uses
-        // spans pays only the one `bool` check.
-        if self.has_spans {
-            for sy in sy0..sy1 {
-                let dy = dst_y.saturating_add(sy - src_rect.top());
-                if usize::from(dy) >= dst_height {
+        // has to do `put_tile`'s `clear_span_overlap`/`clear_overlap` calls itself, or a cell that
+        // used to anchor (or be covered by) a multi-cell span, or half of a wide-character pair,
+        // would keep claiming cells this blit just overwrote (retroglyph#710, retroglyph#1013).
+        // Only the cells actually being overwritten (in bounds, non-empty source tile) are
+        // cleared: an empty source tile is transparent and leaves the destination untouched, so
+        // clearing a whole row's footprint up front would wipe out spans/pairs the blit never
+        // actually touches. `clear_span_overlap` is gated on `has_spans` so a grid that never uses
+        // spans pays only the one `bool` check; `clear_overlap` has no such gate because `put_tile`
+        // itself never gates it (`WIDE_CHAR`/`WIDE_CHAR_SPACER` are set on every feature
+        // combination, not just under `egc`).
+        for sy in sy0..sy1 {
+            let dy = dst_y.saturating_add(sy - src_rect.top());
+            if usize::from(dy) >= dst_height {
+                continue;
+            }
+            for sx in sx0..sx1 {
+                let dx = dst_x.saturating_add(sx - src_rect.left());
+                if usize::from(dx) >= dst_width {
                     continue;
                 }
-                for sx in sx0..sx1 {
-                    let dx = dst_x.saturating_add(sx - src_rect.left());
-                    if usize::from(dx) >= dst_width {
-                        continue;
-                    }
-                    let src_idx = usize::from(sy) * src_width + usize::from(sx);
-                    if src_lb.buf.as_ref()[src_idx]
-                        .flags
-                        .contains(TileFlags::EMPTY)
-                    {
-                        continue;
-                    }
+                let src_idx = usize::from(sy) * src_width + usize::from(sx);
+                if src_lb.buf.as_ref()[src_idx]
+                    .flags
+                    .contains(TileFlags::EMPTY)
+                {
+                    continue;
+                }
+                if self.has_spans {
                     self.clear_span_overlap(dst_layer, dx, dy, 1);
                 }
+                self.clear_overlap(dst_layer, dx, dy, 1);
             }
         }
 
@@ -531,6 +551,23 @@ impl Grid {
                 let mut out_tile = transform(tile, &dst_tile);
                 out_tile.flags.remove(TileFlags::HAS_EXTRA);
                 out_tile.clear_span();
+
+                // Half a wide-character pair is as unrepresentable as half a span (see
+                // `clear_span` above): `src_rect` or the destination clip can separate a lead
+                // from its spacer, so drop the flag on whichever half survives the copy alone
+                // rather than leave a dangling lead (no spacer to its right) or an orphaned
+                // spacer (no lead to its left) (retroglyph#1013).
+                if out_tile.flags.contains(TileFlags::WIDE_CHAR) {
+                    let partner_survived = sx + 1 < sx1 && usize::from(dx) + 1 < dst_width;
+                    if !partner_survived {
+                        out_tile.clear_wide();
+                    }
+                } else if out_tile.flags.contains(TileFlags::WIDE_CHAR_SPACER) {
+                    let partner_survived = sx > sx0 && dx > 0;
+                    if !partner_survived {
+                        out_tile.clear_wide();
+                    }
+                }
                 dst_lb.buf.as_mut()[dst_idx] = out_tile;
                 if tile.flags.contains(TileFlags::HAS_EXTRA) {
                     if let Some(extra) = src_lb.extra_entry_for(src_idx, tile) {
@@ -548,11 +585,9 @@ impl Grid {
         }
     }
 
-    /// Yield `(layer_id, Pos, &Tile, Option<&str>)` for every allocated cell
-    /// across all layers, in layer-major (0 → `max_layer`) then row-major
-    /// order. The last element is the tile's grapheme text (see
-    /// [`grapheme`](Self::grapheme)), `Some` only when
-    /// [`TileFlags::HAS_EXTRA`] is set.
+    /// Yield a [`DrawCell`] for every allocated cell across all layers, in
+    /// layer-major (0 → `max_layer`) then row-major order. `grapheme` is
+    /// `Some` only when [`TileFlags::HAS_EXTRA`] is set.
     ///
     /// Unallocated layers are skipped. This is used by backends that need
     /// the full frame on every draw (see [`crate::Output::needs_full_frame`]).
@@ -576,7 +611,7 @@ impl Grid {
             })
     }
 
-    /// Clear every allocated layer.
+    /// Clears every allocated layer.
     pub fn clear_all(&mut self) {
         for layer in self.layers.iter_mut().flatten() {
             layer.buf.clear();
@@ -584,7 +619,59 @@ impl Grid {
         }
     }
 
-    /// Composite every allocated layer into `dst`'s layer 0, one tile per cell.
+    /// Deallocates `layer`, freeing its buffer entirely rather than clearing its content in
+    /// place.
+    ///
+    /// Unlike [`clear_all`](Self::clear_all) (and a per-layer clear via [`cells_mut`](Self::cells_mut)),
+    /// which empty a layer's cells but leave it allocated, this drops the [`LayerBuf`] itself, the
+    /// same table slot [`layer_or_alloc`](Self::layer_or_alloc) fills in on first write. That
+    /// matters because [`max_layer`](Self::max_layer) only ever grows on write (see its own doc):
+    /// a layer that is merely cleared still counts toward it, while a deallocated one does not,
+    /// letting `max_layer` fall back down once every layer above it is also gone. This is what lets
+    /// [`crate::Terminal::drop_layer`] undo a layer's permanent allocation and, once every layer
+    /// above 0 is dropped, put [`crate::Terminal::present`] back on its single-layer fast path
+    /// (retroglyph#1028).
+    ///
+    /// If `layer` was the current `max_layer`, the table is rescanned downward for the next
+    /// highest still-allocated layer, `O(max_layer)` in the worst case; deallocating any other
+    /// layer is `O(1)`. Deallocating an already-unallocated layer (or one past the table's
+    /// current length) is a no-op.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `layer` is 0: layer 0 is always allocated (see [`Grid::new`]) and can never be
+    /// deallocated.
+    pub(crate) fn deallocate_layer(&mut self, layer: u8) {
+        assert_ne!(
+            layer, 0,
+            "layer 0 is always allocated and cannot be deallocated"
+        );
+        let idx = usize::from(layer);
+        if idx >= self.layers.len() {
+            return;
+        }
+        self.layers[idx] = None;
+        if layer == self.max_layer {
+            self.max_layer = (0..layer)
+                .rev()
+                .find(|&id| self.layers[usize::from(id)].is_some())
+                .unwrap_or(0);
+        }
+    }
+
+    /// Whether `layer` is unallocated, or allocated but every tile on it is untouched (see
+    /// [`Tile::is_empty`]).
+    ///
+    /// Used by [`crate::Terminal::drop_layer`]'s deferred deallocation to tell a layer that is
+    /// still genuinely empty (safe to free) apart from one that was redrawn after the drop was
+    /// requested (some tile is no longer empty), which must cancel the drop instead of silently
+    /// discarding content the app just wrote.
+    pub(crate) fn layer_is_empty(&self, layer: u8) -> bool {
+        self.layer(layer)
+            .is_none_or(|lb| lb.buf.as_ref().iter().all(Tile::is_empty))
+    }
+
+    /// Composites every allocated layer into `dst`'s layer 0, one tile per cell.
     ///
     /// Used by [`crate::Terminal::present`] for backends that do not composite
     /// layers themselves (see [`crate::Output::composites_layers`]). The rule
@@ -668,7 +755,7 @@ impl Grid {
     }
 }
 
-/// Blend two [`Color`] values using `mode`. [`Color::Default`] preserves the
+/// Blends two [`Color`] values using `mode`. [`Color::Default`] preserves the
 /// destination. Non-RGB source colors are returned as-is (no resolution).
 ///
 /// [`BlendMode::Linear`] is a per-channel sRGB-domain lerp (dst -> src by `t`) delegated to
@@ -848,7 +935,7 @@ mod tests {
         assert_eq!(g.layers.len(), 1);
         assert!(g.layer(255).is_none());
         assert!(g.tile(255, (0, 0)).is_none());
-        assert!(g.grapheme(255, 0, 0).is_none());
+        assert!(crate::grid::grapheme_at(&g, 255, 0, 0).is_none());
     }
 
     #[test]
@@ -858,6 +945,110 @@ mod tests {
         let mut g = Grid::new(5, 5);
         g.clear(255);
         assert_eq!(g.layers.len(), 1);
+    }
+
+    #[test]
+    fn put_tile_out_of_bounds_does_not_allocate_the_layer() {
+        // retroglyph#1012: a refused out-of-bounds write must not allocate the layer or raise
+        // `max_layer`, matching `put_tile`'s own "does nothing" contract.
+        let mut g = Grid::new(4, 4);
+        assert_eq!(
+            g.put_tile(200, (99, 99), Tile::new('x', Style::default())),
+            None
+        );
+        assert_eq!(g.max_layer(), 0);
+        assert!(g.tile(200, (0, 0)).is_none());
+        assert!(g.layer(200).is_none());
+    }
+
+    #[test]
+    fn set_tint_out_of_bounds_does_not_allocate_the_layer() {
+        // retroglyph#1012: same guarantee as `put_tile`, for the `set_tint` write path.
+        let mut g = Grid::new(4, 4);
+        g.set_tint(200, 99, 99, Tint::multiply(1, 2, 3));
+        assert_eq!(g.max_layer(), 0);
+        assert!(g.layer(200).is_none());
+    }
+
+    #[test]
+    #[should_panic(expected = "layer 0 is always allocated")]
+    fn test_grid_deallocate_layer_zero_panics() {
+        let mut g = Grid::new(4, 4);
+        g.deallocate_layer(0);
+    }
+
+    #[test]
+    fn test_grid_deallocate_layer_the_top_layer_lowers_max_layer() {
+        let mut g = Grid::new(4, 4);
+        g.put_tile(3, (0, 0), Tile::new('@', Style::default()));
+        assert_eq!(g.max_layer(), 3);
+
+        g.deallocate_layer(3);
+        assert_eq!(g.max_layer(), 0);
+        assert!(g.layer(3).is_none());
+    }
+
+    #[test]
+    fn test_grid_deallocate_layer_rescans_down_to_the_next_allocated_layer() {
+        let mut g = Grid::new(4, 4);
+        g.put_tile(2, (0, 0), Tile::new('a', Style::default()));
+        g.put_tile(5, (0, 0), Tile::new('b', Style::default()));
+        assert_eq!(g.max_layer(), 5);
+
+        g.deallocate_layer(5);
+        assert_eq!(g.max_layer(), 2);
+        assert!(g.layer(5).is_none());
+        assert!(g.layer(2).is_some());
+    }
+
+    #[test]
+    fn test_grid_deallocate_layer_below_the_top_leaves_max_layer_unchanged() {
+        let mut g = Grid::new(4, 4);
+        g.put_tile(2, (0, 0), Tile::new('a', Style::default()));
+        g.put_tile(5, (0, 0), Tile::new('b', Style::default()));
+
+        g.deallocate_layer(2);
+        assert_eq!(g.max_layer(), 5);
+        assert!(g.layer(2).is_none());
+        assert!(g.layer(5).is_some());
+    }
+
+    #[test]
+    fn test_grid_deallocate_layer_reads_back_as_unallocated() {
+        let mut g = Grid::new(4, 4);
+        g.put_tile(1, (0, 0), Tile::new('@', Style::default()));
+        g.deallocate_layer(1);
+        assert!(g.tile(1, (0, 0)).is_none());
+    }
+
+    #[test]
+    fn test_grid_deallocate_layer_already_unallocated_is_a_no_op() {
+        let mut g = Grid::new(4, 4);
+        g.deallocate_layer(1);
+        assert_eq!(g.max_layer(), 0);
+
+        // Past the table's current length entirely.
+        g.deallocate_layer(200);
+        assert_eq!(g.max_layer(), 0);
+    }
+
+    #[test]
+    fn set_extra_out_of_bounds_does_not_allocate_the_layer() {
+        // retroglyph#1012: same guarantee as `put_tile`/`set_tint`, for the crate-private
+        // `set_extra` write path (reached from `Headless::draw_layers` with whatever `pos` the
+        // replayed `DrawCell` stream carries, which is not itself bounds-checked there).
+        let mut g = Grid::new(4, 4);
+        g.set_extra(
+            200,
+            99,
+            99,
+            TileExtra {
+                grapheme: None,
+                tint: Tint::multiply(1, 2, 3),
+            },
+        );
+        assert_eq!(g.max_layer(), 0);
+        assert!(g.layer(200).is_none());
     }
 
     #[test]
@@ -1193,6 +1384,25 @@ mod tests {
         assert_eq!(anchor.glyph(), ' ');
     }
 
+    /// `fill_region` scans the region for overlapping spans once, not once per row (see
+    /// `clear_span_overlap_rect`, retroglyph#1020): a span several rows tall, entirely inside
+    /// `rect`, must still come out fully and correctly reset rather than leaving a stale anchor
+    /// or covered cell behind from a row the single-pass collection missed.
+    #[test]
+    fn fill_region_clears_a_multi_row_span_it_fully_covers() {
+        let mut g = Grid::new(6, 6);
+        g.write_span(0, 1, 1, &["AB", "CD", "EF", "GH"], Style::default())
+            .expect("2x4 span fits in a 6x6 grid");
+
+        g.fill_region(0, Rect::new(0, 0, 6, 6), Tile::new('#', Style::default()));
+
+        for y in 0..6 {
+            for x in 0..6 {
+                assert_eq!(g.tile(0, (x, y)).unwrap().glyph(), '#', "({x}, {y})");
+            }
+        }
+    }
+
     /// `clear_overlap` runs regardless of `egc` (see its own doc comment): `fill_region` gated it
     /// behind the feature until retroglyph#1014, so a wide pair written by `put_tile` (which is
     /// not itself `egc`-gated) kept a stale `WIDE_CHAR` flag after a fill partially overwrote it
@@ -1250,7 +1460,7 @@ mod tests {
 
         g.fill_region(0, Rect::new(0, 0, 4, 4), Tile::new('#', Style::default()));
 
-        assert_eq!(g.grapheme(0, 1, 1), None);
+        assert_eq!(crate::grid::grapheme_at(&g, 0, 1, 1), None);
         assert_eq!(g.tint(0, 2, 2), Tint::None);
     }
 
@@ -1333,12 +1543,12 @@ mod tests {
         g.set_tint(0, 1, 1, Tint::multiply(128, 128, 128));
 
         // Both members survive: `set_tint` preserves the grapheme already stored.
-        assert_eq!(g.grapheme(0, 1, 1), Some("e\u{0301}"));
+        assert_eq!(crate::grid::grapheme_at(&g, 0, 1, 1), Some("e\u{0301}"));
         assert_eq!(g.tint(0, 1, 1), Tint::multiply(128, 128, 128));
 
         // Clearing the tint leaves the grapheme, and so leaves the entry in place.
         g.set_tint(0, 1, 1, Tint::None);
-        assert_eq!(g.grapheme(0, 1, 1), Some("e\u{0301}"));
+        assert_eq!(crate::grid::grapheme_at(&g, 0, 1, 1), Some("e\u{0301}"));
         assert_eq!(g.tint(0, 1, 1), Tint::None);
     }
 
@@ -1351,7 +1561,7 @@ mod tests {
 
         // HAS_EXTRA is now set for a cell with no grapheme text. `grapheme` must still say None
         // rather than reaching into the entry and finding an empty slot.
-        assert_eq!(g.grapheme(0, 1, 1), None);
+        assert_eq!(crate::grid::grapheme_at(&g, 0, 1, 1), None);
         assert_eq!(g.tint(0, 1, 1), Tint::multiply(128, 128, 128));
     }
 
@@ -1364,7 +1574,7 @@ mod tests {
         let mut dst = Grid::new(2, 2);
         dst.blit(0, &src, Rect::new(0, 0, 2, 2), 0, 0);
         assert_eq!(dst[Pos::new(0, 0)].glyph, 'e');
-        assert_eq!(dst.grapheme(0, 0, 0), Some("e\u{0301}"));
+        assert_eq!(crate::grid::grapheme_at(&dst, 0, 0, 0), Some("e\u{0301}"));
     }
 
     #[test]
@@ -1711,7 +1921,10 @@ mod tests {
         let mut g = Grid::new(2, 2);
         g.write_grapheme(0, 0, 0, "e\u{0301}", Style::default());
         let cloned = g.clone();
-        assert_eq!(cloned.grapheme(0, 0, 0), Some("e\u{0301}"));
+        assert_eq!(
+            crate::grid::grapheme_at(&cloned, 0, 0, 0),
+            Some("e\u{0301}")
+        );
     }
 
     #[cfg(feature = "egc")]
@@ -1722,7 +1935,10 @@ mod tests {
         let mut flattened = Grid::new(2, 2);
         g.flatten_into(&mut flattened);
         assert_eq!(flattened[Pos::new(0, 0)].glyph, 'e');
-        assert_eq!(flattened.grapheme(0, 0, 0), Some("e\u{0301}"));
+        assert_eq!(
+            crate::grid::grapheme_at(&flattened, 0, 0, 0),
+            Some("e\u{0301}")
+        );
     }
 
     #[test]
@@ -1927,6 +2143,119 @@ mod tests {
 
         assert_eq!(dst[Pos::new(1, 0)].glyph(), 'X');
         assert_eq!(dst.tile(0, Pos::new(0, 0)).map(Tile::span), Some((1, 1)));
+    }
+
+    #[test]
+    fn blit_leaves_a_dangling_wide_char_lead_in_the_destination() {
+        // retroglyph#1013: `blit` writes straight into the destination buffer, bypassing
+        // `put_tile`'s `clear_overlap` call, so overwriting a wide-character pair's spacer used
+        // to leave the lead cell still claiming a spacer the blit had just replaced.
+        let mut dst = Grid::new(4, 1);
+        dst.put_tile(0, (0, 0), Tile::new('\u{4e2d}', Style::default()));
+
+        let mut src = Grid::new(4, 1);
+        src.put_tile(0, (1, 0), Tile::new('X', Style::default()));
+        dst.blit(0, &src, Rect::new(1, 0, 1, 1), 1, 0);
+
+        assert_eq!(dst[Pos::new(1, 0)].glyph(), 'X');
+        assert!(!dst[Pos::new(0, 0)].flags().contains(TileFlags::WIDE_CHAR));
+    }
+
+    #[test]
+    fn blit_alpha_leaves_a_dangling_wide_char_lead_in_the_destination() {
+        // Same bug as `blit_leaves_a_dangling_wide_char_lead_in_the_destination`, but through
+        // `blit_alpha`'s separate copy path.
+        let mut dst = Grid::new(4, 1);
+        dst.put_tile(0, (0, 0), Tile::new('\u{4e2d}', Style::default()));
+
+        let mut src = Grid::new(4, 1);
+        src.put_tile(0, (1, 0), Tile::new('X', Style::default()));
+        dst.blit_alpha(
+            0,
+            &src,
+            Rect::new(1, 0, 1, 1),
+            1,
+            0,
+            BlendMode::Linear,
+            1.0,
+            1.0,
+        );
+
+        assert_eq!(dst[Pos::new(1, 0)].glyph(), 'X');
+        assert!(!dst[Pos::new(0, 0)].flags().contains(TileFlags::WIDE_CHAR));
+    }
+
+    #[test]
+    fn blit_degrades_a_wide_char_pair_clipped_by_src_rect() {
+        // `src_rect` can clip a wide-character pair in half, and half a pair is not
+        // representable, so `blit` drops the `WIDE_CHAR` flag on the lead it does copy, the same
+        // way it already degrades a clipped span (retroglyph#1013).
+        let mut src = Grid::new(4, 1);
+        src.put_tile(0, (0, 0), Tile::new('\u{4e2d}', Style::default()));
+
+        let mut dst = Grid::new(4, 1);
+        dst.blit(0, &src, Rect::new(0, 0, 1, 1), 0, 0);
+
+        assert!(!dst[Pos::new(0, 0)].flags().contains(TileFlags::WIDE_CHAR));
+    }
+
+    #[test]
+    fn blit_alpha_degrades_a_wide_char_pair_clipped_by_src_rect() {
+        // Same bug as `blit_degrades_a_wide_char_pair_clipped_by_src_rect`, but through
+        // `blit_alpha`'s separate copy path.
+        let mut src = Grid::new(4, 1);
+        src.put_tile(0, (0, 0), Tile::new('\u{4e2d}', Style::default()));
+
+        let mut dst = Grid::new(4, 1);
+        dst.blit_alpha(
+            0,
+            &src,
+            Rect::new(0, 0, 1, 1),
+            0,
+            0,
+            BlendMode::Linear,
+            1.0,
+            1.0,
+        );
+
+        assert!(!dst[Pos::new(0, 0)].flags().contains(TileFlags::WIDE_CHAR));
+    }
+
+    #[test]
+    fn blit_copies_a_whole_wide_char_pair_intact() {
+        // The lead-clip and spacer-clip tests above both exercise the `!partner_survived` half of
+        // `blit_with`'s wide-pair check; this covers the other half, where `src_rect` includes
+        // both halves and neither flag should be stripped.
+        let mut src = Grid::new(4, 1);
+        src.put_tile(0, (0, 0), Tile::new('\u{4e2d}', Style::default()));
+
+        let mut dst = Grid::new(4, 1);
+        dst.blit(0, &src, Rect::new(0, 0, 2, 1), 0, 0);
+
+        assert!(dst[Pos::new(0, 0)].flags().contains(TileFlags::WIDE_CHAR));
+        assert!(
+            dst[Pos::new(1, 0)]
+                .flags()
+                .contains(TileFlags::WIDE_CHAR_SPACER)
+        );
+    }
+
+    #[test]
+    fn blit_degrades_a_bare_wide_char_spacer_clipped_by_src_rect() {
+        // The spacer twin of `blit_degrades_a_wide_char_pair_clipped_by_src_rect`: `src_rect` can
+        // just as easily clip out the lead and leave the spacer, which is equally unrepresentable
+        // on its own, so `blit` drops `WIDE_CHAR_SPACER` on the spacer it does copy.
+        let mut src = Grid::new(4, 1);
+        src.put_tile(0, (0, 0), Tile::new('\u{4e2d}', Style::default()));
+
+        let mut dst = Grid::new(4, 1);
+        dst.blit(0, &src, Rect::new(1, 0, 1, 1), 1, 0);
+
+        assert!(
+            !dst[Pos::new(1, 0)]
+                .flags()
+                .contains(TileFlags::WIDE_CHAR_SPACER)
+        );
     }
 
     /// A single `blit`-vs-`copy_rect_clamped` comparison case for

@@ -223,6 +223,37 @@ fn put_span_reports_why_a_span_did_not_draw() {
 }
 
 #[test]
+fn put_span_refuses_an_axis_wider_than_255_cells() {
+    let mut grid = Grid::new(300, 2);
+    let mut surface = screen(&mut grid);
+    let row = "a".repeat(256);
+
+    // Fits the surface's own clip (300 columns), but 256 columns is one past what a span's
+    // footprint can represent (`Tile` stores each span dimension in a `u8`).
+    assert_eq!(
+        surface.put_span((0, 0), &[row.as_str()], Style::default()),
+        None
+    );
+    assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
+}
+
+#[test]
+fn put_span_refuses_and_writes_nothing_when_a_later_row_is_longer_than_the_first() {
+    let mut grid = Grid::new(4, 4);
+    let mut surface = screen(&mut grid);
+
+    // `span_fits` measures the footprint against the first row ("ab", 2 cols) and it fits;
+    // `Grid::write_span` is what actually rejects the ragged second row ("abc", 3 cols), so
+    // the refusal happens after the fits check has already passed, not before it.
+    assert_eq!(
+        surface.put_span((0, 0), &["ab", "abc"], Style::default()),
+        None
+    );
+    assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
+    assert_eq!(grid[Pos::new(0, 1)].glyph(), ' ');
+}
+
+#[test]
 fn put_span_uniform_writes_the_anchor_once_and_fills_the_rest() {
     let mut grid = Grid::new(4, 4);
     assert_eq!(
@@ -395,6 +426,98 @@ fn fill_rect_with_a_wide_glyph_falls_back_to_the_put_loop() {
     }
 }
 
+/// A translated view's `fill_rect`/`clear_region` fallback loop must clip to this surface's own
+/// bounds before iterating, not iterate the caller's full `rect`: a `rect` far larger than the
+/// area (the documented "fill the world rect and let the surface clip" camera idiom) would
+/// otherwise run billions of no-op iterations. See retroglyph#1000.
+#[test]
+fn translated_fill_rect_and_clear_region_clip_a_rect_much_larger_than_the_area() {
+    let mut grid = Grid::new(4, 4);
+    {
+        let mut surface = screen(&mut grid);
+        let mut view = surface.translate((1, 1));
+        view.fill_rect(Rect::new(0, 0, 60_000, 60_000), '#', Style::default());
+    }
+    for y in 0..4 {
+        for x in 0..4 {
+            assert_eq!(grid[Pos::new(x, y)].glyph(), '#', "cell ({x}, {y})");
+        }
+    }
+
+    let mut grid = Grid::new(4, 4);
+    {
+        let mut surface = screen(&mut grid);
+        surface.fill_rect(Rect::new(0, 0, 4, 4), '#', Style::default());
+        let mut view = surface.translate((1, 1));
+        view.clear_region(Rect::new(0, 0, 60_000, 60_000));
+    }
+    for y in 0..4 {
+        for x in 0..4 {
+            assert_eq!(grid[Pos::new(x, y)].glyph(), ' ', "cell ({x}, {y})");
+        }
+    }
+}
+
+/// A tinted surface's `fill_rect` fallback loop must clip to this surface's own bounds before
+/// iterating, not iterate the caller's full `rect`. See retroglyph#1000.
+#[test]
+fn tinted_fill_rect_clips_a_rect_much_larger_than_the_area() {
+    let mut grid = Grid::new(4, 4);
+    {
+        let mut surface = screen(&mut grid);
+        surface.with_tint(Tint::multiply(128, 64, 32)).fill_rect(
+            Rect::new(0, 0, 60_000, 60_000),
+            '#',
+            Style::default(),
+        );
+    }
+    for y in 0..4 {
+        for x in 0..4 {
+            assert_eq!(grid[Pos::new(x, y)].glyph(), '#', "cell ({x}, {y})");
+            assert_eq!(
+                grid.tint(0, x, y),
+                Tint::multiply(128, 64, 32),
+                "cell ({x}, {y})"
+            );
+        }
+    }
+}
+
+/// A wide-glyph `fill_rect` fallback loop must clip to this surface's own bounds before
+/// iterating, not iterate the caller's full `rect`. See retroglyph#1000.
+#[test]
+fn wide_glyph_fill_rect_clips_a_rect_much_larger_than_the_area() {
+    let mut via_fill_rect = Grid::new(4, 4);
+    screen(&mut via_fill_rect).fill_rect(
+        Rect::new(0, 0, 60_000, 60_000),
+        '\u{6f22}',
+        Style::default(),
+    );
+
+    // Same expectation as `fill_rect_with_a_wide_glyph_falls_back_to_the_put_loop`: a
+    // rect-clipped-to-the-area `put` loop, not "every cell holds the glyph" (a 2-column glyph
+    // overwrites every other cell's spacer as the loop advances).
+    let mut via_put = Grid::new(4, 4);
+    {
+        let mut surface = screen(&mut via_put);
+        for y in 0..4 {
+            for x in 0..4 {
+                surface.put((x, y), '\u{6f22}', Style::default());
+            }
+        }
+    }
+
+    for y in 0..4 {
+        for x in 0..4 {
+            assert_eq!(
+                via_fill_rect[Pos::new(x, y)],
+                via_put[Pos::new(x, y)],
+                "cell ({x}, {y})"
+            );
+        }
+    }
+}
+
 /// `fill_rect`, `clear`, and `clear_region` all route through `Grid::fill_region`, which must
 /// clear any span the fill partially overwrites the same way the per-cell loop it replaced
 /// did, or the surviving span's anchor would keep claiming cells the fill just overwrote.
@@ -440,6 +563,39 @@ fn clear_region_clears_a_span_it_partially_overwrites() {
             .flags()
             .contains(TileFlags::SPAN_ANCHOR)
     );
+}
+
+#[test]
+fn fill_rect_with_a_zero_sized_rect_is_a_no_op() {
+    let mut grid = Grid::new(4, 4);
+    {
+        let mut surface = screen(&mut grid);
+        surface.fill_rect(Rect::new(1, 1, 0, 3), '#', Style::default());
+        surface.fill_rect(Rect::new(1, 1, 3, 0), '#', Style::default());
+    }
+
+    for y in 0..4 {
+        for x in 0..4 {
+            assert_eq!(grid[Pos::new(x, y)].glyph(), ' ', "cell ({x}, {y})");
+        }
+    }
+}
+
+#[test]
+fn clear_region_with_a_zero_sized_rect_is_a_no_op() {
+    let mut grid = Grid::new(4, 4);
+    {
+        let mut surface = screen(&mut grid);
+        surface.fill_rect(Rect::new(0, 0, 4, 4), '#', Style::default());
+        surface.clear_region(Rect::new(1, 1, 0, 2));
+        surface.clear_region(Rect::new(1, 1, 2, 0));
+    }
+
+    for y in 0..4 {
+        for x in 0..4 {
+            assert_eq!(grid[Pos::new(x, y)].glyph(), '#', "cell ({x}, {y})");
+        }
+    }
 }
 
 #[test]
@@ -510,6 +666,24 @@ fn with_tint_survives_clip_and_on_layer() {
     }
 
     assert_eq!(grid.tint(2, 1, 1), Tint::multiply(9, 9, 9));
+}
+
+#[test]
+fn with_tint_on_a_write_outside_the_clip_does_not_allocate_the_layer() {
+    // retroglyph#1012: the tint is only applied after a write actually lands (see
+    // `apply_tint`'s own doc comment), so a tinted write refused by the clip must not touch a
+    // layer it never wrote to, on a layer that has never been allocated before.
+    let mut grid = Grid::new(4, 4);
+    {
+        let mut surface = screen(&mut grid);
+        surface
+            .on_layer(7)
+            .with_tint(Tint::multiply(9, 9, 9))
+            .clip(Rect::new(0, 0, 2, 2))
+            .put((10, 10), '@', Style::default());
+    }
+    assert_eq!(grid.max_layer(), 0);
+    assert!(grid.tile(7, (0, 0)).is_none());
 }
 
 #[test]
@@ -622,6 +796,31 @@ fn a_wide_char_at_the_clip_edge_refuses_to_write_its_spacer_outside_the_clip() {
             .is_some_and(|t| t.flags().contains(crate::tile::TileFlags::WIDE_CHAR_SPACER)),
         "spacer must not be written outside the clip"
     );
+}
+
+// Gated to the non-egc build: under `egc`, `put`/`put_signed` go through `write_grapheme_at`
+// instead of `Grid::put_tile`, which has the same unfixed shape (retroglyph#1045 only covers
+// the non-egc branches, matching #998's own scope for `put_offset`).
+#[test]
+#[cfg(not(feature = "egc"))]
+fn put_does_not_tint_a_foreign_tile_when_put_tile_refuses_the_write() {
+    // Unlike the clip-edge test above, `wide_spacer_fits` only refuses a write when the
+    // *clip* excludes the spacer column; here the clip is wider than the grid itself, so
+    // `wide_spacer_fits` passes and it is `Grid::put_tile`'s own last-column refusal
+    // (retroglyph#1045) that has to stop `apply_tint` from re-tinting the existing tile.
+    let mut grid = Grid::new(4, 1);
+    {
+        let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 8, 1), 0);
+        surface
+            .with_tint(Tint::multiply(128, 64, 32))
+            .put((3, 0), 'X', Style::default());
+        surface
+            .with_tint(Tint::multiply(1, 2, 3))
+            .put((3, 0), '\u{6f22}', Style::default());
+    }
+
+    assert_eq!(grid[Pos::new(3, 0)].glyph(), 'X');
+    assert_eq!(grid.tint(0, 3, 0), Tint::multiply(128, 64, 32));
 }
 
 #[test]
@@ -814,6 +1013,69 @@ fn clip_to_a_disjoint_rect_is_empty_and_drops_every_write() {
 }
 
 #[test]
+fn clip_to_a_zero_width_rect_is_empty_and_drops_every_write() {
+    let mut grid = Grid::new(4, 4);
+    {
+        let mut surface = screen(&mut grid);
+        let mut sub = surface.clip(Rect::new(1, 1, 0, 2));
+        assert_eq!(sub.clip_rect(), Rect::EMPTY);
+        sub.put((1, 1), 'X', Style::default());
+    }
+
+    assert_eq!(grid[Pos::new(1, 1)].glyph(), ' ');
+}
+
+#[test]
+fn scope_to_a_zero_height_rect_is_empty_and_drops_every_write() {
+    let mut grid = Grid::new(4, 4);
+    {
+        let mut surface = screen(&mut grid);
+        let mut sub = surface.scope(Rect::new(1, 1, 2, 0));
+        assert_eq!(sub.area(), Rect::new(1, 1, 2, 0));
+        assert_eq!(sub.clip_rect(), Rect::EMPTY);
+        sub.put((0, 0), 'X', Style::default());
+    }
+
+    assert_eq!(grid[Pos::new(1, 1)].glyph(), ' ');
+}
+
+#[test]
+fn print_with_an_empty_string_is_a_no_op() {
+    let mut grid = Grid::new(4, 4);
+    screen(&mut grid).print((0, 0), "", Style::default());
+
+    for y in 0..4 {
+        for x in 0..4 {
+            assert_eq!(grid[Pos::new(x, y)].glyph(), ' ', "cell ({x}, {y})");
+        }
+    }
+}
+
+#[test]
+fn print_line_with_an_empty_line_is_a_no_op() {
+    let mut grid = Grid::new(4, 4);
+    screen(&mut grid).print_line((0, 0), &Line::default());
+
+    assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
+}
+
+#[test]
+fn print_and_fill_rect_are_no_ops_on_a_surface_with_an_empty_area() {
+    let mut grid = Grid::new(4, 4);
+    {
+        let mut surface = Surface::new(&mut grid, Rect::EMPTY, 0);
+        surface.print((0, 0), "hi", Style::default());
+        surface.fill_rect(Rect::new(0, 0, 4, 4), '#', Style::default());
+    }
+
+    for y in 0..4 {
+        for x in 0..4 {
+            assert_eq!(grid[Pos::new(x, y)].glyph(), ' ', "cell ({x}, {y})");
+        }
+    }
+}
+
+#[test]
 fn put_signed_drops_a_negative_coordinate() {
     let mut grid = Grid::new(4, 4);
     let mut surface = screen(&mut grid);
@@ -850,8 +1112,10 @@ fn put_signed_drops_a_coordinate_past_this_surfaces_width_or_height() {
     assert_eq!(grid[Pos::new(0, 2)].glyph(), ' ');
 }
 
+// Not gated behind `egc`: `Tile::new` sets `WIDE_CHAR`/`WIDE_CHAR_SPACER` on every feature
+// combination (unlike the clip-edge tests above, this bookkeeping goes through
+// `Grid::put_tile` either way, not through the `egc`-only grapheme path).
 #[test]
-#[cfg(feature = "egc")]
 fn put_signed_does_wide_char_bookkeeping_like_put() {
     use crate::tile::TileFlags;
 
@@ -878,6 +1142,25 @@ fn put_signed_does_wide_char_bookkeeping_like_put() {
             .flags()
             .contains(TileFlags::WIDE_CHAR_SPACER)
     );
+}
+
+#[test]
+#[cfg(not(feature = "egc"))]
+fn put_signed_does_not_tint_a_foreign_tile_when_put_tile_refuses_the_write() {
+    // Same reproduction as `put`'s own version above, through `put_signed`'s non-egc branch.
+    let mut grid = Grid::new(4, 1);
+    {
+        let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 8, 1), 0);
+        surface
+            .with_tint(Tint::multiply(128, 64, 32))
+            .put_signed((3, 0), 'X', Style::default());
+        surface
+            .with_tint(Tint::multiply(1, 2, 3))
+            .put_signed((3, 0), '\u{6f22}', Style::default());
+    }
+
+    assert_eq!(grid[Pos::new(3, 0)].glyph(), 'X');
+    assert_eq!(grid.tint(0, 3, 0), Tint::multiply(128, 64, 32));
 }
 
 #[test]
@@ -949,6 +1232,26 @@ fn put_offset_does_not_move_a_pre_existing_tile_when_its_own_write_is_refused() 
 }
 
 #[test]
+fn put_offset_on_a_refused_write_leaves_the_targets_glyph_and_offset_alone() {
+    let mut grid = Grid::new(4, 4);
+    {
+        let mut surface = screen(&mut grid);
+        let mut clipped = surface.clip(Rect::new(0, 0, 2, 2));
+        clipped.put((1, 1), 'X', Style::default());
+        // (3, 3) is inside the grid but outside the clip: refused entirely (retroglyph#998:
+        // this used to still set `dx`/`dy` on a cell the glyph write itself never touched).
+        clipped.put_offset((3, 3), Offset::new(5, -5), 'Y', Style::default());
+    }
+
+    // Nothing was ever written at the refused write's own target.
+    let target = grid.tile(0, Pos::new(3, 3)).unwrap();
+    assert_eq!(target.glyph(), ' ');
+    assert_eq!((target.dx(), target.dy()), (0, 0));
+    // The glyph inside the clip is unaffected.
+    assert_eq!(grid[Pos::new(1, 1)].glyph(), 'X');
+}
+
+#[test]
 fn translate_does_not_change_area_width_or_height() {
     let mut grid = Grid::new(10, 10);
     let mut surface = screen(&mut grid);
@@ -959,6 +1262,52 @@ fn translate_does_not_change_area_width_or_height() {
     assert_eq!(view.clip_rect(), Rect::new(5, 5, 4, 4));
     assert_eq!(view.width(), 4);
     assert_eq!(view.height(), 4);
+}
+
+#[test]
+fn clip_translate_does_not_change_area_local_area_width_or_height() {
+    let mut grid = Grid::new(10, 10);
+    let mut surface = screen(&mut grid);
+    let view = surface.clip_translate(Rect::new(5, 5, 4, 4), (-5, -5));
+
+    assert_eq!(view.area(), Rect::new(5, 5, 4, 4));
+    assert_eq!(view.local_area(), Rect::new(0, 0, 4, 4));
+    assert_eq!(view.width(), 4);
+    assert_eq!(view.height(), 4);
+}
+
+#[test]
+fn translate_saturates_at_i32_max_across_repeated_calls_instead_of_overflowing() {
+    let mut grid = Grid::new(4, 4);
+    let mut surface = screen(&mut grid);
+    // Composing `(i32::MAX - 1, 0)` then `(5, 0)` would overflow a plain `+` past `i32::MAX`;
+    // `saturating_add` instead pins the composed origin at `i32::MAX`.
+    let mut once = surface.translate((i32::MAX - 1, 0));
+    let mut view = once.translate((5, 0));
+
+    // Every coordinate this surface can express (`u16`) minus an origin pinned at `i32::MAX`
+    // stays deeply negative, so every write is dropped rather than landing somewhere
+    // unexpected, or panicking on the intermediate overflow.
+    view.put((0, 0), 'A', Style::default());
+    view.put((3, 3), 'B', Style::default());
+
+    assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
+    assert_eq!(grid[Pos::new(3, 3)].glyph(), ' ');
+}
+
+#[test]
+fn translate_saturates_at_i32_min_across_repeated_calls_instead_of_overflowing() {
+    let mut grid = Grid::new(4, 4);
+    let mut surface = screen(&mut grid);
+    let mut once = surface.translate((i32::MIN + 1, 0));
+    let mut view = once.translate((-5, 0));
+
+    // Pinned at `i32::MIN`: `shift`'s `checked_sub` cannot represent `x - i32::MIN` in an
+    // `i32` for any grid coordinate, so it returns `None` and the write is dropped rather
+    // than panicking on the subtraction.
+    view.put((0, 0), 'A', Style::default());
+
+    assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
 }
 
 #[test]
@@ -1138,6 +1487,66 @@ fn translate_shifts_put_span_and_put_span_uniform() {
 }
 
 #[test]
+fn translate_shifts_print_and_still_wraps_at_the_surfaces_own_width() {
+    // A 5-char string, unlike `translate_shifts_fill_rect_print_and_clear_region_via_put`'s
+    // one-character print, is long enough to actually cross the wrap column at the area's own
+    // 4-column width.
+    let mut grid = Grid::new(4, 4);
+    {
+        let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 4, 2), 0);
+        let mut view = surface.translate((2, 0));
+        view.print((2, 0), "abcde", Style::default());
+    }
+
+    assert_eq!(grid[Pos::new(0, 0)].glyph(), 'a');
+    assert_eq!(grid[Pos::new(1, 0)].glyph(), 'b');
+    assert_eq!(grid[Pos::new(2, 0)].glyph(), 'c');
+    assert_eq!(grid[Pos::new(3, 0)].glyph(), 'd');
+    // Wrapped to row 1 at the area's own width (4 columns, retroglyph#991's fix), still
+    // shifted by the translate origin rather than one column early or late.
+    assert_eq!(grid[Pos::new(0, 1)].glyph(), 'e');
+}
+
+#[test]
+fn translate_shifts_print_line() {
+    use crate::text::Span;
+    use alloc::vec;
+
+    let mut grid = Grid::new(6, 4);
+    {
+        let mut surface = screen(&mut grid);
+        let mut view = surface.translate((2, 0));
+        let line = Line::from(vec![Span::raw("ab"), Span::raw("cd")]);
+        view.print_line((2, 0), &line);
+    }
+
+    assert_eq!(grid[Pos::new(0, 0)].glyph(), 'a');
+    assert_eq!(grid[Pos::new(1, 0)].glyph(), 'b');
+    assert_eq!(grid[Pos::new(2, 0)].glyph(), 'c');
+    assert_eq!(grid[Pos::new(3, 0)].glyph(), 'd');
+}
+
+// `print_aligned` x `translate` is covered by
+// `print_aligned_ignores_translate_and_still_lands_at_the_plain_local_position` above:
+// retroglyph#993 made `print_aligned`'s `rect` deliberately ignore any outstanding
+// `translate`, so this file's own translate-composition test for it was superseded by that
+// fix rather than merged alongside it.
+
+#[test]
+fn translate_composes_with_with_style() {
+    let mut grid = Grid::new(10, 10);
+    {
+        let mut surface = screen(&mut grid);
+        let mut view = surface.translate((3, 3));
+        let mut styled = view.with_style(Style::new().fg(Color::RED));
+        styled.put((3, 3), 'A');
+    }
+
+    assert_eq!(grid[Pos::new(0, 0)].glyph(), 'A');
+    assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Color::RED);
+}
+
+#[test]
 fn clear_is_unaffected_by_translate() {
     let mut grid = Grid::new(4, 4);
     {
@@ -1154,33 +1563,50 @@ fn clear_is_unaffected_by_translate() {
 }
 
 #[test]
+fn clear_only_clears_the_intersection_of_area_and_clip() {
+    let mut grid = Grid::new(6, 6);
+    {
+        let mut surface = screen(&mut grid);
+        surface.fill_rect(Rect::new(0, 0, 6, 6), '#', Style::default());
+        // `area` is the whole grid; `clip` narrows to a 2x2 window inside it.
+        surface.clip(Rect::new(2, 2, 2, 2)).clear();
+    }
+
+    // Inside `area \u2229 clip`: cleared.
+    assert_eq!(grid[Pos::new(2, 2)].glyph(), ' ');
+    assert_eq!(grid[Pos::new(3, 3)].glyph(), ' ');
+    // Inside `area`, outside `clip`: untouched.
+    assert_eq!(grid[Pos::new(0, 0)].glyph(), '#');
+    assert_eq!(grid[Pos::new(5, 5)].glyph(), '#');
+}
+
+#[test]
+fn clear_on_a_scoped_surface_clears_the_scoped_area_intersected_with_the_parent_clip() {
+    let mut grid = Grid::new(6, 6);
+    {
+        let mut surface = screen(&mut grid);
+        surface.fill_rect(Rect::new(0, 0, 6, 6), '#', Style::default());
+        let mut clipped = surface.clip(Rect::new(0, 0, 4, 4));
+        // `scope` widens `area` to a rect the parent's clip does not fully cover.
+        clipped.scope(Rect::new(2, 2, 4, 4)).clear();
+    }
+
+    // `area \u2229 clip` == (2, 2, 2, 2): cleared.
+    assert_eq!(grid[Pos::new(2, 2)].glyph(), ' ');
+    assert_eq!(grid[Pos::new(3, 3)].glyph(), ' ');
+    // Inside the scoped `area` but outside the parent's clip: untouched.
+    assert_eq!(grid[Pos::new(5, 5)].glyph(), '#');
+    // Outside the scoped `area` entirely: untouched.
+    assert_eq!(grid[Pos::new(0, 0)].glyph(), '#');
+}
+
+#[test]
 fn grid_is_the_read_only_counterpart_of_grid_mut() {
     let mut grid = Grid::new(4, 4);
     let mut surface = screen(&mut grid);
     surface.put((1, 1), 'X', Style::default());
 
     assert_eq!(surface.grid()[Pos::new(1, 1)].glyph(), 'X');
-}
-
-#[test]
-fn tile_reads_a_written_cell_without_a_mutable_borrow() {
-    let mut grid = Grid::new(4, 4);
-    let mut surface = screen(&mut grid);
-    surface.put((1, 1), 'X', Style::default());
-
-    assert_eq!(surface.tile((1, 1)).map(Tile::glyph), Some('X'));
-    assert_eq!(surface.tile((0, 0)).map(Tile::glyph), Some(' '));
-    assert_eq!(surface.tile((10, 10)), None);
-}
-
-#[test]
-fn background_reads_the_styles_background_colour() {
-    let mut grid = Grid::new(4, 4);
-    let mut surface = screen(&mut grid);
-    surface.put((1, 1), 'X', Style::new().bg(Color::RED));
-
-    assert_eq!(surface.background((1, 1)), Some(Color::RED));
-    assert_eq!(surface.background((10, 10)), None);
 }
 
 #[test]

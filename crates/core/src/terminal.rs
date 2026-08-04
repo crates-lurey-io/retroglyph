@@ -74,6 +74,15 @@ pub struct Terminal<B: Backend> {
     /// start of `present` (it's a one-shot opt-in, not a sticky mode) and on
     /// [`resize`](Self::resize).
     retained_layers: Vec<bool>,
+    /// Layers marked by [`drop_layer`](Self::drop_layer) to be deallocated, on both `current` and
+    /// `previous`, once `present` no longer needs them for this frame's diff.
+    ///
+    /// Indexed by layer id, same convention as `retained_layers`. Consumed (and reset to all
+    /// `false`) after `present`'s diff has been computed and sent to the backend, but before the
+    /// current/previous swap: deallocating any earlier would make the layer invisible to the diff
+    /// (`diff`/`flatten_into` only walk `current`'s own `max_layer`), silently dropping the erase
+    /// the backend needs instead of sending it (retroglyph#1028).
+    dropped_layers: Vec<bool>,
 }
 
 impl<B: Backend> Terminal<B> {
@@ -99,6 +108,7 @@ impl<B: Backend> Terminal<B> {
             flattened_stale: false,
             present_count: 0,
             retained_layers: Vec::new(),
+            dropped_layers: Vec::new(),
         }
     }
 
@@ -171,6 +181,9 @@ impl<B: Backend> Terminal<B> {
         // would just copy empty content forward for a still-marked layer. Dropping pending
         // retention here too keeps that a non-event rather than relying on it.
         self.retained_layers.clear();
+        // Same reasoning: a pending `drop_layer` deallocation is meaningless once `resize` has
+        // already reallocated every layer's buffers at the new dimensions.
+        self.dropped_layers.clear();
         self.backend.resize(Size::new(width, height));
     }
 
@@ -281,6 +294,63 @@ impl<B: Backend> Terminal<B> {
         self.retained_layers[idx] = true;
     }
 
+    /// Marks `layer` to be deallocated, forgetting it was ever drawn to.
+    ///
+    /// [`Grid::max_layer`] only grows on write, so a terminal that ever draws to a layer above 0,
+    /// even for a single frame, stays on [`present`](Self::present)'s flatten path for the rest of
+    /// the process, whether or not that layer is still in use (retroglyph#1028). This is the
+    /// explicit escape hatch: call it once a layer's content is truly done (a one-off overlay
+    /// dismissed, a transient effect finished), and once every layer above 0 has been dropped,
+    /// `present` falls back onto its single-layer fast path.
+    ///
+    /// `layer`'s content is cleared immediately (so this frame's diff still tells the backend to
+    /// erase whatever it last showed there, exactly as if the app had simply stopped drawing to
+    /// it), but the underlying buffer is only freed, and `max_layer` only allowed to fall, once
+    /// the next [`present`](Self::present) has sent that erase and no longer needs the layer for
+    /// its diff. Deallocating any earlier would make the layer invisible to `present`'s diff
+    /// (which only walks `current`'s own allocated layers), silently dropping the erase instead of
+    /// sending it.
+    ///
+    /// This is a one-shot request, not a sticky mode: unlike [`retain_layer`](Self::retain_layer),
+    /// which defers one frame's redraw, this defers the actual deallocation, so drawing to `layer`
+    /// again before the next `present` (undoing the drop) cancels it instead of losing that draw:
+    /// the layer stays allocated and behaves like any other write. Any pending
+    /// [`retain_layer`](Self::retain_layer) call for `layer` is cleared immediately, though:
+    /// retaining content that no longer exists would resurrect it on the next present regardless
+    /// of whether the drop itself goes through.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `layer` is 0: layer 0 is always allocated and can never be dropped.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::backend::Headless;
+    /// use retroglyph_core::{Layer, Terminal};
+    ///
+    /// let mut term = Terminal::new(Headless::new(10, 5));
+    /// term.draw(|s| s.on_tier(Layer::Hud).print((0, 0), "Paused", Default::default()))
+    ///     .unwrap();
+    ///
+    /// term.drop_layer(Layer::Hud);
+    /// term.present().unwrap(); // Sends the erase, then frees the layer.
+    /// assert_eq!(term.grid().max_layer(), 0);
+    /// ```
+    pub fn drop_layer(&mut self, layer: impl Into<u8>) {
+        let id = layer.into();
+        assert_ne!(id, 0, "layer 0 is always allocated and cannot be dropped");
+        self.current.clear(id);
+        let idx = usize::from(id);
+        if idx < self.retained_layers.len() {
+            self.retained_layers[idx] = false;
+        }
+        if self.dropped_layers.len() <= idx {
+            self.dropped_layers.resize(idx + 1, false);
+        }
+        self.dropped_layers[idx] = true;
+    }
+
     /// Present the current frame: computes the diff against the previous frame, sends changed
     /// cells to the backend, flushes, then swaps buffers. Always presents unconditionally, even
     /// if nothing was drawn since the last call; most callers want [`draw`](Self::draw) instead
@@ -372,11 +442,12 @@ impl<B: Backend> Terminal<B> {
                 // copy of `current`. Diff the real grids directly and skip the
                 // flatten buffers entirely.
                 //
-                // This is sticky-off, not sticky-on: layers are never deallocated once written
-                // (see `Grid`'s layer storage), so `max_layer()` never drops back to 0 on its
-                // own. A terminal that ever draws to layer 1+, even for a single transient
-                // frame, stays on the flatten path in the `else` branch below for the rest of
-                // the process.
+                // This is sticky-off, not sticky-on: layers are never deallocated on their own
+                // once written (see `Grid`'s layer storage), so `max_layer()` never drops back to
+                // 0 on its own. A terminal that ever draws to layer 1+, even for a single
+                // transient frame, stays on the flatten path in the `else` branch below for the
+                // rest of the process, unless it explicitly calls `drop_layer` on every layer
+                // above 0 (retroglyph#1028).
                 let diff = self.current.diff(&self.previous);
                 self.backend.draw_layers(diff)?;
                 self.flattened_stale = true;
@@ -411,6 +482,29 @@ impl<B: Backend> Terminal<B> {
             // dropping them.
             self.current.clear_all();
             return Err(err);
+        }
+        // Deallocate any layer `drop_layer` marked, now that the diff above (computed while the
+        // layer was still allocated, if only as an already-cleared buffer) has told the backend
+        // to erase whatever it last showed there. Also gated on `flush` succeeding, for the same
+        // reason as the swaps below: on failure, `previous` must keep the layer allocated so a
+        // retried `present` can still resend the erase that never actually reached the backend.
+        if self.dropped_layers.iter().any(|&dropped| dropped) {
+            for (id, &dropped) in self.dropped_layers.iter().enumerate() {
+                if dropped {
+                    #[allow(clippy::cast_possible_truncation)]
+                    let id = id as u8;
+                    // If the app drew to `layer` again after calling `drop_layer` but before
+                    // this present, that write is a live redraw the app clearly wants kept, not
+                    // stale content: cancel the drop instead of discarding it.
+                    if self.current.layer_is_empty(id) {
+                        self.current.deallocate_layer(id);
+                        self.previous.deallocate_layer(id);
+                    }
+                }
+            }
+            for dropped in &mut self.dropped_layers {
+                *dropped = false;
+            }
         }
         // Both swaps happen only after `flush` succeeds, for the same reason described above.
         if swap_flattened {
@@ -469,23 +563,6 @@ impl<B: Backend> Terminal<B> {
     /// backend implements [`Input::push_event`](crate::backend::Input::push_event).
     pub fn requeue_events(&mut self, events: impl IntoIterator<Item = Event>) {
         self.queued_events.extend(events);
-    }
-
-    /// Reads an input event, blocking indefinitely until one is available.
-    ///
-    /// Only call this on backends that genuinely block (e.g. crossterm, window). Backends
-    /// that never block (e.g. [`Headless`](crate::backend::Headless), which returns
-    /// immediately regardless of timeout) will panic here once their event queue is
-    /// empty; use [`poll`](Self::poll) or [`drain_events`](Self::drain_events) instead if
-    /// that is a possibility.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the backend's [`poll_event`](crate::Input::poll_event) returns
-    /// `None` even with an unbounded timeout.
-    pub fn read_blocking(&mut self) -> Event {
-        self.poll(Duration::MAX)
-            .expect("read_blocking() called but no events available")
     }
 
     /// Drains all available events without blocking.
@@ -714,7 +791,7 @@ mod tests {
         assert_eq!(terminal.poll(Duration::ZERO), Some(Event::Close));
 
         terminal.backend_mut().push_event(Event::Resize(80, 25));
-        assert_eq!(terminal.read_blocking(), Event::Resize(80, 25));
+        assert_eq!(terminal.poll(Duration::MAX), Some(Event::Resize(80, 25)));
     }
 
     #[test]
@@ -996,14 +1073,6 @@ mod tests {
         assert_eq!(terminal.poll(Duration::ZERO), Some(Event::Close));
         assert_eq!(terminal.poll(Duration::ZERO), Some(Event::Resize(4, 2)));
         assert_eq!(terminal.poll(Duration::ZERO), None);
-    }
-
-    #[test]
-    #[should_panic(expected = "read_blocking() called but no events available")]
-    fn test_terminal_read_panic() {
-        let backend = Headless::new(10, 10);
-        let mut terminal = Terminal::new(backend);
-        let _ = terminal.read_blocking();
     }
 
     #[test]
@@ -1298,10 +1367,16 @@ mod tests {
         assert_eq!(term.backend().inner.grid()[Pos::new(0, 0)].glyph(), 'a');
 
         // Frame 2: composites branch. Bypasses the flatten buffers entirely, so
-        // `flattened_previous` still holds frame 1's flattened content.
+        // `flattened_previous` still holds frame 1's flattened content. Layer 1 is redrawn
+        // identically to frame 1 so `Grid::diff` (now that it also reports a layer that stopped
+        // being written, retroglyph#1018) sees no change there and doesn't emit anything for it;
+        // `Headless::draw_layers` writes every cell to one shared grid regardless of layer (see
+        // `CompositingBackend`'s docs above), so a real layer-1 diff would corrupt this frame's
+        // single-grid glyph check, which is unrelated to what this test is verifying.
         term.backend_mut().composites = true;
         term.draw(|s| {
             s.put((0, 0), 'b', Style::default());
+            s.on_layer(1).put((1, 0), '#', Style::default());
         })
         .expect("draw failed");
         assert_eq!(term.backend().inner.grid()[Pos::new(0, 0)].glyph(), 'b');
@@ -1981,6 +2056,121 @@ mod tests {
         term.retain_layer(5u8);
         term.draw(|_| {}).expect("draw failed");
         assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), ' ');
+    }
+
+    // --- drop_layer ---
+
+    #[test]
+    #[should_panic(expected = "layer 0 is always allocated")]
+    fn test_drop_layer_zero_panics() {
+        let mut term = Terminal::new(Headless::new(3, 1));
+        term.drop_layer(0u8);
+    }
+
+    #[test]
+    fn test_drop_layer_restores_the_single_layer_fast_path() {
+        use crate::surface::Layer;
+
+        // retroglyph#1028: a layer stays allocated once written, permanently moving `present`
+        // onto the flatten path. `drop_layer` is the explicit escape hatch back to the
+        // single-layer fast path once every layer above 0 is gone.
+        let mut term = Terminal::new(Headless::new(3, 1));
+        term.draw(|s| s.on_tier(Layer::Hud).put((0, 0), 'H', Style::default()))
+            .expect("draw failed");
+        // `current` was just swapped to the other (never-written) buffer, so `previous` is the
+        // one still carrying the allocation right after this draw.
+        assert_eq!(term.current.max_layer(), 0);
+        assert_ne!(term.previous.max_layer(), 0);
+
+        // The deallocation is deferred to the next `present`: calling `drop_layer` alone must
+        // not yet change either buffer's `max_layer`.
+        term.drop_layer(Layer::Hud);
+        assert_ne!(term.previous.max_layer(), 0);
+
+        term.draw(|_| {}).expect("draw failed");
+        assert_eq!(term.current.max_layer(), 0);
+        assert_eq!(term.previous.max_layer(), 0);
+    }
+
+    #[test]
+    fn test_drop_layer_erases_content_from_the_backend_on_the_next_present() {
+        use crate::surface::Layer;
+
+        let mut term = Terminal::new(Headless::new(3, 1));
+        term.draw(|s| s.on_tier(Layer::Hud).put((0, 0), 'H', Style::default()))
+            .expect("draw failed");
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'H');
+
+        term.drop_layer(Layer::Hud);
+        term.draw(|_| {}).expect("draw failed");
+
+        // The layer's content is gone once the drop has gone through a present, same as if the
+        // app had simply stopped drawing to it.
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    fn test_drop_layer_is_cancelled_by_a_redraw_before_the_next_present() {
+        use crate::surface::Layer;
+
+        // A write to `layer` after `drop_layer` but before the deferred deallocation runs is a
+        // live redraw the app wants kept, not stale content left over from before the drop, so
+        // it must not be silently discarded.
+        let mut term = Terminal::new(Headless::new(3, 1));
+        term.draw(|s| s.on_tier(Layer::Hud).put((0, 0), 'H', Style::default()))
+            .expect("draw failed");
+
+        term.drop_layer(Layer::Hud);
+        term.draw(|s| s.on_tier(Layer::Hud).put((0, 0), 'J', Style::default()))
+            .expect("draw failed");
+
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'J');
+        assert_ne!(term.current.max_layer(), 0);
+    }
+
+    #[test]
+    fn test_drop_layer_clears_pending_retention_for_that_layer() {
+        use crate::surface::Layer;
+
+        // Retaining content that no longer exists would resurrect it on the next present, so
+        // `drop_layer` must clear any pending `retain_layer` call for the same id.
+        let mut term = Terminal::new(Headless::new(3, 1));
+        term.draw(|s| s.on_tier(Layer::Hud).put((0, 0), 'H', Style::default()))
+            .expect("draw failed");
+
+        term.retain_layer(Layer::Hud);
+        term.drop_layer(Layer::Hud);
+        term.draw(|_| {}).expect("draw failed");
+
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    fn test_drop_layer_never_drawn_is_a_no_op() {
+        let mut term = Terminal::new(Headless::new(3, 1));
+        term.drop_layer(5u8);
+        term.draw(|_| {}).expect("draw failed");
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    fn test_drop_layer_reallocates_on_the_next_write_after_it_takes_effect() {
+        use crate::surface::Layer;
+
+        // The only way back once a drop has actually gone through is drawing to the layer
+        // again, which reallocates it from scratch.
+        let mut term = Terminal::new(Headless::new(3, 1));
+        term.draw(|s| s.on_tier(Layer::Hud).put((0, 0), 'H', Style::default()))
+            .expect("draw failed");
+        term.drop_layer(Layer::Hud);
+        term.draw(|_| {}).expect("draw failed"); // Lets the drop take effect.
+        assert_eq!(term.current.max_layer(), 0);
+        assert_eq!(term.previous.max_layer(), 0);
+
+        term.draw(|s| s.on_tier(Layer::Hud).put((0, 0), 'J', Style::default()))
+            .expect("draw failed");
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'J');
+        assert_ne!(term.previous.max_layer(), 0);
     }
 
     // --- unicode width ---

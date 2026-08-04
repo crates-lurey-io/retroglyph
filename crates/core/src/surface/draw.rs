@@ -64,6 +64,44 @@ impl Surface<'_> {
         (!abs.is_empty()).then_some(abs)
     }
 
+    /// Clips `rect` (in the same coordinate space as `fill_rect`/`clear_region`'s own `rect`
+    /// argument) to what can possibly land on this surface: `(0, 0)..(area.width, area.height)`
+    /// shifted by `origin_offset`, mirroring the subtraction [`shift`](Self::shift) applies per
+    /// cell.
+    ///
+    /// Both methods' per-cell fallback loop runs this first so the loop is bounded to at most
+    /// `area.width * area.height` cells regardless of how much larger `rect` is, rather than
+    /// iterating `rect`'s full width * height (up to ~4.3 billion cells for a `u16`-sized rect)
+    /// and relying on a per-cell check to skip what doesn't land.
+    ///
+    /// The intersection itself is [`Rect::intersect`], not hand-rolled per-field arithmetic,
+    /// widened to `i64` because `origin_offset` can push the shifted area below `0` or above
+    /// `u16::MAX`, neither of which `Rect<u16>` can represent; the result is narrowed back to
+    /// `u16` once [`intersect`](ixy::Rect::intersect) has already bounded it within `rect`'s own
+    /// (already-`u16`) extent.
+    fn clip_local_rect(&self, rect: Rect) -> Rect {
+        let bounds = ixy::Rect::<i64>::new(
+            i64::from(self.origin_offset.0),
+            i64::from(self.origin_offset.1),
+            i64::from(self.area.width()),
+            i64::from(self.area.height()),
+        );
+        let rect = ixy::Rect::<i64>::new(
+            i64::from(rect.left()),
+            i64::from(rect.top()),
+            i64::from(rect.width()),
+            i64::from(rect.height()),
+        )
+        .intersect(bounds);
+        // `intersect` only ever narrows `rect`'s own fields, which started out as `u16`, so
+        // these conversions never fail.
+        let left = u16::try_from(rect.left()).unwrap_or(u16::MAX);
+        let top = u16::try_from(rect.top()).unwrap_or(u16::MAX);
+        let width = u16::try_from(rect.width()).unwrap_or(u16::MAX);
+        let height = u16::try_from(rect.height()).unwrap_or(u16::MAX);
+        Rect::new(left, top, width, height)
+    }
+
     /// Applies this surface's tint to the cell just written at `(x, y)`.
     ///
     /// Called after a write rather than as part of one, because a glyph write drops whatever
@@ -169,8 +207,9 @@ impl Surface<'_> {
                 return;
             }
             let tile = Tile::new(ch, style);
-            self.grid.put_tile(self.layer, (x, y), tile);
-            self.apply_tint(x, y);
+            if self.grid.put_tile(self.layer, (x, y), tile).is_some() {
+                self.apply_tint(x, y);
+            }
         }
     }
 
@@ -232,8 +271,13 @@ impl Surface<'_> {
                 return;
             }
             let tile = Tile::new(ch, style);
-            self.grid.put_tile(self.layer, (abs_x, abs_y), tile);
-            self.apply_tint(abs_x, abs_y);
+            if self
+                .grid
+                .put_tile(self.layer, (abs_x, abs_y), tile)
+                .is_some()
+            {
+                self.apply_tint(abs_x, abs_y);
+            }
         }
     }
 
@@ -497,6 +541,7 @@ impl Surface<'_> {
             return;
         }
 
+        let rect = self.clip_local_rect(rect);
         for y in rect.top()..rect.bottom() {
             for x in rect.left()..rect.right() {
                 self.put((x, y), ch, style);
@@ -823,6 +868,7 @@ impl Surface<'_> {
             return;
         }
 
+        let rect = self.clip_local_rect(rect);
         for y in rect.top()..rect.bottom() {
             for x in rect.left()..rect.right() {
                 if let Some((x, y)) = self.shift(x, y) {
