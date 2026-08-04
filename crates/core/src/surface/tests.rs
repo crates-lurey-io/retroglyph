@@ -798,6 +798,31 @@ fn a_wide_char_at_the_clip_edge_refuses_to_write_its_spacer_outside_the_clip() {
     );
 }
 
+// Gated to the non-egc build: under `egc`, `put`/`put_signed` go through `write_grapheme_at`
+// instead of `Grid::put_tile`, which has the same unfixed shape (retroglyph#1045 only covers
+// the non-egc branches, matching #998's own scope for `put_offset`).
+#[test]
+#[cfg(not(feature = "egc"))]
+fn put_does_not_tint_a_foreign_tile_when_put_tile_refuses_the_write() {
+    // Unlike the clip-edge test above, `wide_spacer_fits` only refuses a write when the
+    // *clip* excludes the spacer column; here the clip is wider than the grid itself, so
+    // `wide_spacer_fits` passes and it is `Grid::put_tile`'s own last-column refusal
+    // (retroglyph#1045) that has to stop `apply_tint` from re-tinting the existing tile.
+    let mut grid = Grid::new(4, 1);
+    {
+        let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 8, 1), 0);
+        surface
+            .with_tint(Tint::multiply(128, 64, 32))
+            .put((3, 0), 'X', Style::default());
+        surface
+            .with_tint(Tint::multiply(1, 2, 3))
+            .put((3, 0), '\u{6f22}', Style::default());
+    }
+
+    assert_eq!(grid[Pos::new(3, 0)].glyph(), 'X');
+    assert_eq!(grid.tint(0, 3, 0), Tint::multiply(128, 64, 32));
+}
+
 #[test]
 fn clip_intersects_rather_than_replaces_so_it_cannot_widen() {
     let mut grid = Grid::new(8, 4);
@@ -1117,6 +1142,25 @@ fn put_signed_does_wide_char_bookkeeping_like_put() {
             .flags()
             .contains(TileFlags::WIDE_CHAR_SPACER)
     );
+}
+
+#[test]
+#[cfg(not(feature = "egc"))]
+fn put_signed_does_not_tint_a_foreign_tile_when_put_tile_refuses_the_write() {
+    // Same reproduction as `put`'s own version above, through `put_signed`'s non-egc branch.
+    let mut grid = Grid::new(4, 1);
+    {
+        let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 8, 1), 0);
+        surface
+            .with_tint(Tint::multiply(128, 64, 32))
+            .put_signed((3, 0), 'X', Style::default());
+        surface
+            .with_tint(Tint::multiply(1, 2, 3))
+            .put_signed((3, 0), '\u{6f22}', Style::default());
+    }
+
+    assert_eq!(grid[Pos::new(3, 0)].glyph(), 'X');
+    assert_eq!(grid.tint(0, 3, 0), Tint::multiply(128, 64, 32));
 }
 
 #[test]

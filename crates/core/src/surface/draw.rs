@@ -201,8 +201,9 @@ impl Surface<'_> {
                 return;
             }
             let tile = Tile::new(ch, style);
-            self.grid.put_tile(self.layer, (x, y), tile);
-            self.apply_tint(x, y);
+            if self.grid.put_tile(self.layer, (x, y), tile).is_some() {
+                self.apply_tint(x, y);
+            }
         }
     }
 
@@ -264,8 +265,13 @@ impl Surface<'_> {
                 return;
             }
             let tile = Tile::new(ch, style);
-            self.grid.put_tile(self.layer, (abs_x, abs_y), tile);
-            self.apply_tint(abs_x, abs_y);
+            if self
+                .grid
+                .put_tile(self.layer, (abs_x, abs_y), tile)
+                .is_some()
+            {
+                self.apply_tint(abs_x, abs_y);
+            }
         }
     }
 
