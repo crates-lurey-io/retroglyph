@@ -585,10 +585,9 @@ impl Grid {
         }
     }
 
-    /// Yields `(layer_id, Pos, &Tile, Option<&str>)` for every allocated cell
-    /// across all layers, in layer-major (0 → `max_layer`) then row-major
-    /// order. The last element is the tile's grapheme text, `Some` only when
-    /// [`TileFlags::HAS_EXTRA`] is set.
+    /// Yield a [`DrawCell`] for every allocated cell across all layers, in
+    /// layer-major (0 → `max_layer`) then row-major order. `grapheme` is
+    /// `Some` only when [`TileFlags::HAS_EXTRA`] is set.
     ///
     /// Unallocated layers are skipped. This is used by backends that need
     /// the full frame on every draw (see [`crate::Output::needs_full_frame`]).
