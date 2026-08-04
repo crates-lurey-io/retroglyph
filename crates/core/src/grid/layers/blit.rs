@@ -157,6 +157,22 @@ impl Grid {
     /// and [`blit_alpha`] expose) so [`blit_cross_layer`](Self::blit_cross_layer) can read a
     /// different source layer than the one it writes: see that method's own doc for why (this is
     /// the retroglyph#824 fix).
+    ///
+    /// ```text
+    ///   src (read from src_layer)              self (written at dst_layer)
+    ///   +-----------------------+              +-----------------------+
+    ///   |     src_rect          |              |                       |
+    ///   |     +--------+        |  translate   |    (dst_x,dst_y)      |
+    ///   |     |  A  B  |        |  by          |    +--------+         |
+    ///   |     |  C  D..|........|. (dst_x -    |    |  A  B  |         |
+    ///   |     +-----|--+   src  |   src_rect   |    |  C  D  |         |
+    ///   |           |   bounds  |   origin)    |    +-----|--+  self   |
+    ///   +-----------|-----------+              +----------|---bounds--+
+    ///               clipped to src's edge                 clipped again to self's edge
+    ///
+    ///   Copied region = src_rect ∩ src bounds ∩ (self bounds shifted back by the offset).
+    ///   Cells outside any of the three are skipped, never wrapped (dst_x/dst_y saturate).
+    /// ```
     #[allow(clippy::too_many_arguments)]
     fn blit_with(
         &mut self,
