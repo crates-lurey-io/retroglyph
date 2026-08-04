@@ -50,11 +50,6 @@ libm = [
     "alpha-blend/libm",
     "alpha-blend/libm-arch",
 ]
-# Alias for `libm`, matching `gem`'s and `alpha-blend`'s own `libm-arch` feature name so a reader
-# following their docs finds the name they expect. Already implied by `libm` above (which always
-# requests the `arch`-intrinsified `libm` dependency; see the `[dependencies.libm]` comment
-# below), so this exists purely for discoverability and never needs to be enabled on its own.
-libm-arch = ["libm"]
 # Adds `Serialize`/`Deserialize` impls for [`Color`], [`Style`], `Size`, `Offset`, and (via `ixy`)
 # `Pos`/`Rect`, so a config file can round-trip a saved camera position, window geometry, sub-cell
 # pixel offset, or theme color.
@@ -115,8 +110,9 @@ serde = { version = "1", default-features = false, features = ["derive"], option
 # `alpha-blend` both set `default-features = false` here and re-add `arch` through their own
 # `libm-arch` feature, which means a consumer who enables `libm` but forgets `libm-arch` silently
 # gets the slow path on those two. Don't copy that asymmetry onto this dependency: making `arch`
-# unconditional here and `libm-arch` (above) a redundant alias means the fast path can't be lost
-# by omission, which is the whole point (retroglyph#886).
+# unconditional here means the fast path can't be lost by omission, which is the whole point
+# (retroglyph#886). There is no matching `libm-arch` feature on this crate to mirror theirs; it
+# would be inert, since `libm` above already guarantees `arch` (retroglyph#977).
 libm = { version = "0.2", optional = true }
 grixy = { version = "0.7.0", features = ["alloc", "buffer"] }
 unicode-width = "0.2"
