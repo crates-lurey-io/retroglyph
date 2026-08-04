@@ -8,31 +8,32 @@ use crate::backend::DrawCell;
 #[cfg(test)]
 use crate::color::Style;
 use crate::color::Tint;
-#[cfg(test)]
 use crate::tile::Tile;
 #[cfg(test)]
 use alloc::vec::Vec;
 
 impl Grid {
-    /// Yields `(layer_id, Pos, &Tile, Option<&str>)` for every changed
-    /// position across all layers, in layer-major (0 → `max_layer`) then
-    /// row-major order. The last element is the changed tile's grapheme text
-    /// (see [`grapheme`](Self::grapheme)).
+    /// Yield a [`DrawCell`] for every changed position across all layers, in layer-major
+    /// (`0` → `max(self.max_layer, other.max_layer)`) then row-major order.
     ///
-    /// Three cases per layer:
-    /// - Layer absent in `self`: nothing yielded.
-    /// - Layer in `self`, absent in `other` (newly allocated): all
-    ///   `width × height` tiles yielded.
-    /// - Layer in both, and `self` and `other` have matching dimensions: only
-    ///   positions where the `Tile` or its grapheme text differs are yielded.
-    /// - Layer in both, but `self` and `other` have different dimensions: all
-    ///   positions in `self` are considered changed, same as a newly
-    ///   allocated layer.
+    /// Four cases per layer:
+    /// - Layer absent in both `self` and `other`: nothing yielded.
+    /// - Layer in `self`, absent in `other` (newly allocated): all `width × height` tiles
+    ///   yielded.
+    /// - Layer in both, and `self` and `other` have matching dimensions: only positions where
+    ///   the `Tile` or its side-table entry (grapheme text, tint) differs are yielded.
+    /// - Layer in both, but `self` and `other` have different dimensions: all positions in
+    ///   `self` are considered changed, same as a newly allocated layer.
+    /// - Layer in `other` but no longer in `self` (stopped being written): every position is
+    ///   yielded as a cleared, default [`Tile`], sized to `other`'s dimensions. This case is
+    ///   only expressible when `self` and `other` have matching dimensions; a simultaneous size
+    ///   change and layer teardown falls back to "nothing yielded" for that layer, matching a
+    ///   layer absent from both.
     ///
     /// This iterator is zero-allocation: it walks the layer buffers inline.
     pub fn diff<'a>(&'a self, other: &'a Self) -> impl Iterator<Item = DrawCell<'a>> + 'a {
         let width = usize::from(self.width);
-        let max = self.max_layer;
+        let max = self.max_layer.max(other.max_layer);
         let same_size = self.width == other.width && self.height == other.height;
         (0..=max).flat_map(move |id| {
             // A size mismatch is treated the same as `other` never having allocated this layer:
@@ -41,8 +42,25 @@ impl Grid {
             // double-buffering contract.
             let other_layer = if same_size { other.layer(id) } else { None };
             match (self.layer(id), other_layer) {
-                // Layer absent in `self`: nothing changed.
-                (None, _) => LayerDiff::Empty,
+                // Layer absent in both, or `self` never allocated it while a size mismatch makes
+                // `other`'s buffer unusable for positions: nothing changed.
+                (None, None) => LayerDiff::Empty,
+                // Layer stopped being written: `self` no longer has it, but `other` (same
+                // dimensions, checked by `other_layer` above) still does. Report every position
+                // as cleared so a compositing backend can retire the layer instead of continuing
+                // to show its stale content; see retroglyph#1018.
+                (None, Some(prev_lb)) => LayerDiff::Cleared(
+                    prev_lb.buf.as_ref().iter().enumerate().map(move |(i, _)| {
+                        let (x, y) = flat_index_to_xy(i, width);
+                        DrawCell {
+                            layer: id,
+                            pos: Pos::new(x, y),
+                            tile: &Tile::EMPTY,
+                            grapheme: None,
+                            tint: Tint::None,
+                        }
+                    }),
+                ),
                 // Newly allocated layer: all cells are "changed".
                 (Some(cur_lb), None) => LayerDiff::Full(
                     cur_lb
@@ -97,16 +115,18 @@ impl Grid {
 
 /// Per-layer diff iterator, replacing a boxed trait object so `diff` performs
 /// no per-layer heap allocation.
-enum LayerDiff<F, D> {
+enum LayerDiff<F, D, C> {
     Empty,
     Full(F),
     Diff(D),
+    Cleared(C),
 }
 
-impl<'a, F, D> Iterator for LayerDiff<F, D>
+impl<'a, F, D, C> Iterator for LayerDiff<F, D, C>
 where
     F: Iterator<Item = DrawCell<'a>>,
     D: Iterator<Item = DrawCell<'a>>,
+    C: Iterator<Item = DrawCell<'a>>,
 {
     type Item = DrawCell<'a>;
 
@@ -115,6 +135,7 @@ where
             Self::Empty => None,
             Self::Full(iter) => iter.next(),
             Self::Diff(iter) => iter.next(),
+            Self::Cleared(iter) => iter.next(),
         }
     }
 }
@@ -191,6 +212,37 @@ mod tests {
         assert!(layers[1..].iter().all(|&l| l == 2));
     }
 
+    #[test]
+    fn test_grid_diff_reports_layer_that_stopped_being_written() {
+        // frame 1: a HUD is drawn on layer 5.
+        let mut a = Grid::new(4, 4);
+        a.put_tile(5, (0, 0), Tile::new('H', Style::default()));
+
+        // frame 2: the HUD is hidden, so `b` never allocates layer 5.
+        let b = Grid::new(4, 4);
+
+        // `b.max_layer()` is 0, but layer 5's stale content in `a` must still be reported so a
+        // compositing backend can clear it instead of continuing to show it (retroglyph#1018).
+        let diffs: Vec<_> = b.diff(&a).collect();
+        assert_eq!(diffs.len(), 16);
+        assert!(diffs.iter().all(|c| c.layer == 5));
+        assert!(diffs.iter().all(|c| c.tile.glyph == ' '));
+        assert!(diffs.iter().all(|c| c.grapheme.is_none()));
+    }
+
+    #[test]
+    fn test_grid_diff_stopped_layer_with_size_mismatch_yields_nothing_for_that_layer() {
+        // A layer that stopped being written *and* a size change happening at once can't be
+        // expressed against `other`'s buffer, so it falls back to "nothing yielded", same as a
+        // layer absent from both sides.
+        let mut a = Grid::new(4, 4);
+        a.put_tile(5, (0, 0), Tile::new('H', Style::default()));
+        let b = Grid::new(3, 3);
+
+        let diffs: Vec<_> = b.diff(&a).collect();
+        assert!(diffs.iter().all(|c| c.layer != 5));
+    }
+
     #[cfg(feature = "egc")]
     #[test]
     fn test_grid_diff_detects_grapheme_only_change() {
@@ -209,6 +261,28 @@ mod tests {
         // Identical grapheme text on both sides: no diff.
         let mut prev2 = Grid::new(2, 2);
         prev2.write_grapheme(0, 0, 0, "e\u{0301}", Style::default());
+        assert_eq!(cur.diff(&prev2).count(), 0);
+    }
+
+    #[test]
+    fn test_grid_diff_detects_tint_only_change() {
+        // Same glyph, style, and flags on both sides: only the tint (the side table's other
+        // member) differs. A `Tile`-only diff would miss this too, same as the grapheme case.
+        let mut cur = Grid::new(2, 2);
+        let mut prev = Grid::new(2, 2);
+        cur.put_tile(0, (0, 0), Tile::new('@', Style::default()));
+        prev.put_tile(0, (0, 0), Tile::new('@', Style::default()));
+        cur.set_tint(0, 0, 0, Tint::multiply(64, 128, 192));
+
+        let diffs: Vec<_> = cur.diff(&prev).collect();
+        assert_eq!(diffs.len(), 1);
+        assert_eq!(diffs[0].pos, Pos::new(0, 0));
+        assert_eq!(diffs[0].tint, Tint::multiply(64, 128, 192));
+
+        // Identical tint on both sides: no diff.
+        let mut prev2 = Grid::new(2, 2);
+        prev2.put_tile(0, (0, 0), Tile::new('@', Style::default()));
+        prev2.set_tint(0, 0, 0, Tint::multiply(64, 128, 192));
         assert_eq!(cur.diff(&prev2).count(), 0);
     }
 }

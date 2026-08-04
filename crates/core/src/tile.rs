@@ -37,8 +37,7 @@ bitflags::bitflags! {
         /// This flag is authoritative for whether extra text exists: code
         /// that reads a tile's grapheme must check this bit first and treat
         /// the side-table as backing storage only, never the other way
-        /// around. `Tile` cannot carry the string itself and stay small (see
-        /// [`Grid::grapheme`](crate::grid::Grid::grapheme)); the split is
+        /// around. `Tile` cannot carry the string itself and stay small; the split is
         /// what keeps the common single-codepoint tile compact.
         const HAS_EXTRA         = 0b0000_1000;
         /// This tile is the top-left anchor of a multi-cell span: it occupies
@@ -72,7 +71,8 @@ bitflags::bitflags! {
 /// [`TileFlags::HAS_EXTRA`]): that lives in a sparse side-table on the owning
 /// [`Grid`](crate::grid::Grid), keeping every `Tile` a small, fully `Copy`
 /// value regardless of whether the `egc` feature is enabled. Read it back via
-/// [`Grid::grapheme`](crate::grid::Grid::grapheme).
+/// [`DrawCell::grapheme`](crate::backend::DrawCell::grapheme), streamed off
+/// [`Grid::layers`](crate::grid::Grid::layers).
 ///
 /// # Examples
 ///
@@ -139,20 +139,30 @@ pub struct Tile {
 
 impl Default for Tile {
     fn default() -> Self {
-        Self {
-            glyph: ' ',
-            style: Style::default(),
-            width: 1,
-            dx: 0,
-            dy: 0,
-            flags: TileFlags::EMPTY,
-            span_w: 1,
-            span_h: 1,
-        }
+        Self::EMPTY
     }
 }
 
 impl Tile {
+    /// The tile every layer cell starts as: a blank, unstyled, unwritten cell.
+    ///
+    /// Equivalent to [`Tile::default`], expressed as an associated `const` so callers that need
+    /// a `'static` reference to a default tile (e.g. [`Grid::diff`](crate::grid::Grid::diff)
+    /// reporting a layer that stopped being written) don't need an owned value to borrow from.
+    pub(crate) const EMPTY: Self = Self {
+        glyph: ' ',
+        style: Style {
+            fg: crate::color::Color::Default,
+            bg: crate::color::Color::Default,
+        },
+        width: 1,
+        dx: 0,
+        dy: 0,
+        flags: TileFlags::EMPTY,
+        span_w: 1,
+        span_h: 1,
+    };
+
     /// Creates a new tile with the given glyph and style.
     ///
     /// `dx` and `dy` default to 0 (no sub-cell offset). `glyph`'s display width is computed

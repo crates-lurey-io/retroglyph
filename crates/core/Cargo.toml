@@ -147,6 +147,10 @@ name = "flatten"
 harness = false
 
 [[bench]]
+name = "fill_region"
+harness = false
+
+[[bench]]
 name = "blit"
 harness = false
 
