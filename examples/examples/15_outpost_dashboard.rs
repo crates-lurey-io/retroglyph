@@ -44,7 +44,6 @@
     clippy::cast_sign_loss
 )]
 
-use retroglyph_core::animate::{Easing, Tween};
 use retroglyph_core::app::Frame;
 use retroglyph_core::backend::Backend;
 use retroglyph_core::camera::Camera;
@@ -55,7 +54,7 @@ use retroglyph_core::surface::Surface;
 use retroglyph_core::terminal::Terminal;
 use retroglyph_examples::Example;
 use retroglyph_widgets::{
-    Align, Constraint, draw_clipped, split_h, split_h_spaced, split_v, truncate,
+    Align, Constraint, Easing, Tween, draw_clipped, split_h, split_h_spaced, split_v, truncate,
 };
 
 // ── Breakpoints ────────────────────────────────────────────────────────────
