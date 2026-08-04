@@ -9,7 +9,7 @@ use crate::tile::Tile;
 use super::{Layer, Surface};
 
 fn screen(grid: &mut Grid) -> Surface<'_> {
-    let area = Rect::new(0, 0, grid.width(), grid.height());
+    let area = grid.rect();
     Surface::new(grid, area, 0)
 }
 
