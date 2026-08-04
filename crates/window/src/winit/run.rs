@@ -1659,12 +1659,13 @@ where
         } else {
             MouseEventKind::Moved
         };
-        term.backend_mut().push_event(Event::Mouse(MouseEvent {
-            kind,
-            position: pos,
-            pixel_position: Some(px),
-            modifiers: self.current_modifiers,
-        }));
+        term.backend_mut()
+            .push_event(Event::Mouse(MouseEvent::with_pixel_position(
+                kind,
+                pos,
+                self.current_modifiers,
+                px,
+            )));
     }
 
     fn on_mouse_input(
@@ -1691,12 +1692,13 @@ where
             self.held_buttons &= !button_mask(btn);
             MouseEventKind::Up(btn)
         };
-        term.backend_mut().push_event(Event::Mouse(MouseEvent {
-            kind,
-            position: pos,
-            pixel_position: Some(px),
-            modifiers: self.current_modifiers,
-        }));
+        term.backend_mut()
+            .push_event(Event::Mouse(MouseEvent::with_pixel_position(
+                kind,
+                pos,
+                self.current_modifiers,
+                px,
+            )));
     }
 
     fn on_mouse_wheel(&mut self, delta: winit::event::MouseScrollDelta) {
@@ -1723,12 +1725,13 @@ where
             dx: scroll_x as f32,
             dy: scroll_y as f32,
         };
-        term.backend_mut().push_event(Event::Mouse(MouseEvent {
-            kind,
-            position: pos,
-            pixel_position: Some(px),
-            modifiers: self.current_modifiers,
-        }));
+        term.backend_mut()
+            .push_event(Event::Mouse(MouseEvent::with_pixel_position(
+                kind,
+                pos,
+                self.current_modifiers,
+                px,
+            )));
     }
 
     /// Synthesize mouse events from a touch so tap/drag work out of the box.
@@ -2370,12 +2373,11 @@ mod tests {
     #[test]
     fn mouse_event_round_trips_through_event_buffer() {
         let mut backend = WindowBackend::new(MockPresenter::default());
-        let ev = Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Down(MouseButton::Left),
-            position: Pos { x: 3, y: 1 },
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        });
+        let ev = Event::Mouse(MouseEvent::new(
+            MouseEventKind::Down(MouseButton::Left),
+            Pos { x: 3, y: 1 },
+            KeyModifiers::NONE,
+        ));
         backend.push_event(ev.clone());
         assert_eq!(backend.poll_event(Duration::ZERO), Some(ev));
         assert_eq!(backend.poll_event(Duration::ZERO), None);
@@ -2384,18 +2386,16 @@ mod tests {
     #[test]
     fn multiple_mouse_events_preserve_fifo_order() {
         let mut backend = WindowBackend::new(MockPresenter::default());
-        let moved = Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Moved,
-            position: Pos { x: 1, y: 2 },
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        });
-        let clicked = Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Down(MouseButton::Left),
-            position: Pos { x: 1, y: 2 },
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        });
+        let moved = Event::Mouse(MouseEvent::new(
+            MouseEventKind::Moved,
+            Pos { x: 1, y: 2 },
+            KeyModifiers::NONE,
+        ));
+        let clicked = Event::Mouse(MouseEvent::new(
+            MouseEventKind::Down(MouseButton::Left),
+            Pos { x: 1, y: 2 },
+            KeyModifiers::NONE,
+        ));
         backend.push_event(moved.clone());
         backend.push_event(clicked.clone());
         assert_eq!(backend.poll_event(Duration::ZERO), Some(moved));
@@ -2414,12 +2414,12 @@ mod tests {
         });
         assert_eq!(
             poll(&mut app),
-            Some(Event::Mouse(MouseEvent {
-                kind: MouseEventKind::Moved,
-                position: Pos { x: 2, y: 2 },
-                pixel_position: Some(PhysicalPos { x: 20, y: 32 }),
-                modifiers: KeyModifiers::NONE,
-            }))
+            Some(Event::Mouse(MouseEvent::with_pixel_position(
+                MouseEventKind::Moved,
+                Pos { x: 2, y: 2 },
+                KeyModifiers::NONE,
+                PhysicalPos { x: 20, y: 32 },
+            )))
         );
     }
 
@@ -2440,12 +2440,12 @@ mod tests {
         });
         assert_eq!(
             poll(&mut app),
-            Some(Event::Mouse(MouseEvent {
-                kind: MouseEventKind::Down(MouseButton::Left),
-                position: Pos { x: 2, y: 1 },
-                pixel_position: Some(PhysicalPos { x: 16, y: 16 }),
-                modifiers: KeyModifiers::NONE,
-            }))
+            Some(Event::Mouse(MouseEvent::with_pixel_position(
+                MouseEventKind::Down(MouseButton::Left),
+                Pos { x: 2, y: 1 },
+                KeyModifiers::NONE,
+                PhysicalPos { x: 16, y: 16 },
+            )))
         );
     }
 
@@ -2459,12 +2459,12 @@ mod tests {
         });
         assert_eq!(
             poll(&mut app),
-            Some(Event::Mouse(MouseEvent {
-                kind: MouseEventKind::Up(MouseButton::Right),
-                position: Pos { x: 0, y: 0 },
-                pixel_position: Some(PhysicalPos { x: 0, y: 0 }),
-                modifiers: KeyModifiers::NONE,
-            }))
+            Some(Event::Mouse(MouseEvent::with_pixel_position(
+                MouseEventKind::Up(MouseButton::Right),
+                Pos { x: 0, y: 0 },
+                KeyModifiers::NONE,
+                PhysicalPos { x: 0, y: 0 },
+            )))
         );
     }
 

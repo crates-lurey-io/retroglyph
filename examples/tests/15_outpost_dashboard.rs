@@ -33,12 +33,7 @@ const fn key(code: KeyCode) -> Event {
 }
 
 const fn mouse(kind: MouseEventKind, x: u16, y: u16) -> Event {
-    Event::Mouse(MouseEvent {
-        kind,
-        position: Pos::new(x, y),
-        pixel_position: None,
-        modifiers: KeyModifiers::NONE,
-    })
+    Event::Mouse(MouseEvent::new(kind, Pos::new(x, y), KeyModifiers::NONE))
 }
 
 /// Drives `E` through one synthetic event per tick, returning each frame's

@@ -760,18 +760,16 @@ mod tests {
     }
 
     fn click_at(interaction: &mut Interaction<Id>, pos: Pos) {
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Down(MouseButton::Left),
-            position: pos,
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Up(MouseButton::Left),
-            position: pos,
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Down(MouseButton::Left),
+            pos,
+            KeyModifiers::NONE,
+        )));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Up(MouseButton::Left),
+            pos,
+            KeyModifiers::NONE,
+        )));
     }
 
     /// Registers `Save`/`Cancel` at fixed rects and returns their responses,
@@ -830,12 +828,11 @@ mod tests {
         let mut interaction = Interaction::<Id>::new();
         let _ = frame(&mut interaction); // frame 1: registers Save/Cancel
 
-        let down = Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Down(MouseButton::Left),
-            position: Pos::new(2, 0),
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        });
+        let down = Event::Mouse(MouseEvent::new(
+            MouseEventKind::Down(MouseButton::Left),
+            Pos::new(2, 0),
+            KeyModifiers::NONE,
+        ));
         // frame 2: press delivered via handle_event, same as a real tick.
         let (save2, _) = frame_with_events(&mut interaction, &[down]);
         assert!(!save2.pressed()); // this frame's hover snapshot predates the event
@@ -845,12 +842,11 @@ mod tests {
         let (save3, _) = frame(&mut interaction);
         assert!(save3.pressed());
 
-        let up = Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Up(MouseButton::Left),
-            position: Pos::new(2, 0),
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        });
+        let up = Event::Mouse(MouseEvent::new(
+            MouseEventKind::Up(MouseButton::Left),
+            Pos::new(2, 0),
+            KeyModifiers::NONE,
+        ));
         // frame 4: release delivered the same way.
         let _ = frame_with_events(&mut interaction, &[up]);
 
@@ -864,12 +860,11 @@ mod tests {
         let mut interaction = Interaction::<Id>::new();
         let _ = frame(&mut interaction);
 
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Moved,
-            position: Pos::new(7, 0),
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Moved,
+            Pos::new(7, 0),
+            KeyModifiers::NONE,
+        )));
 
         let (save, cancel) = frame(&mut interaction);
         assert!(!save.hovered());
@@ -898,34 +893,31 @@ mod tests {
         let mut interaction = Interaction::<Id>::new().with_drag_threshold(1);
         let _ = frame(&mut interaction);
 
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Down(MouseButton::Left),
-            position: Pos::new(2, 0),
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Down(MouseButton::Left),
+            Pos::new(2, 0),
+            KeyModifiers::NONE,
+        )));
         interaction.begin_frame();
         let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::drag());
         assert!(!save.dragging()); // hasn't moved yet
         interaction.end_frame();
 
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Moved,
-            position: Pos::new(4, 0), // 2 cells from the press origin
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Moved,
+            Pos::new(4, 0), // 2 cells from the press origin
+            KeyModifiers::NONE,
+        )));
         interaction.begin_frame();
         let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::drag());
         assert!(save.dragging());
         interaction.end_frame();
 
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Up(MouseButton::Left),
-            position: Pos::new(4, 0),
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Up(MouseButton::Left),
+            Pos::new(4, 0),
+            KeyModifiers::NONE,
+        )));
         interaction.begin_frame();
         let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::drag());
         assert!(!save.clicked()); // released after dragging, not a click
@@ -937,47 +929,43 @@ mod tests {
         let mut interaction = Interaction::<Id>::new();
         let _ = frame(&mut interaction); // frame 1: registers Save/Cancel
 
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Down(MouseButton::Left),
-            position: Pos::new(2, 0), // over Save
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Down(MouseButton::Left),
+            Pos::new(2, 0), // over Save
+            KeyModifiers::NONE,
+        )));
 
         // frame 2: press resolves against frame 1's registrations, pointer still over Save.
         let (save, _) = frame(&mut interaction);
         assert!(save.held());
 
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Moved,
-            position: Pos::new(20, 0), // outside Save's rect, still held down
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Moved,
+            Pos::new(20, 0), // outside Save's rect, still held down
+            KeyModifiers::NONE,
+        )));
         interaction.begin_frame();
         let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::click());
         let _ = interaction.interact(Rect::new(6, 0, 5, 1), Id::Cancel, Sense::click());
         interaction.end_frame();
         assert!(!save.held()); // slid off before release: cancels immediately
 
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Moved,
-            position: Pos::new(2, 0), // back over Save, still held down, before release
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Moved,
+            Pos::new(2, 0), // back over Save, still held down, before release
+            KeyModifiers::NONE,
+        )));
         interaction.begin_frame();
         let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::click());
         let _ = interaction.interact(Rect::new(6, 0, 5, 1), Id::Cancel, Sense::click());
         interaction.end_frame();
         assert!(save.held()); // back inside: held again
 
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Up(MouseButton::Left),
-            position: Pos::new(2, 0),
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Up(MouseButton::Left),
+            Pos::new(2, 0),
+            KeyModifiers::NONE,
+        )));
         interaction.begin_frame();
         let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::click());
         let _ = interaction.interact(Rect::new(6, 0, 5, 1), Id::Cancel, Sense::click());
@@ -994,12 +982,11 @@ mod tests {
         let _ = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::hover());
         interaction.end_frame();
 
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Down(MouseButton::Left),
-            position: Pos::new(2, 0), // over Save
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Down(MouseButton::Left),
+            Pos::new(2, 0), // over Save
+            KeyModifiers::NONE,
+        )));
 
         interaction.begin_frame();
         // `active` is assigned from whichever id was topmost at press time, regardless of that
@@ -1067,12 +1054,11 @@ mod tests {
         let mut interaction = Interaction::<Id>::new();
         let _ = frame(&mut interaction);
 
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Moved,
-            position: Pos::new(2, 0),
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Moved,
+            Pos::new(2, 0),
+            KeyModifiers::NONE,
+        )));
 
         let (save, cancel) = frame(&mut interaction);
         assert_eq!(save.pointer_pos(), Some(Pos::new(2, 0)));
@@ -1084,12 +1070,11 @@ mod tests {
         let mut interaction = Interaction::<Id>::new().with_drag_threshold(1);
         let _ = frame(&mut interaction);
 
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Down(MouseButton::Left),
-            position: Pos::new(2, 0),
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Down(MouseButton::Left),
+            Pos::new(2, 0),
+            KeyModifiers::NONE,
+        )));
         interaction.begin_frame();
         let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::drag());
         let cancel = interaction.interact(Rect::new(6, 0, 5, 1), Id::Cancel, Sense::drag());
@@ -1097,12 +1082,11 @@ mod tests {
         assert_eq!(save.press_origin(), Some(Pos::new(2, 0)));
         assert_eq!(cancel.press_origin(), None); // press never landed on Cancel
 
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Moved,
-            position: Pos::new(4, 0),
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Moved,
+            Pos::new(4, 0),
+            KeyModifiers::NONE,
+        )));
         interaction.begin_frame();
         let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::drag());
         interaction.end_frame();
@@ -1115,12 +1099,11 @@ mod tests {
         let mut interaction = Interaction::<Id>::new().with_drag_threshold(1);
         let _ = frame(&mut interaction);
 
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Down(MouseButton::Left),
-            position: Pos::new(2, 0),
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Down(MouseButton::Left),
+            Pos::new(2, 0),
+            KeyModifiers::NONE,
+        )));
         interaction.begin_frame();
         let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::drag());
         let cancel = interaction.interact(Rect::new(6, 0, 5, 1), Id::Cancel, Sense::drag());
@@ -1130,12 +1113,11 @@ mod tests {
 
         // Move far past Save's own rect (5 cells wide): drag_delta must keep tracking the full
         // displacement from the press origin, unlike `pointer_pos`, which would go `None` here.
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Moved,
-            position: Pos::new(20, 3),
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Moved,
+            Pos::new(20, 3),
+            KeyModifiers::NONE,
+        )));
         interaction.begin_frame();
         let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::drag());
         interaction.end_frame();
@@ -1148,18 +1130,16 @@ mod tests {
         let mut interaction = Interaction::<Id>::new();
         let _ = frame(&mut interaction);
 
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Moved,
-            position: Pos::new(2, 0),
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Scroll { dx: 0.0, dy: -1.0 },
-            position: Pos::new(2, 0),
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Moved,
+            Pos::new(2, 0),
+            KeyModifiers::NONE,
+        )));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Scroll { dx: 0.0, dy: -1.0 },
+            Pos::new(2, 0),
+            KeyModifiers::NONE,
+        )));
 
         interaction.begin_frame();
         let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, Sense::scroll());
@@ -1193,12 +1173,11 @@ mod tests {
         );
         interaction.end_frame();
 
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Scroll { dx: 0.0, dy: -1.0 },
-            position: Pos::new(2, 0),
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Scroll { dx: 0.0, dy: -1.0 },
+            Pos::new(2, 0),
+            KeyModifiers::NONE,
+        )));
 
         interaction.begin_frame();
         let container = interaction.interact(Rect::new(0, 0, 10, 1), Id::Save, Sense::scroll());
@@ -1228,18 +1207,16 @@ mod tests {
     }
 
     fn right_click_at(interaction: &mut Interaction<Id>, pos: Pos) {
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Down(MouseButton::Right),
-            position: pos,
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Up(MouseButton::Right),
-            position: pos,
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Down(MouseButton::Right),
+            pos,
+            KeyModifiers::NONE,
+        )));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Up(MouseButton::Right),
+            pos,
+            KeyModifiers::NONE,
+        )));
     }
 
     #[test]
@@ -1292,22 +1269,20 @@ mod tests {
         let mut interaction = Interaction::<Id>::new();
         let _ = frame_disabled(&mut interaction); // frame 1: registers Save
 
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Down(MouseButton::Left),
-            position: Pos::new(2, 0), // over Save
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Down(MouseButton::Left),
+            Pos::new(2, 0), // over Save
+            KeyModifiers::NONE,
+        )));
         let save = frame_disabled(&mut interaction); // frame 2: press resolves
         assert!(!save.pressed());
         assert!(!save.held());
 
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Up(MouseButton::Left),
-            position: Pos::new(2, 0),
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Up(MouseButton::Left),
+            Pos::new(2, 0),
+            KeyModifiers::NONE,
+        )));
         let save = frame_disabled(&mut interaction); // frame 3: release resolves
         assert!(!save.released());
         assert!(!save.clicked());
@@ -1324,28 +1299,25 @@ mod tests {
         let _ = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, sense);
         interaction.end_frame();
 
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Down(MouseButton::Left),
-            position: Pos::new(2, 0), // over Save
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Down(MouseButton::Left),
+            Pos::new(2, 0), // over Save
+            KeyModifiers::NONE,
+        )));
         interaction.begin_frame();
         let _ = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, sense);
         interaction.end_frame();
 
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Moved,
-            position: Pos::new(4, 0), // 2 cells from the press origin, past the threshold
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Scroll { dx: 0.0, dy: -1.0 },
-            position: Pos::new(4, 0),
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Moved,
+            Pos::new(4, 0), // 2 cells from the press origin, past the threshold
+            KeyModifiers::NONE,
+        )));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Scroll { dx: 0.0, dy: -1.0 },
+            Pos::new(4, 0),
+            KeyModifiers::NONE,
+        )));
 
         interaction.begin_frame();
         let save = interaction.interact(Rect::new(0, 0, 5, 1), Id::Save, sense);
@@ -1361,12 +1333,11 @@ mod tests {
         let mut interaction = Interaction::<Id>::new();
         let _ = frame_disabled(&mut interaction);
 
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Moved,
-            position: Pos::new(2, 0), // over Save
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Moved,
+            Pos::new(2, 0), // over Save
+            KeyModifiers::NONE,
+        )));
 
         let save = frame_disabled(&mut interaction);
         assert!(save.hovered()); // hit-testing keeps working while disabled
@@ -1463,12 +1434,11 @@ mod tests {
         let _ = frame(&mut interaction); // frame 1: registers Save/Cancel
         let _ = frame(&mut interaction); // frame 2: frame 1's registrations become `prev_hits`
 
-        let consumed = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Moved,
-            position: Pos::new(2, 0), // over Save
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
+        let consumed = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Moved,
+            Pos::new(2, 0), // over Save
+            KeyModifiers::NONE,
+        )));
         assert_eq!(consumed, Consumed::Yes);
         assert!(interaction.wants_pointer());
     }
@@ -1479,12 +1449,11 @@ mod tests {
         let _ = frame(&mut interaction); // frame 1: registers Save/Cancel
         let _ = frame(&mut interaction); // frame 2: frame 1's registrations become `prev_hits`
 
-        let consumed = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Moved,
-            position: Pos::new(20, 20), // outside both Save and Cancel
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
+        let consumed = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Moved,
+            Pos::new(20, 20), // outside both Save and Cancel
+            KeyModifiers::NONE,
+        )));
         assert_eq!(consumed, Consumed::No);
         assert!(!interaction.wants_pointer());
     }
@@ -1503,12 +1472,11 @@ mod tests {
         let (save, _) = frame_with_events(&mut interaction, &[tab]); // frame 2: Tab focuses Save
         assert!(save.focused());
 
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Down(MouseButton::Left),
-            position: Pos::new(2, 0), // over Save, now active and mid-press
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Down(MouseButton::Left),
+            Pos::new(2, 0), // over Save, now active and mid-press
+            KeyModifiers::NONE,
+        )));
 
         assert_eq!(
             interaction.handle_event(&Event::Resize(80, 24)),

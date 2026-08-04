@@ -409,12 +409,11 @@ mod tests {
         assert!((state.offset() - 0.0).abs() < f32::EPSILON);
 
         // Press at the top of the track: resolves against frame 1's registration.
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Down(MouseButton::Left),
-            position: Pos::new(0, 0),
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Down(MouseButton::Left),
+            Pos::new(0, 0),
+            KeyModifiers::NONE,
+        )));
         interaction.begin_frame();
         let response =
             interaction.interact(area, Id::Bar, InteractiveWidget::<Id>::sense(&scrollbar));
@@ -428,12 +427,11 @@ mod tests {
         assert!((state.offset() - 0.0).abs() < f32::EPSILON); // clicked at the top: no jump needed
 
         // Drag down to the bottom of the track while still held.
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Moved,
-            position: Pos::new(0, 9),
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Moved,
+            Pos::new(0, 9),
+            KeyModifiers::NONE,
+        )));
         interaction.begin_frame();
         let response =
             interaction.interact(area, Id::Bar, InteractiveWidget::<Id>::sense(&scrollbar));
@@ -446,12 +444,11 @@ mod tests {
         interaction.end_frame();
         assert!(state.offset() > 0.0); // dragged toward the bottom: offset increased
 
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent {
-            kind: MouseEventKind::Up(MouseButton::Left),
-            position: Pos::new(0, 9),
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        }));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Up(MouseButton::Left),
+            Pos::new(0, 9),
+            KeyModifiers::NONE,
+        )));
         interaction.begin_frame();
         let response =
             interaction.interact(area, Id::Bar, InteractiveWidget::<Id>::sense(&scrollbar));

@@ -172,12 +172,7 @@ mod tests {
     use super::*;
 
     fn mouse(kind: MouseEventKind, pos: Pos) -> Event {
-        Event::Mouse(MouseEvent {
-            kind,
-            position: pos,
-            pixel_position: None,
-            modifiers: KeyModifiers::NONE,
-        })
+        Event::Mouse(MouseEvent::new(kind, pos, KeyModifiers::NONE))
     }
 
     #[test]

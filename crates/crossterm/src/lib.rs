@@ -1339,16 +1339,15 @@ const fn from_crossterm_mouse_event_kind(
 const fn from_crossterm_mouse_event(
     m: crossterm::event::MouseEvent,
 ) -> retroglyph_core::event::MouseEvent {
-    retroglyph_core::event::MouseEvent {
-        kind: from_crossterm_mouse_event_kind(m.kind),
-        position: Pos {
+    // Crossterm is a character-mode backend; it has no sub-cell resolution.
+    retroglyph_core::event::MouseEvent::new(
+        from_crossterm_mouse_event_kind(m.kind),
+        Pos {
             x: m.column,
             y: m.row,
         },
-        // Crossterm is a character-mode backend; it has no sub-cell resolution.
-        pixel_position: None,
-        modifiers: from_crossterm_key_modifiers(m.modifiers),
-    }
+        from_crossterm_key_modifiers(m.modifiers),
+    )
 }
 
 // Taking ownership matches the call site: `crossterm::event::read()` hands us

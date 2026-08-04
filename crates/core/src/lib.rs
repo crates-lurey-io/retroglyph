@@ -51,15 +51,6 @@
 //! this crate's own `math` shim -- the `no_std` side of that split. See `std` below for the alternative that prefers
 //! the platform's own float intrinsics when available; a build needs exactly one of the two.
 //!
-//! ### `libm-arch`
-//!
-//! ⚪ Optional.
-//!
-//! Alias for `libm`, matching `gem`'s and `alpha-blend`'s own `libm-arch` feature name so a reader
-//! following their docs finds the name they expect. Already implied by `libm` above (which always
-//! requests the `arch`-intrinsified `libm` dependency; see the `[dependencies.libm]` comment
-//! below), so this exists purely for discoverability and never needs to be enabled on its own.
-//!
 //! ### `serde`
 //!
 //! ⚪ Optional.
@@ -157,7 +148,7 @@ extern crate alloc;
 // without one, and `indexed-quant` forwards `gem/space`, which needs `gem/std` or `gem/libm` for
 // the same reason. Failing here names the two features that fix it, ahead of the same build
 // failing as an unresolved `libm::` path inside `math.rs` or inside `gem::space`'s own
-// `compile_error!`. `libm-arch` needs no mention: it turns on `libm` itself.
+// `compile_error!`.
 #[cfg(not(any(feature = "std", feature = "libm")))]
 compile_error!("retroglyph-core needs a float backend: enable `std` or `libm`.");
 

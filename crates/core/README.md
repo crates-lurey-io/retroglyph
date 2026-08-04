@@ -105,15 +105,6 @@ easing curves and the separable `BlendMode` channel math, via this crate's own `
 `no_std` side of that split. See `std` below for the alternative that prefers the platform's own
 float intrinsics when available; a build needs exactly one of the two.
 
-### `libm-arch`
-
-⚪ Optional.
-
-Alias for `libm`, matching `gem`'s and `alpha-blend`'s own `libm-arch` feature name so a reader
-following their docs finds the name they expect. Already implied by `libm` above (which always
-requests the `arch`-intrinsified `libm` dependency; see the `[dependencies.libm]` comment below), so
-this exists purely for discoverability and never needs to be enabled on its own.
-
 ### `serde`
 
 ⚪ Optional.

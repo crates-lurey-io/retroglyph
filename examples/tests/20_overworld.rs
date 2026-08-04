@@ -29,21 +29,20 @@ use retroglyph_core::terminal::Terminal;
 use retroglyph_examples::{Example, HEADLESS_FRAME_DELTA};
 
 const fn mouse(kind: MouseEventKind, x: u16, y: u16) -> Event {
-    Event::Mouse(MouseEvent {
+    Event::Mouse(MouseEvent::new(
         kind,
-        position: retroglyph_core::grid::Pos { x, y },
-        pixel_position: None,
-        modifiers: KeyModifiers::NONE,
-    })
+        retroglyph_core::grid::Pos { x, y },
+        KeyModifiers::NONE,
+    ))
 }
 
 const fn key(ch: char) -> Event {
-    Event::Key(KeyEvent {
-        code: KeyCode::Char(ch),
-        modifiers: KeyModifiers::NONE,
-        kind: KeyEventKind::Press,
-        location: KeyLocation::Standard,
-    })
+    Event::Key(KeyEvent::with_location(
+        KeyCode::Char(ch),
+        KeyModifiers::NONE,
+        KeyEventKind::Press,
+        KeyLocation::Standard,
+    ))
 }
 
 /// Draws one idle frame at `width`x`height` and returns the resulting state, with

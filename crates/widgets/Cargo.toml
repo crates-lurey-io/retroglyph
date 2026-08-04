@@ -31,8 +31,6 @@ egc = ["retroglyph-core/egc"]
 # gauge/sparkline/bar percentage rounding, scroll momentum decay) instead of `std`'s own float
 # intrinsics. See `std` below; a build needs exactly one of the two.
 libm = ["retroglyph-core/libm"]
-# Alias for `libm`, matching `retroglyph-core`'s own `libm-arch` feature name.
-libm-arch = ["retroglyph-core/libm-arch"]
 # Adds `Serialize`/`Deserialize` impls for [`Theme`] and `Density`, forwarding to
 # `retroglyph-core`'s `serde` feature.
 #

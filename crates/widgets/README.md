@@ -145,12 +145,6 @@ Uses `retroglyph-core`'s `libm` feature (the `no_std` float backend: scrollbar g
 gauge/sparkline/bar percentage rounding, scroll momentum decay) instead of `std`'s own float
 intrinsics. See `std` below; a build needs exactly one of the two.
 
-### `libm-arch`
-
-⚪ Optional.
-
-Alias for `libm`, matching `retroglyph-core`'s own `libm-arch` feature name.
-
 ### `serde`
 
 ⚪ Optional.
