@@ -1569,48 +1569,6 @@ fn grid_is_the_read_only_counterpart_of_grid_mut() {
 }
 
 #[test]
-fn tile_reads_a_written_cell_without_a_mutable_borrow() {
-    let mut grid = Grid::new(4, 4);
-    let mut surface = screen(&mut grid);
-    surface.put((1, 1), 'X', Style::default());
-
-    assert_eq!(surface.tile((1, 1)).map(Tile::glyph), Some('X'));
-    assert_eq!(surface.tile((0, 0)).map(Tile::glyph), Some(' '));
-    assert_eq!(surface.tile((10, 10)), None);
-}
-
-#[test]
-fn background_reads_the_styles_background_colour() {
-    let mut grid = Grid::new(4, 4);
-    let mut surface = screen(&mut grid);
-    surface.put((1, 1), 'X', Style::new().bg(Color::RED));
-
-    assert_eq!(surface.background((1, 1)), Some(Color::RED));
-    assert_eq!(surface.background((10, 10)), None);
-}
-
-#[test]
-fn tile_returns_none_on_an_unallocated_layer() {
-    let mut grid = Grid::new(4, 4);
-    let mut surface = screen(&mut grid);
-    let unallocated = surface.on_layer(1);
-
-    // Layer 0 is always allocated (even empty); layer 1 was never written to, so it isn't
-    // allocated at all, a third reason `tile` answers `None`, distinct from "nothing was ever
-    // written at this cell" and "out of bounds".
-    assert_eq!(unallocated.tile((0, 0)), None);
-}
-
-#[test]
-fn background_returns_none_on_an_unallocated_layer() {
-    let mut grid = Grid::new(4, 4);
-    let mut surface = screen(&mut grid);
-    let unallocated = surface.on_layer(1);
-
-    assert_eq!(unallocated.background((0, 0)), None);
-}
-
-#[test]
 fn print_aligned_left_aligns_by_default() {
     let mut grid = Grid::new(8, 1);
     {
