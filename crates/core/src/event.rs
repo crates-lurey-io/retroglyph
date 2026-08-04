@@ -1,10 +1,10 @@
 //! Input event system.
 //!
-//! [`Terminal::poll`](crate::Terminal::poll) returns an optional [`Event`] with support for
-//! keyboard ([`KeyEvent`], all standard keys plus [`KeyModifiers`]), mouse ([`MouseEvent`]:
+//! [`Terminal::poll`](crate::terminal::Terminal::poll) returns an optional [`Event`](crate::event::Event) with support for
+//! keyboard ([`KeyEvent`](crate::event::KeyEvent), all standard keys plus [`KeyModifiers`](crate::event::KeyModifiers)), mouse ([`MouseEvent`](crate::event::MouseEvent):
 //! buttons, movement, scroll), touch (synthesized into the same mouse events on the
 //! software/WASM backend), window resize, and close events.
-//! [`has_input`](crate::Terminal::has_input) checks for a pending event without blocking. Resize
+//! [`has_input`](crate::terminal::Terminal::has_input) checks for a pending event without blocking. Resize
 //! events are applied to the grid automatically, before the event reaches your code.
 
 use crate::grid::Pos;
@@ -14,7 +14,7 @@ use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 
 /// Physical (pixel) position relative to the window's top-left corner.
 ///
-/// Using `ixy::Pos<u32>` rather than the cell-grid [`Pos`] (`ixy::Pos<u16>`)
+/// Using `ixy::Pos<u32>` rather than the cell-grid [`Pos`](crate::grid::Pos) (`ixy::Pos<u16>`)
 /// makes the distinction type-safe: you cannot accidentally pass a pixel
 /// coordinate where a cell coordinate is expected.
 pub type PhysicalPos = ixy::Pos<u32>;
@@ -118,14 +118,14 @@ impl Not for KeyModifiers {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
-/// A modifier key pressed as a standalone key event, independent of the [`KeyModifiers`] flags
+/// A modifier key pressed as a standalone key event, independent of the [`KeyModifiers`](crate::event::KeyModifiers) flags
 /// carried on non-modifier key events.
 ///
 /// This is flat (no per-side variants) because side is conveyed separately: pair this with the
-/// surrounding [`KeyEvent`]'s [`KeyLocation::Left`]/[`KeyLocation::Right`] rather than duplicating
+/// surrounding [`KeyEvent`](crate::event::KeyEvent)'s [`KeyLocation::Left`](crate::event::KeyLocation::Left)/[`KeyLocation::Right`](crate::event::KeyLocation::Right) rather than duplicating
 /// left/right into `ModifierKey` itself.
 ///
-/// Reporting a bare modifier press as a [`KeyCode::Modifier`] event is backend-dependent: the
+/// Reporting a bare modifier press as a [`KeyCode::Modifier`](crate::event::KeyCode::Modifier) event is backend-dependent: the
 /// crossterm backend requires the terminal to support the kitty keyboard protocol with the
 /// `REPORT_ALL_KEYS_AS_ESCAPE_CODES` enhancement flag enabled; plain terminals never report these.
 pub enum ModifierKey {
@@ -225,7 +225,7 @@ pub enum KeyEventKind {
 /// The physical location of a key on the keyboard, for keys that appear in more than one place.
 ///
 /// Mirrors [winit's `KeyLocation`](https://docs.rs/winit/latest/winit/keyboard/enum.KeyLocation.html):
-/// a key like "1" carries the same [`KeyCode`] whether it's pressed above the letters or on the
+/// a key like "1" carries the same [`KeyCode`](crate::event::KeyCode) whether it's pressed above the letters or on the
 /// numpad, and modifier keys like Shift exist on both the left and right sides. This field
 /// disambiguates those cases.
 pub enum KeyLocation {
@@ -251,17 +251,17 @@ pub struct KeyEvent {
     /// Whether this is a press, auto-repeat, or release.
     ///
     /// Backends that cannot distinguish these always report
-    /// [`KeyEventKind::Press`]. See [`KeyEventKind`] for per-backend behavior.
+    /// [`KeyEventKind::Press`](crate::event::KeyEventKind::Press). See [`KeyEventKind`](crate::event::KeyEventKind) for per-backend behavior.
     pub kind: KeyEventKind,
     /// The physical location of the key, for keys that appear in more than one place.
     ///
-    /// Backends that cannot determine this always report [`KeyLocation::Standard`].
+    /// Backends that cannot determine this always report [`KeyLocation::Standard`](crate::event::KeyLocation::Standard).
     pub location: KeyLocation,
 }
 
 impl KeyEvent {
     /// Creates a key press event with the given code and modifiers, and
-    /// [`KeyLocation::Standard`].
+    /// [`KeyLocation::Standard`](crate::event::KeyLocation::Standard).
     #[must_use]
     pub const fn new(code: KeyCode, modifiers: KeyModifiers) -> Self {
         Self {
@@ -272,7 +272,7 @@ impl KeyEvent {
         }
     }
 
-    /// Creates a key event with an explicit [`KeyEventKind`] and [`KeyLocation::Standard`].
+    /// Creates a key event with an explicit [`KeyEventKind`](crate::event::KeyEventKind) and [`KeyLocation::Standard`](crate::event::KeyLocation::Standard).
     #[must_use]
     pub const fn with_kind(code: KeyCode, modifiers: KeyModifiers, kind: KeyEventKind) -> Self {
         Self {
@@ -283,7 +283,7 @@ impl KeyEvent {
         }
     }
 
-    /// Creates a key event with an explicit [`KeyEventKind`] and [`KeyLocation`].
+    /// Creates a key event with an explicit [`KeyEventKind`](crate::event::KeyEventKind) and [`KeyLocation`](crate::event::KeyLocation).
     #[must_use]
     pub const fn with_location(
         code: KeyCode,
@@ -350,7 +350,7 @@ pub enum MouseEventKind {
 #[derive(Debug, Clone, Copy, PartialEq)]
 /// Mouse input event.
 ///
-/// Does not derive `Eq`/`Hash`: [`MouseEventKind`] does not (its `Scroll` variant's `f32`
+/// Does not derive `Eq`/`Hash`: [`MouseEventKind`](crate::event::MouseEventKind) does not (its `Scroll` variant's `f32`
 /// fields implement neither).
 pub struct MouseEvent {
     /// The kind of mouse event.
@@ -402,7 +402,7 @@ impl MouseEvent {
 /// Currently just these two variants: every source that can report this
 /// (winit's `Theme`, the browser's `prefers-color-scheme` media query) only
 /// ever resolves to one of exactly these two, and a backend that can't
-/// determine a preference simply never emits [`Event::ThemeChanged`] rather
+/// determine a preference simply never emits [`Event::ThemeChanged`](crate::event::Event::ThemeChanged) rather
 /// than emitting a third "unknown" case for callers to handle. Marked
 /// `#[non_exhaustive]` for consistency with sibling public enums, in case a
 /// future source (e.g. a `HighContrast` case) needs to be added.
@@ -419,7 +419,7 @@ pub enum SystemTheme {
 #[non_exhaustive]
 /// Terminal input event.
 ///
-/// Does not derive `Eq`/`Hash`: [`MouseEvent`] does not (its `MouseEventKind::Scroll` variant's
+/// Does not derive `Eq`/`Hash`: [`MouseEvent`](crate::event::MouseEvent) does not (its `MouseEventKind::Scroll` variant's
 /// `f32` fields implement neither).
 pub enum Event {
     /// Keyboard event.
@@ -428,8 +428,8 @@ pub enum Event {
     Mouse(MouseEvent),
     /// Terminal window resized to the given `(cols, rows)`.
     ///
-    /// When this event comes from [`Terminal::poll`](crate::Terminal::poll) (or the other
-    /// [`Terminal`](crate::Terminal) methods that route through it), the grid has already been
+    /// When this event comes from [`Terminal::poll`](crate::terminal::Terminal::poll) (or the other
+    /// [`Terminal`](crate::terminal::Terminal) methods that route through it), the grid has already been
     /// resized to these dimensions by the time the event reaches your code; the payload is there
     /// so the app can react, for example recomputing layout or redrawing. A consumer driving
     /// [`Input::poll_event`](crate::backend::Input::poll_event) directly on a raw backend gets no
@@ -487,8 +487,8 @@ pub enum Event {
 /// Whether `new` should replace the queue's current tail event instead of being pushed alongside
 /// it, when a backend is appending `new` to a `Vec`/`VecDeque` of pending events.
 ///
-/// True for two consecutive [`Event::Mouse`] events both carrying [`MouseEventKind::Moved`], or
-/// both carrying [`MouseEventKind::Drag`] with the same button: a queue owner (winit, the wasm
+/// True for two consecutive [`Event::Mouse`](crate::event::Event::Mouse) events both carrying [`MouseEventKind::Moved`](crate::event::MouseEventKind::Moved), or
+/// both carrying [`MouseEventKind::Drag`](crate::event::MouseEventKind::Drag) with the same button: a queue owner (winit, the wasm
 /// FFI boundary, `Headless`) can be fed pointer-move/drag events far faster than a consumer
 /// drains them, and only the most recent position matters once it does (whether or not a button
 /// is held), so collapsing either run in place keeps the queue from growing unbounded
@@ -529,23 +529,23 @@ pub const fn coalesces_with(new: &Event, existing: &Event) -> bool {
 
 /// Tracks which keys are currently held down.
 ///
-/// Feed it every [`KeyEvent`] (or [`Event`]) you receive and query
+/// Feed it every [`KeyEvent`](crate::event::KeyEvent) (or [`Event`](crate::event::Event)) you receive and query
 /// [`is_held`](Self::is_held) each frame for held-key movement. A key is
-/// considered held from its first [`KeyEventKind::Press`] until a matching
-/// [`KeyEventKind::Release`], or until [`apply_event`](Self::apply_event) sees an
-/// [`Event::FocusLost`], whichever comes first.
+/// considered held from its first [`KeyEventKind::Press`](crate::event::KeyEventKind::Press) until a matching
+/// [`KeyEventKind::Release`](crate::event::KeyEventKind::Release), or until [`apply_event`](Self::apply_event) sees an
+/// [`Event::FocusLost`](crate::event::Event::FocusLost), whichever comes first.
 ///
 /// Held keys are keyed by `(KeyCode, KeyLocation)`, so a held Numpad8 and a held digit-row 8 are
 /// tracked separately: [`is_held`](Self::is_held) takes the pair, and [`held`](Self::held) yields
 /// it.
 ///
 /// Release events are what actually clear a key, and not every backend emits them: plain
-/// terminals only ever report [`KeyEventKind::Press`] (see [`KeyEventKind`]). On those
+/// terminals only ever report [`KeyEventKind::Press`](crate::event::KeyEventKind::Press) (see [`KeyEventKind`](crate::event::KeyEventKind)). On those
 /// press-only backends a key never leaves the held set on its own -- not even on focus loss, since
 /// there is no release to match -- so call [`clear`](Self::clear) at a suitable boundary (e.g.
 /// once per turn) if you rely on held-key state there. Backends rich enough to emit releases
 /// (winit, or a terminal with the kitty keyboard protocol) are exactly the ones that also emit
-/// [`Event::FocusLost`], so [`apply_event`](Self::apply_event) clears the held set on it: without
+/// [`Event::FocusLost`](crate::event::Event::FocusLost), so [`apply_event`](Self::apply_event) clears the held set on it: without
 /// that, alt-tabbing or clicking away while a key is down would leave it stuck held forever, since
 /// the release is delivered to whichever window/app gains focus instead.
 #[derive(Debug, Clone, Default)]
@@ -562,8 +562,8 @@ impl KeyState {
 
     /// Updates the held set from a key event.
     ///
-    /// [`Press`](KeyEventKind::Press) and [`Repeat`](KeyEventKind::Repeat) add
-    /// the `(code, location)` pair; [`Release`](KeyEventKind::Release) removes it.
+    /// [`Press`](crate::event::KeyEventKind::Press) and [`Repeat`](crate::event::KeyEventKind::Repeat) add
+    /// the `(code, location)` pair; [`Release`](crate::event::KeyEventKind::Release) removes it.
     pub fn apply(&mut self, event: KeyEvent) {
         let entry = (event.code, event.location);
         match event.kind {
@@ -578,9 +578,9 @@ impl KeyState {
         }
     }
 
-    /// Updates the held set from an [`Event`].
+    /// Updates the held set from an [`Event`](crate::event::Event).
     ///
-    /// Key events update the held set as [`apply`](Self::apply) does; [`Event::FocusLost`]
+    /// Key events update the held set as [`apply`](Self::apply) does; [`Event::FocusLost`](crate::event::Event::FocusLost)
     /// clears it entirely (see the type-level docs for why); every other event is ignored.
     pub fn apply_event(&mut self, event: &Event) {
         match event {

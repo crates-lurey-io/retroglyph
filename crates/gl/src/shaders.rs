@@ -181,7 +181,7 @@ void main() {
 /// therefore the blending above, is identical tinted or not.
 ///
 /// The math is a bit-exact GLSL translation of `gem::channel::multiply_u8`/`mix_u8`, the two
-/// functions `retroglyph_core::Tint::apply` calls, done in `uint`/`int` on the source texel's
+/// functions `retroglyph_core::color::Tint::apply` calls, done in `uint`/`int` on the source texel's
 /// reconstructed 0..255 channel values rather than in normalized float. This mirrors
 /// `SpriteTint::apply` exactly rather than merely approximating it: the CPU rasteriser calls that
 /// function directly, and a parity test renders the same sprite through both to keep them honest

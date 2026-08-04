@@ -20,8 +20,12 @@
 //!
 //! Static display. Keys: `q` or `Escape` quits, or close the window.
 
+use retroglyph_core::backend::Backend;
+use retroglyph_core::color::Style;
 use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::{Backend, Rect, Style, Surface, Terminal};
+use retroglyph_core::grid::Rect;
+use retroglyph_core::surface::Surface;
+use retroglyph_core::terminal::Terminal;
 use retroglyph_examples::Example;
 use retroglyph_widgets::{Constraint, split_h, split_v};
 
@@ -165,7 +169,7 @@ impl Example for WeightedFill {
     fn tick<B: Backend>(
         &mut self,
         term: &mut Terminal<B>,
-        _frame: &retroglyph_core::Frame,
+        _frame: &retroglyph_core::app::Frame,
     ) -> bool {
         if !self.handle_events(term) {
             return false;

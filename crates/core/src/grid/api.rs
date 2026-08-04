@@ -42,7 +42,7 @@ impl Grid {
         }
     }
 
-    /// Build a grid from a rectangular character map, one [`Tile`] per cell.
+    /// Build a grid from a rectangular character map, one [`Tile`](crate::tile::Tile) per cell.
     ///
     /// `map` is split on `\n`; the grid width is the longest line's display
     /// width (`unicode-width`'s [`UnicodeWidthStr`](unicode_width::UnicodeWidthStr))
@@ -61,7 +61,9 @@ impl Grid {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Grid, Pos, Style, Tile};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Pos};
+    /// use retroglyph_core::tile::Tile;
     ///
     /// // A ragged map: the second line is shorter than the first.
     /// let grid = Grid::from_charmap("###\n#.", |c| match c {
@@ -123,7 +125,7 @@ impl Grid {
         Size::new(self.width, self.height)
     }
 
-    /// Returns the full grid as a [`Rect`] at the origin.
+    /// Returns the full grid as a [`Rect`](crate::grid::Rect) at the origin.
     ///
     /// Equivalent to `Rect::new(0, 0, width, height)`. Handy for passing the whole grid to
     /// layout helpers or `blit`'s `src_rect`.

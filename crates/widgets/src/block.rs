@@ -2,10 +2,10 @@
 //!
 //! [`join_h`] and [`join_v`] concatenate several `Grid`s into one,
 //! side-by-side or stacked, via [`Grid::blit`]. `Grid` is constructible
-//! without a [`Backend`](retroglyph_core::Backend)/[`Terminal`](retroglyph_core::Terminal), so
+//! without a [`Backend`](retroglyph_core::backend::Backend)/[`Terminal`](retroglyph_core::terminal::Terminal), so
 //! composing widget output ahead of drawing it means composing `Grid`s directly, with no
 //! separate cell/buffer type.
-use retroglyph_core::Grid;
+use retroglyph_core::grid::Grid;
 
 /// Concatenate `grids` left-to-right into one [`Grid`] (layer 0 only).
 ///
@@ -62,7 +62,9 @@ pub fn join_v(grids: &[Grid]) -> Grid {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::{Pos, Style, Tile};
+    use retroglyph_core::color::Style;
+    use retroglyph_core::grid::Pos;
+    use retroglyph_core::tile::Tile;
 
     use super::*;
 

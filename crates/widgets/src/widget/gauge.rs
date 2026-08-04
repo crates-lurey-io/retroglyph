@@ -1,7 +1,7 @@
 //! [`Gauge`]: a labeled, load-colored progress bar.
 use core::fmt::Write as _;
 
-use retroglyph_core::{Color, Style};
+use retroglyph_core::color::{Color, Style};
 
 use super::{Widget, bar};
 use crate::Surface;
@@ -22,7 +22,7 @@ use crate::Theme;
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Grid, Rect};
+/// use retroglyph_core::grid::{Grid, Rect};
 /// use retroglyph_widgets::{Gauge, Surface, Widget};
 ///
 /// let area = Rect::new(0, 0, 20, 1);
@@ -126,7 +126,7 @@ impl Widget for Gauge<'_> {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::{Grid, Pos, Rect};
+    use retroglyph_core::grid::{Grid, Pos, Rect};
 
     use super::*;
 
@@ -142,7 +142,7 @@ mod tests {
 
     #[test]
     fn label_style_is_configurable() {
-        use retroglyph_core::Color;
+        use retroglyph_core::color::Color;
 
         let area = Rect::new(0, 0, 20, 1);
         let mut grid = Grid::new(20, 1);
@@ -187,7 +187,7 @@ mod tests {
 
     #[test]
     fn theme_on_uses_the_given_backdrop_instead_of_panel_bg() {
-        use retroglyph_core::Color;
+        use retroglyph_core::color::Color;
 
         let area = Rect::new(0, 0, 20, 1);
         let mut grid = Grid::new(20, 1);

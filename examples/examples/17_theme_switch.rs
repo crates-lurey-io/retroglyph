@@ -9,7 +9,7 @@
 //! [`Theme::DARK`] and hand-thread `theme.*` into each style knob; `.theme()` replaces that
 //! boilerplate. [`Ui`] pairs the frame's surface with [`Interaction`] (via
 //! [`Interaction::frame`]), so drawing each widget into its own area no longer needs a fresh
-//! [`Surface`](retroglyph_core::Surface) built by hand.
+//! [`Surface`](retroglyph_core::surface::Surface) built by hand.
 //!
 //! ```sh
 //! cargo run --example 17_theme_switch --features crossterm
@@ -21,8 +21,12 @@
 //! active theme. Left/Right switches tabs, Up/Down moves the list selection. `q` or `Escape`
 //! quits, or close the window.
 
+use retroglyph_core::app::Frame;
+use retroglyph_core::backend::Backend;
+use retroglyph_core::color::Style;
 use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::{Backend, Frame, Rect, Style, Terminal};
+use retroglyph_core::grid::Rect;
+use retroglyph_core::terminal::Terminal;
 use retroglyph_examples::Example;
 use retroglyph_widgets::{
     Button, Interaction, List, ListState, Panel, ProgressBar, Tabs, Theme, Ui,

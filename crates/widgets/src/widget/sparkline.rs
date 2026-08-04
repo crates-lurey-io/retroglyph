@@ -1,5 +1,5 @@
 //! [`Sparkline`]: a single-row bar chart of recent samples.
-use retroglyph_core::Style;
+use retroglyph_core::color::Style;
 use retroglyph_core::symbols::bar::NINE_LEVELS;
 
 use super::{Meter, Widget};
@@ -26,7 +26,7 @@ use crate::Surface;
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Grid, Rect};
+/// use retroglyph_core::grid::{Grid, Rect};
 /// use retroglyph_widgets::{Surface, Sparkline, Widget};
 ///
 /// let samples = [1.0, 3.0, 2.0, 4.0, 1.5];
@@ -101,7 +101,7 @@ impl Widget for Sparkline<'_> {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::{Grid, Pos, Rect};
+    use retroglyph_core::grid::{Grid, Pos, Rect};
 
     use super::*;
 
@@ -129,7 +129,7 @@ mod tests {
 
     #[test]
     fn style_overrides_the_default_meter_ramp_with_one_fixed_color() {
-        use retroglyph_core::Color;
+        use retroglyph_core::color::Color;
 
         let area = Rect::new(0, 0, 3, 1);
         let mut grid = Grid::new(3, 1);

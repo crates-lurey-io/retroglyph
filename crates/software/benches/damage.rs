@@ -29,8 +29,11 @@
 #![allow(missing_docs)]
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
-use retroglyph_core::DrawCell;
-use retroglyph_core::{Color, Output, Pos, Style, Tile};
+use retroglyph_core::backend::DrawCell;
+use retroglyph_core::backend::Output;
+use retroglyph_core::color::{Color, Style};
+use retroglyph_core::grid::Pos;
+use retroglyph_core::tile::Tile;
 use retroglyph_software::SoftwareBackendBuilder;
 use retroglyph_window::font::unscii16;
 use std::cell::RefCell;

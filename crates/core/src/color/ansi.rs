@@ -15,7 +15,7 @@ use gem::space::Srgb;
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{AnsiColor, Color};
+/// use retroglyph_core::color::{AnsiColor, Color};
 ///
 /// let color = Color::Ansi(AnsiColor::Green);
 /// assert_eq!(AnsiColor::Green.to_index(), 2);
@@ -92,7 +92,7 @@ impl AnsiColor {
     }
 }
 
-/// All 16 [`AnsiColor`] variants in index order (0–15), for iterating the palette.
+/// All 16 [`AnsiColor`](crate::color::AnsiColor) variants in index order (0–15), for iterating the palette.
 pub(super) const ANSI_COLORS: [AnsiColor; 16] = [
     AnsiColor::Black,
     AnsiColor::Red,
@@ -396,7 +396,7 @@ pub(super) fn rgb_to_ansi(r: u8, g: u8, b: u8) -> AnsiColor {
     }
 }
 
-/// Error returned when a `u8` value has no corresponding [`AnsiColor`].
+/// Error returned when a `u8` value has no corresponding [`AnsiColor`](crate::color::AnsiColor).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct InvalidAnsiIndex(pub u8);
 

@@ -3,7 +3,7 @@
 
 use alloc::vec::Vec;
 
-use retroglyph_core::{Event, KeyCode};
+use retroglyph_core::event::{Event, KeyCode};
 
 /// Which id currently holds keyboard focus, plus Tab/Shift+Tab cycling
 /// through the ids [`register`](Self::register)ed as focusable.
@@ -153,7 +153,7 @@ impl<Id> Default for FocusRing<Id> {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::{KeyEvent, KeyModifiers};
+    use retroglyph_core::event::{KeyEvent, KeyModifiers};
 
     use super::*;
 

@@ -1,5 +1,5 @@
 //! [`Button`]: a clickable label, styled from an already-resolved [`Response`].
-use retroglyph_core::{Color, Style};
+use retroglyph_core::color::{Color, Style};
 
 use super::{InteractiveWidget, Widget};
 use crate::Align;
@@ -22,7 +22,7 @@ use crate::text::draw_clipped;
 /// site can't mismatch it:
 ///
 /// ```
-/// use retroglyph_core::{Grid, Rect};
+/// use retroglyph_core::grid::{Grid, Rect};
 /// use retroglyph_widgets::{Button, InteractiveWidget, Interaction, Surface};
 ///
 /// #[derive(Clone, Copy, PartialEq, Eq)]
@@ -198,9 +198,8 @@ impl Widget for Button<'_> {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::{
-        Event, Grid, KeyModifiers, MouseButton, MouseEvent, MouseEventKind, Pos, Rect,
-    };
+    use retroglyph_core::event::{Event, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+    use retroglyph_core::grid::{Grid, Pos, Rect};
 
     use super::*;
     use crate::Interaction;

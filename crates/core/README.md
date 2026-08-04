@@ -21,7 +21,9 @@ cargo add retroglyph-core
 
 ```rust
 # fn main() -> Result<(), core::convert::Infallible> {
-use retroglyph_core::{Terminal, Color, Style, backend::Headless};
+use retroglyph_core::backend::Headless;
+use retroglyph_core::color::{Color, Style};
+use retroglyph_core::terminal::Terminal;
 
 let mut term = Terminal::new(Headless::new(80, 24));
 term.draw(|s| s.put((5, 5), '@', Style::new().fg(Color::GREEN)))?;

@@ -1,10 +1,10 @@
 //! The winit event loop and the windowed app drivers.
 //!
 //! [`run_windowed`] drives a raw `FnMut(&mut Terminal<..>)` closure;
-//! [`run_app`] drives an [`App`](retroglyph_core::App). This is the inverted
+//! [`run_app`] drives an [`App`](retroglyph_core::app::App). This is the inverted
 //! driver: winit owns the loop and calls back into the app on each redraw,
 //! so it cannot be core's generic
-//! [`run_blocking`](retroglyph_core::run_blocking), which owns its own
+//! [`run_blocking`](retroglyph_core::app::run_blocking), which owns its own
 //! `while` loop.
 
 use super::translate::{
@@ -15,12 +15,12 @@ use super::translate::{
 use super::web;
 use crate::backend::WindowBackend;
 use crate::presenter::Presenter;
-use retroglyph_core::HasSize;
-use retroglyph_core::Terminal;
 use retroglyph_core::backend::{Input, Output};
 use retroglyph_core::event::{
     Event, KeyModifiers, MouseButton, MouseEvent, MouseEventKind, PhysicalPos,
 };
+use retroglyph_core::grid::HasSize;
+use retroglyph_core::terminal::Terminal;
 use std::cell::Cell;
 use std::fmt;
 use std::marker::PhantomData;
@@ -157,11 +157,11 @@ impl WindowConfig {
     ///     input or window event, an injected [`Event::Custom`], window creation), and the loop
     ///     sleeps otherwise. Right for event-driven retro/terminal UIs, which are idle most of
     ///     the time; wrong for anything that animates from
-    ///     [`Frame::delta`](retroglyph_core::Frame::delta), which will render one frame and then
+    ///     [`Frame::delta`](retroglyph_core::app::Frame::delta), which will render one frame and then
     ///     sit still until the next stray event.
     ///   - `false` is **continuous**: a frame is rendered every tick whether or not anything
-    ///     happened, which is what a [`Tween`](retroglyph_core::Tween)/
-    ///     [`FrameClock`](retroglyph_core::FrameClock)-driven app needs.
+    ///     happened, which is what a [`Tween`](retroglyph_core::animate::Tween)/
+    ///     [`FrameClock`](retroglyph_core::frames::FrameClock)-driven app needs.
     ///
     /// The two combine independently: `(Some(fps), false)` is the common capped-animation shape
     /// (see [`Self::animated`] for a shorthand), `(None, true)` is the common idle-UI shape, and
@@ -360,7 +360,7 @@ impl WindowConfig {
 ///
 /// # Presenting is automatic
 ///
-/// Unlike [`run_blocking`](retroglyph_core::run_blocking), this driver calls
+/// Unlike [`run_blocking`](retroglyph_core::app::run_blocking), this driver calls
 /// [`Terminal::present`] for you, once, right after `app_loop` returns each frame: you no longer
 /// need to (and, for a stale-content bug fixed by this behavior, should not rely on remembering
 /// to) call it yourself inside `app_loop`. Calling it yourself is still supported and has no ill
@@ -482,7 +482,7 @@ where
 ///
 /// This delivery is a side channel, not a queued [`Event`]: `on_custom_event` runs as soon as
 /// winit dispatches the `user_event`, which can be before `app_loop` next drains earlier-queued
-/// window/input events via [`poll`](retroglyph_core::Terminal::poll). Don't assume a `T` arrives
+/// window/input events via [`poll`](retroglyph_core::terminal::Terminal::poll). Don't assume a `T` arrives
 /// interleaved with the `poll()` stream in send order relative to those events; if that matters,
 /// use [`run_windowed_with_proxy`]'s plain `u64`/[`Event::Custom`] path instead, which does
 /// interleave on the backend's own FIFO.
@@ -576,8 +576,8 @@ fn push_custom_event<P: Presenter>(id: u64, term: &mut Terminal<WindowBackend<P>
 /// [`run_windowed_with_proxy`]/[`run_windowed_with_typed_proxy`] pass flags nobody ever sets (a
 /// plain `FnMut(&mut Terminal<..>)` closure has no way to reach them); [`run_app_with_proxy`]/
 /// [`run_app_with_typed_proxy`] share both with the closure they build around `app_loop`: it sets
-/// `exit_requested` on [`Flow::Exit`](retroglyph_core::Flow::Exit) and `skip_present` on
-/// [`Flow::Idle`](retroglyph_core::Flow::Idle).
+/// `exit_requested` on [`Flow::Exit`](retroglyph_core::app::Flow::Exit) and `skip_present` on
+/// [`Flow::Idle`](retroglyph_core::app::Flow::Idle).
 fn run_windowed_with_typed_proxy_and_exit_flag<T, P, F, O, D>(
     config: WindowConfig,
     presenter: P,
@@ -648,18 +648,18 @@ where
     }
 }
 
-/// Drive an [`App`](retroglyph_core::App) from the windowed event loop.
+/// Drive an [`App`](retroglyph_core::app::App) from the windowed event loop.
 ///
 /// This is the inverted driver: winit owns the event loop and calls back
 /// into the app on each redraw, rather than the app owning a `while` loop.
 ///
-/// Each frame builds a [`Frame`](retroglyph_core::Frame) with a wall-clock
+/// Each frame builds a [`Frame`](retroglyph_core::app::Frame) with a wall-clock
 /// `dt` measured via [`web_time::Instant`]: a plain [`std::time::Instant`]
 /// re-export on native, backed by the browser's `Performance.now()` on
 /// `wasm32` (where `std::time::Instant` itself is unavailable). Calls
-/// [`App::update`](retroglyph_core::App::update).
+/// [`App::update`](retroglyph_core::app::App::update).
 ///
-/// On [`Flow::Exit`](retroglyph_core::Flow) the event loop exits gracefully
+/// On [`Flow::Exit`](retroglyph_core::app::Flow) the event loop exits gracefully
 /// (via [`ActiveEventLoop::exit`]) instead of force-exiting the process, so
 /// the stack unwinds normally and `Drop` impls up the call chain (unflushed
 /// writes, GPU/surface teardown, app-level RAII) run before the process
@@ -668,9 +668,9 @@ where
 /// runner rather than leaving it a no-op.
 ///
 /// See [`run_windowed`]'s "Presenting is automatic" section: the app's
-/// [`update`](retroglyph_core::App::update) implementation no longer needs to call
+/// [`update`](retroglyph_core::app::App::update) implementation no longer needs to call
 /// [`Terminal::present`] itself here either, this driver presents automatically after each call,
-/// except on [`Flow::Idle`](retroglyph_core::Flow::Idle), where the present is skipped entirely
+/// except on [`Flow::Idle`](retroglyph_core::app::Flow::Idle), where the present is skipped entirely
 /// and the previous frame stays on screen.
 ///
 /// # Resizing is not automatic
@@ -690,7 +690,7 @@ pub fn run_app<P, A>(
 ) -> Result<(), winit::error::EventLoopError>
 where
     P: Presenter + 'static,
-    A: retroglyph_core::App<WindowBackend<P>> + 'static,
+    A: retroglyph_core::app::App<WindowBackend<P>> + 'static,
 {
     run_app_with_proxy(config, presenter, app, |_proxy| {})
 }
@@ -717,7 +717,7 @@ pub fn run_app_with_proxy<P, A, O>(
 ) -> Result<(), winit::error::EventLoopError>
 where
     P: Presenter + 'static,
-    A: retroglyph_core::App<WindowBackend<P>> + 'static,
+    A: retroglyph_core::app::App<WindowBackend<P>> + 'static,
     O: FnOnce(EventProxy),
 {
     run_app_with_typed_proxy(config, presenter, app, on_proxy, push_custom_event)
@@ -747,7 +747,7 @@ pub fn run_app_with_typed_proxy<T, P, A, O, D>(
 where
     T: Send + 'static,
     P: Presenter + 'static,
-    A: retroglyph_core::App<WindowBackend<P>> + 'static,
+    A: retroglyph_core::app::App<WindowBackend<P>> + 'static,
     O: FnOnce(EventProxy<T>),
     D: FnMut(T, &mut Terminal<WindowBackend<P>>) + 'static,
 {
@@ -764,17 +764,17 @@ where
             let now = web_time::Instant::now();
             let delta = now.duration_since(last);
             last = now;
-            let frame = retroglyph_core::Frame {
+            let frame = retroglyph_core::app::Frame {
                 delta,
                 frame: frame_count,
             };
             frame_count = frame_count.wrapping_add(1);
             match app.update(term, &frame) {
-                retroglyph_core::Flow::Exit => exit_requested_in_loop.set(true),
+                retroglyph_core::app::Flow::Exit => exit_requested_in_loop.set(true),
                 // Nothing changed: tell `handle_redraw_requested` to skip its automatic present
                 // for this frame. `Terminal::present` always presents unconditionally, so this
                 // flag is the only thing standing between an idle frame and an unwanted redraw.
-                retroglyph_core::Flow::Idle => skip_present_in_loop.set(true),
+                retroglyph_core::app::Flow::Idle => skip_present_in_loop.set(true),
                 // `Flow` is `#[non_exhaustive]`; any other variant (including `Continue`) presents
                 // as usual via `handle_redraw_requested`'s automatic present.
                 _ => {}
@@ -939,7 +939,7 @@ struct WindowApp<P: Presenter, F, T, D> {
     /// force-terminating the process.
     exit_requested: Rc<Cell<bool>>,
     /// Set by `app_loop` (specifically [`run_app_with_proxy`]'s closure) on
-    /// [`Flow::Idle`](retroglyph_core::Flow::Idle) to tell
+    /// [`Flow::Idle`](retroglyph_core::app::Flow::Idle) to tell
     /// [`handle_redraw_requested`](Self::handle_redraw_requested) to skip its automatic present
     /// for this frame. Cleared at the start of every `handle_redraw_requested` call, so it only
     /// ever reflects the outcome of the `app_loop` call about to run.
@@ -1423,7 +1423,7 @@ where
     }
 
     /// Runs the app closure, automatically presents the `Terminal` if the app didn't already (and
-    /// didn't return [`Flow::Idle`](retroglyph_core::Flow::Idle)), and presents the frame to the
+    /// didn't return [`Flow::Idle`](retroglyph_core::app::Flow::Idle)), and presents the frame to the
     /// surface, tracking consecutive `present()` failures to rate-limit logging and trigger
     /// surface recovery.
     ///
@@ -1435,7 +1435,7 @@ where
     ///
     /// Windowed apps no longer need to call [`Terminal::present`] themselves: this method calls it
     /// once, right after `app_loop` returns, unless [`skip_present`](Self::skip_present) was set
-    /// (an [`App`](retroglyph_core::App) returned `Flow::Idle`) or
+    /// (an [`App`](retroglyph_core::app::App) returned `Flow::Idle`) or
     /// [`Terminal::present_count`] shows `app_loop` already called it. A [`Terminal::present`]
     /// error is logged and does not stop the surface-level present below from running (matching
     /// this function's existing keep-going-on-failure philosophy); it uses a different error type
@@ -1824,7 +1824,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use retroglyph_core::DrawCell;
+    use retroglyph_core::backend::DrawCell;
     use retroglyph_core::backend::Output;
     use retroglyph_core::event::{MouseButton, MouseEvent, MouseEventKind};
     use retroglyph_core::grid::{Pos, Size};
@@ -3772,7 +3772,7 @@ mod tests {
         // reach the backend: that's the whole point of this driver-side automatic present.
         let mut app = recording_app(|term| {
             term.surface()
-                .put((0, 0), '@', retroglyph_core::Style::default());
+                .put((0, 0), '@', retroglyph_core::color::Style::default());
         });
         app.handle_redraw_requested();
         let term = app.terminal.as_ref().unwrap();
@@ -3794,7 +3794,7 @@ mod tests {
         // otherwise erase the frame).
         let mut app = recording_app(|term| {
             term.surface()
-                .put((0, 0), '@', retroglyph_core::Style::default());
+                .put((0, 0), '@', retroglyph_core::color::Style::default());
             term.present().expect("app_loop's own present");
         });
         app.handle_redraw_requested();
@@ -3862,7 +3862,7 @@ mod tests {
         // stale `true` from a previous `Idle` frame can't suppress the next frame's present.
         let mut app = recording_app(|term| {
             term.surface()
-                .put((0, 0), '@', retroglyph_core::Style::default());
+                .put((0, 0), '@', retroglyph_core::color::Style::default());
         });
         app.skip_present.set(true); // Stale value, as if left over from a prior Idle frame.
         app.handle_redraw_requested();

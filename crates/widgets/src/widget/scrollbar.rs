@@ -1,5 +1,6 @@
 //! [`Scrollbar`]: a vertical track+thumb indicator.
-use retroglyph_core::{Color, Frame, Style};
+use retroglyph_core::app::Frame;
+use retroglyph_core::color::{Color, Style};
 
 use super::{AnimatedWidget, InteractiveWidget, Widget};
 use crate::Response;
@@ -33,7 +34,7 @@ use crate::draw::{offset_for_pos, thumb_geometry};
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Grid, Rect};
+/// use retroglyph_core::grid::{Grid, Rect};
 /// use retroglyph_widgets::{Scrollbar, Surface, Widget};
 ///
 /// let area = Rect::new(0, 0, 1, 10);
@@ -221,7 +222,8 @@ impl AnimatedWidget for Scrollbar {
 #[allow(clippy::float_cmp)] // ScrollState offsets under test here are exact 0.0 sentinels, not
 // accumulated float results, so exact equality is the correct check, not a bug.
 mod tests {
-    use retroglyph_core::{Color, Grid, Pos, Rect};
+    use retroglyph_core::color::Color;
+    use retroglyph_core::grid::{Grid, Pos, Rect};
 
     use super::*;
     use crate::Surface;
@@ -376,7 +378,9 @@ mod tests {
 
     #[test]
     fn drag_moves_scroll_state() {
-        use retroglyph_core::{Event, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+        use retroglyph_core::event::{
+            Event, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+        };
 
         use crate::Interaction;
 

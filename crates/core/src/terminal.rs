@@ -1,8 +1,8 @@
 //! Stateful terminal lifecycle and double-buffering.
 //!
-//! [`Terminal::present`] compares the current frame against the previous one and forwards only
-//! the changed cells to the [`Backend`]. Pixel-based backends request full frames instead (see
-//! [`Output::needs_full_frame`]) because sub-cell offsets can leave orphaned pixels from the
+//! [`Terminal::present`](crate::terminal::Terminal::present) compares the current frame against the previous one and forwards only
+//! the changed cells to the [`Backend`](crate::backend::Backend). Pixel-based backends request full frames instead (see
+//! [`Output::needs_full_frame`](crate::backend::Output::needs_full_frame)) because sub-cell offsets can leave orphaned pixels from the
 //! previous frame.
 
 use crate::backend::{Backend, CursorStyle, Output};
@@ -14,27 +14,28 @@ use alloc::vec::Vec;
 use core::time::Duration;
 use ixy::HasSize;
 
-/// A double-buffered terminal generic over a [`Backend`].
+/// A double-buffered terminal generic over a [`Backend`](crate::backend::Backend).
 ///
 /// Owns the current and previous frame grids and the backend's lifecycle (resize, present,
-/// events). Drawing itself goes entirely through [`Surface`]: see [`draw`](Self::draw) for the
+/// events). Drawing itself goes entirely through [`Surface`](crate::surface::Surface): see [`draw`](Self::draw) for the
 /// common case (draw a frame, then present it) and [`surface`](Self::surface) for manual control
 /// over presenting.
 ///
 /// # Out-of-bounds drawing
 ///
-/// [`Surface`] clips any write that falls outside its own area rather than panicking; see
-/// [`Surface`]'s own "out-of-bounds drawing" documentation.
+/// [`Surface`](crate::surface::Surface) clips any write that falls outside its own area rather than panicking; see
+/// [`Surface`](crate::surface::Surface)'s own "out-of-bounds drawing" documentation.
 ///
 /// # Examples
 ///
 /// ```
 /// use retroglyph_core::backend::Headless;
-/// use retroglyph_core::{Color, Terminal};
+/// use retroglyph_core::color::Color;
+/// use retroglyph_core::terminal::Terminal;
 ///
 /// let mut term = Terminal::new(Headless::new(20, 5));
 /// term.draw(|surface| {
-///     surface.put((2, 1), '@', retroglyph_core::Style::new().fg(Color::GREEN));
+///     surface.put((2, 1), '@', retroglyph_core::color::Style::new().fg(Color::GREEN));
 /// })
 /// .unwrap();
 /// ```
@@ -83,7 +84,7 @@ impl<B: Backend> Terminal<B> {
     /// # Panics
     ///
     /// Panics if the backend reports a width of 0 (e.g. a minimized window, or a surface queried
-    /// before the first configure); see [`Grid::new`]. A reported height of 0 is fine.
+    /// before the first configure); see [`Grid::new`](crate::grid::Grid::new). A reported height of 0 is fine.
     #[must_use]
     pub fn new(backend: B) -> Self {
         let size = backend.size();
@@ -102,7 +103,7 @@ impl<B: Backend> Terminal<B> {
         }
     }
 
-    /// Draws one frame: `f` gets a [`Surface`] scoped to the whole terminal on layer 0, then the
+    /// Draws one frame: `f` gets a [`Surface`](crate::surface::Surface) scoped to the whole terminal on layer 0, then the
     /// frame is presented (see [`present`](Self::present)) once `f` returns.
     ///
     /// This is the common entry point for drawing: a caller that draws every frame regardless of
@@ -121,7 +122,7 @@ impl<B: Backend> Terminal<B> {
         self.present()
     }
 
-    /// A [`Surface`] scoped to the whole terminal on layer 0, for manual control over presenting
+    /// A [`Surface`](crate::surface::Surface) scoped to the whole terminal on layer 0, for manual control over presenting
     /// (e.g. partial updates spread across several calls, or conditionally skipping a present).
     /// Most callers want [`draw`](Self::draw) instead.
     pub const fn surface(&mut self) -> Surface<'_> {
@@ -135,7 +136,7 @@ impl<B: Backend> Terminal<B> {
         self.current.size()
     }
 
-    /// Returns the full drawing surface as a [`Rect`] at the origin.
+    /// Returns the full drawing surface as a [`Rect`](crate::grid::Rect) at the origin.
     ///
     /// Equivalent to `Rect::new(0, 0, width, height)`. Handy for passing the
     /// whole terminal to layout helpers or region-based drawing.
@@ -206,8 +207,8 @@ impl<B: Backend> Terminal<B> {
 
     /// Returns a mutable reference to the current grid, with no clipping or layer scoping.
     ///
-    /// Escape hatch for whole-grid operations that don't fit [`Surface`]'s clipped,
-    /// single-layer model (e.g. [`Grid::blit`]). Most drawing should go through
+    /// Escape hatch for whole-grid operations that don't fit [`Surface`](crate::surface::Surface)'s clipped,
+    /// single-layer model (e.g. [`Grid::blit`](crate::grid::Grid::blit)). Most drawing should go through
     /// [`draw`](Self::draw)/[`surface`](Self::surface) instead.
     pub const fn grid_mut(&mut self) -> &mut Grid {
         &mut self.current
@@ -258,7 +259,8 @@ impl<B: Backend> Terminal<B> {
     ///
     /// ```
     /// use retroglyph_core::backend::Headless;
-    /// use retroglyph_core::{Layer, Terminal};
+    /// use retroglyph_core::surface::Layer;
+    /// use retroglyph_core::terminal::Terminal;
     ///
     /// let mut term = Terminal::new(Headless::new(10, 5));
     /// let camera_moved = false;
@@ -287,7 +289,7 @@ impl<B: Backend> Terminal<B> {
     /// of calling this directly.
     ///
     /// When the backend requires a full frame (see
-    /// [`crate::Output::needs_full_frame`]), all cells from every allocated layer are
+    /// [`crate::backend::Output::needs_full_frame`]), all cells from every allocated layer are
     /// sent rather than just the diff, so pixel-based backends can clear and
     /// redraw to avoid orphaned pixels from sub-cell offsets.
     ///
@@ -309,8 +311,8 @@ impl<B: Backend> Terminal<B> {
     ///
     /// # Errors
     ///
-    /// Propagates errors from the backend's [`draw_layers`](crate::Output::draw_layers) or
-    /// [`flush`](crate::Output::flush) operations. Either failure returns before the
+    /// Propagates errors from the backend's [`draw_layers`](crate::backend::Output::draw_layers) or
+    /// [`flush`](crate::backend::Output::flush) operations. Either failure returns before the
     /// current/previous buffers are swapped, so the cells from the failed frame stay marked
     /// dirty in `previous` and are resent the next time `present` succeeds. `current` is still
     /// cleared, same as on success, so the caller doesn't need to redraw anything to recover:
@@ -426,7 +428,7 @@ impl<B: Backend> Terminal<B> {
     /// If an event was previously buffered by [`has_input`](Self::has_input), it is
     /// returned immediately. Otherwise, the backend is polled for a new event.
     ///
-    /// [`Event::Resize`] events arriving from the backend are automatically applied: both
+    /// [`Event::Resize`](crate::event::Event::Resize) events arriving from the backend are automatically applied: both
     /// grids are resized before the event is returned to the caller, so the game loop can
     /// immediately redraw at the new size. An event coming back off this terminal's own queue
     /// (from [`requeue_events`](Self::requeue_events), or buffered by
@@ -442,7 +444,7 @@ impl<B: Backend> Terminal<B> {
         self.poll_backend(timeout)
     }
 
-    /// Polls the backend directly (bypassing `queued_events`), applying [`Event::Resize`]
+    /// Polls the backend directly (bypassing `queued_events`), applying [`Event::Resize`](crate::event::Event::Resize)
     /// immediately when found.
     ///
     /// This is the single point where a freshly-polled event enters the terminal, so it's also
@@ -465,7 +467,7 @@ impl<B: Backend> Terminal<B> {
     /// This is the supported way for a wrapper that drains events to intercept some of them
     /// (e.g. `retroglyph-widgets`' `PerfOverlayApp` filtering out its own toggle key) to give
     /// the rest back: it goes through `Terminal`'s own queue, never a backend-specific input
-    /// path, so it works identically on every [`Backend`] regardless of how (or whether) that
+    /// path, so it works identically on every [`Backend`](crate::backend::Backend) regardless of how (or whether) that
     /// backend implements [`Input::push_event`](crate::backend::Input::push_event).
     pub fn requeue_events(&mut self, events: impl IntoIterator<Item = Event>) {
         self.queued_events.extend(events);
@@ -481,7 +483,7 @@ impl<B: Backend> Terminal<B> {
     ///
     /// # Panics
     ///
-    /// Panics if the backend's [`poll_event`](crate::Input::poll_event) returns
+    /// Panics if the backend's [`poll_event`](crate::backend::Input::poll_event) returns
     /// `None` even with an unbounded timeout.
     pub fn read_blocking(&mut self) -> Event {
         self.poll(Duration::MAX)
@@ -562,7 +564,7 @@ impl<B: Backend> Terminal<B> {
     /// [`drain_events`](Self::drain_events) call still observes it: this method only answers
     /// "did something happen", it never hands the event to the caller. That's what lets a driver
     /// loop block between frames without stealing the event the app's own `update` reads; see
-    /// [`run_blocking_with`](crate::run_blocking_with)'s use of this for [`Flow::Idle`](crate::Flow::Idle).
+    /// [`run_blocking_with`](crate::app::run_blocking_with)'s use of this for [`Flow::Idle`](crate::app::Flow::Idle).
     ///
     /// Returns `true` if an event arrived within `timeout`, `false` if `timeout` elapsed with
     /// nothing pending. Pass [`Duration::MAX`] to block indefinitely.
@@ -601,8 +603,8 @@ mod tests {
     use crate::color::Style;
     use crate::tile::Tile;
 
-    /// Wraps [`Headless`] and fails the next [`flush`](Output::flush) or
-    /// [`draw_layers`](Output::draw_layers) call once, then forwards everything (including a
+    /// Wraps [`Headless`](crate::backend::Headless) and fails the next [`flush`](crate::backend::Output::flush) or
+    /// [`draw_layers`](crate::backend::Output::draw_layers) call once, then forwards everything (including a
     /// failed `draw_layers` call's content, which already reached the inner backend) as normal.
     /// Used to exercise `present`'s documented error-recovery contract: either failure must
     /// leave the frame's cells marked dirty so they are resent on the next successful `present`.
@@ -868,7 +870,7 @@ mod tests {
         assert_eq!(terminal.poll(Duration::ZERO), Some(Event::Resize(4, 2)));
     }
 
-    /// Wraps [`Headless`] and counts [`resize`](Output::resize) calls, so a test can prove
+    /// Wraps [`Headless`](crate::backend::Headless) and counts [`resize`](crate::backend::Output::resize) calls, so a test can prove
     /// `Terminal` applies a backend resize at most once per logical `Event::Resize`, even when
     /// the event is buffered by `wait_for_input` and then consumed by `poll` (retroglyph#959).
     struct ResizeCounting {
@@ -1109,10 +1111,10 @@ mod tests {
 
     /// A `composites_layers() == true` backend, the branch of `present` no real backend in this
     /// workspace's core tests exercises (`retroglyph-gl`/`retroglyph-software` test their own
-    /// side of the [`Output`] contract, not `present`'s choice between it and a diff).
+    /// side of the [`Output`](crate::backend::Output) contract, not `present`'s choice between it and a diff).
     /// `needs_full_frame` is fixed at construction, so one struct covers both dispatch modes.
     ///
-    /// Unlike [`Headless`], this records the raw `(layer, pos, glyph)` cells it receives instead
+    /// Unlike [`Headless`](crate::backend::Headless), this records the raw `(layer, pos, glyph)` cells it receives instead
     /// of writing them into a single flat grid: a real compositing backend interprets an
     /// unwritten (default/blank) cell on a higher layer as transparent, but `Headless::draw_layers`
     /// writes every cell it's handed literally to one shared grid regardless of layer, so replaying

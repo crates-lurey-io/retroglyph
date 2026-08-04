@@ -17,7 +17,7 @@
 #![allow(missing_docs, clippy::cast_possible_truncation)]
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use retroglyph_core::{Grid, Rect};
+use retroglyph_core::grid::{Grid, Rect};
 use retroglyph_widgets::{ListState, StatefulWidget, Surface, Table};
 use std::hint::black_box;
 

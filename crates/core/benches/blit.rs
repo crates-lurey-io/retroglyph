@@ -12,7 +12,9 @@
 #![allow(missing_docs)]
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
-use retroglyph_core::{Color, Grid, Rect, Style, Tile};
+use retroglyph_core::color::{Color, Style};
+use retroglyph_core::grid::{Grid, Rect};
+use retroglyph_core::tile::Tile;
 use std::hint::black_box;
 
 /// Builds a `cols x rows` grid with every cell on layer 0 set to a distinct RGB color, so
@@ -58,7 +60,7 @@ fn bench_blit(c: &mut Criterion, cols: u16, rows: u16) {
 /// Registers a `blit_alpha` case per [`BlendMode`] variant, over the same large rect used by
 /// `bench_blit` above, so the two are directly comparable.
 fn bench_blit_alpha(c: &mut Criterion, cols: u16, rows: u16) {
-    use retroglyph_core::BlendMode;
+    use retroglyph_core::grid::BlendMode;
 
     let mut group = c.benchmark_group(format!("blit_alpha/{cols}x{rows}"));
     let cells_touched = u64::from(cols) * u64::from(rows);

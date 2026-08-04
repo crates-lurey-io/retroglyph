@@ -36,7 +36,9 @@ Without a window,
 renders straight into an in-memory pixel buffer: useful for pixel-level tests:
 
 ```rust
-use retroglyph_core::{Backend, Color, Style, Terminal};
+use retroglyph_core::backend::Backend;
+use retroglyph_core::color::{Color, Style};
+use retroglyph_core::terminal::Terminal;
 use retroglyph_software::SoftwareBackendBuilder;
 
 let renderer = SoftwareBackendBuilder::new()

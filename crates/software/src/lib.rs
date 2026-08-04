@@ -4,7 +4,7 @@
 //! # Architecture
 //!
 //! [`SoftwareBackend`] holds configuration only (font chain, grid size, scale); it
-//! does not implement [`Backend`](retroglyph_core::Backend). Call
+//! does not implement [`Backend`](retroglyph_core::backend::Backend). Call
 //! [`into_renderer`](SoftwareBackend::into_renderer) to build a
 //! [`SoftwareRenderer`], which does the actual rendering work:
 //!
@@ -35,13 +35,13 @@
 //! `Output` implementation satisfies both `Backend`'s output half and `Presenter` directly, with
 //! no duplicated method bodies. `retroglyph-window`'s
 //! [`WindowBackend`](retroglyph_window::WindowBackend) wraps a `Presenter` to provide the full
-//! [`Backend`](retroglyph_core::Backend) for windowed use, owning the input event queue that this
+//! [`Backend`](retroglyph_core::backend::Backend) for windowed use, owning the input event queue that this
 //! crate does not.
 //!
 //! For headless use (in-memory rendering, pixel-level tests) skip windowing
 //! entirely: [`SoftwareRenderer`] implements [`Output`],
 //! [`Input`], and [`Cursor`] directly (bundled
-//! as [`Backend`](retroglyph_core::Backend)), so `Terminal<SoftwareRenderer>` works without a
+//! as [`Backend`](retroglyph_core::backend::Backend)), so `Terminal<SoftwareRenderer>` works without a
 //! window, and [`pixels`](SoftwareRenderer::pixels) gives direct access to the rendered
 //! buffer.
 //!
@@ -106,7 +106,7 @@ use surface::WindowSurface;
 #[doc = include_str!("../README.md")]
 struct ReadmeDoctests;
 
-use retroglyph_core::DrawCell;
+use retroglyph_core::backend::DrawCell;
 use retroglyph_core::backend::{Cursor, Input, Output};
 use retroglyph_core::color::Color;
 
@@ -122,9 +122,9 @@ use alpha_blend::rgba::U8x4Rgba;
 use grixy::buf::GridBuf;
 use grixy::ops::GridWrite;
 use grixy::ops::layout::{LinearLayout, RowMajor};
-use retroglyph_core::HasSize;
-use retroglyph_core::Tint;
+use retroglyph_core::color::Tint;
 use retroglyph_core::event::Event;
+use retroglyph_core::grid::HasSize;
 use retroglyph_core::grid::{Pos, Size};
 use retroglyph_core::tile::Tile;
 use retroglyph_window::WindowHandle;
@@ -202,7 +202,7 @@ struct RenderContext {
     /// Per-cell tints from the last `draw_layers` call, indexed exactly as `prev_tiles`.
     ///
     /// A separate shadow copy because a `Tile` does not carry its tint (it lives in a side table
-    /// on `Grid`, see `retroglyph_core::Grid::tint`). Without it a tint-only change would compare
+    /// on `Grid`, see `retroglyph_core::grid::Grid::tint`). Without it a tint-only change would compare
     /// equal on every `Tile` field and never mark the cell dirty, so recoloring a sprite in
     /// place would silently not repaint.
     prev_tints: Vec<GridBuf<Tint, Vec<Tint>, RowMajor>>,
@@ -600,11 +600,12 @@ impl SoftwareBackend {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::Output;
+    /// use retroglyph_core::backend::Output;
     /// use retroglyph_core::tile::Tile;
     /// use retroglyph_core::color::Style;
     /// use retroglyph_core::grid::Pos;
-    /// use retroglyph_core::{Color, DrawCell};
+    /// use retroglyph_core::backend::DrawCell;
+    /// use retroglyph_core::color::Color;
     /// use retroglyph_software::SoftwareBackendBuilder;
     ///
     /// let mut renderer = SoftwareBackendBuilder::new()
@@ -2378,7 +2379,7 @@ mod tests {
     /// cell rather than panic on the underflowing subtraction.
     #[test]
     fn expand_dirty_spans_skips_a_covered_cell_whose_anchor_offset_underflows() {
-        use retroglyph_core::Grid;
+        use retroglyph_core::grid::Grid;
         use retroglyph_core::grid::Pos;
 
         let cols = 2;
@@ -2406,9 +2407,9 @@ mod tests {
 #[cfg(all(test, feature = "tilesets"))]
 mod span_tests {
     use super::*;
-    use retroglyph_core::Grid;
     use retroglyph_core::color::Color;
     use retroglyph_core::color::Style;
+    use retroglyph_core::grid::Grid;
     use retroglyph_core::grid::Pos;
     use retroglyph_window::tileset::{Codepage, SheetColor, SpriteAlign, TilesetOptions};
 
@@ -2903,7 +2904,7 @@ mod span_tests {
 
         assert_eq!(
             r.ctx.warned_dropped_tint.contains(&'X'),
-            retroglyph_core::DEV
+            retroglyph_core::dev::DEV
         );
     }
 
@@ -2942,7 +2943,7 @@ mod span_tests {
 
         assert_eq!(
             r.ctx.warned_dropped_tint.contains(&'X'),
-            retroglyph_core::DEV
+            retroglyph_core::dev::DEV
         );
     }
 }

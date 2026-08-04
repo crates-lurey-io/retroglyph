@@ -1,9 +1,9 @@
-//! `Grid`'s multi-layer API: per-layer tile access ([`Grid::put_tile`], [`Grid::fill_region`],
-//! [`Grid::tint`], [`Grid::set_tint`], [`Grid::tile`], [`Grid::tile_mut`]), cross-grid copies
-//! ([`Grid::blit`], [`Grid::blit_alpha`]), whole-grid iteration and clearing ([`Grid::layers`],
-//! [`Grid::clear_all`]), and the single-layer compositing `flatten_into` uses for cell backends.
+//! `Grid`'s multi-layer API: per-layer tile access ([`Grid::put_tile`](crate::grid::Grid::put_tile), [`Grid::fill_region`](crate::grid::Grid::fill_region),
+//! [`Grid::tint`](crate::grid::Grid::tint), [`Grid::set_tint`](crate::grid::Grid::set_tint), [`Grid::tile`](crate::grid::Grid::tile), [`Grid::tile_mut`](crate::grid::Grid::tile_mut)), cross-grid copies
+//! ([`Grid::blit`](crate::grid::Grid::blit), [`Grid::blit_alpha`](crate::grid::Grid::blit_alpha)), whole-grid iteration and clearing ([`Grid::layers`](crate::grid::Grid::layers),
+//! [`Grid::clear_all`](crate::grid::Grid::clear_all)), and the single-layer compositing `flatten_into` uses for cell backends.
 //!
-//! The [`BlendMode`] blend math backing [`Grid::blit_alpha`] lives here too, next to its only
+//! The [`BlendMode`](crate::grid::BlendMode) blend math backing [`Grid::blit_alpha`](crate::grid::Grid::blit_alpha) lives here too, next to its only
 //! caller.
 
 use super::{BlendMode, Grid, Pos, Rect, TileExtra, flat_index_to_xy, to_grixy_pos};
@@ -20,7 +20,7 @@ use grixy::ops::{ExactSizeGrid, GridRead, GridWrite};
 
 impl Grid {
     /// Write a tile to `layer` at `pos`, honoring `tile`'s own precomputed
-    /// [`width`](Tile::width): a fresh 2-column tile also gets a
+    /// [`width`](crate::tile::Tile::width): a fresh 2-column tile also gets a
     /// [`TileFlags::WIDE_CHAR_SPACER`] at `pos.x + 1`, the same pairing
     /// [`write_grapheme`](Self::write_grapheme) writes, on every feature combination (`Tile::width`
     /// comes from `unicode-width`, an unconditional dependency, not the `egc`-gated
@@ -36,11 +36,11 @@ impl Grid {
     /// # Replaying an already-resolved tile
     ///
     /// The wide-char synthesis above only applies to a **fresh** `tile`: one built through public
-    /// API ([`Tile::new`], [`with_glyph`](Tile::with_glyph), [`Tile::default`]), which can never
+    /// API ([`Tile::new`](crate::tile::Tile::new), [`with_glyph`](crate::tile::Tile::with_glyph), [`Tile::default`](crate::tile::Tile::default)), which can never
     /// carry [`TileFlags::WIDE_CHAR`]/[`TileFlags::WIDE_CHAR_SPACER`] (both `pub(crate)`-only to
     /// set). A `tile` that already carries either flag is, by construction, an already-resolved
     /// tile read back out of some grid (e.g. [`Headless`](crate::backend::Headless) replaying a
-    /// [`DrawCell`] stream verbatim into its own copy) rather than a new
+    /// [`DrawCell`](crate::backend::DrawCell) stream verbatim into its own copy) rather than a new
     /// glyph placement, and is written through exactly as given, with no bounds refusal, spacer
     /// synthesis, or overlap clearing of its own: those already happened on the call that
     /// produced it, and re-running them here would (for a spacer tile specifically) clear the
@@ -48,7 +48,7 @@ impl Grid {
     /// write landing on that spacer.
     ///
     /// Any tile written this way has its extra grapheme text cleared, since a
-    /// caller-constructed [`Tile`] can never legitimately carry
+    /// caller-constructed [`Tile`](crate::tile::Tile) can never legitimately carry
     /// [`TileFlags::HAS_EXTRA`] (the flag is crate-private). Internal callers
     /// that need to preserve EGC text across a copy (e.g. [`blit`](Self::blit))
     /// follow up with a direct extras-table write. Any multi-cell span the
@@ -148,7 +148,9 @@ impl Grid {
     /// [`Surface::fill_rect`](crate::surface::Surface::fill_rect)'s own fallback.
     ///
     /// ```
-    /// use retroglyph_core::{Grid, Pos, Rect, Style, Tile};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Pos, Rect};
+    /// use retroglyph_core::tile::Tile;
     ///
     /// let mut grid = Grid::new(4, 4);
     /// grid.fill_region(0, Rect::new(1, 1, 2, 2), Tile::new('#', Style::default()));
@@ -234,13 +236,13 @@ impl Grid {
 
     /// How a pixel backend recolours the sprite drawn for the cell at `(x, y)` on `layer`.
     ///
-    /// [`Tint::None`] for a cell that has never been tinted, for a cell whose glyph was
+    /// [`Tint::None`](crate::color::Tint::None) for a cell that has never been tinted, for a cell whose glyph was
     /// overwritten since (a glyph write drops the tint with the artwork it belonged to), and for
     /// coordinates outside the grid or on an unallocated layer.
     ///
-    /// A tint is grid state rather than [`Tile`] state, for the same reason a multi-codepoint
+    /// A tint is grid state rather than [`Tile`](crate::tile::Tile) state, for the same reason a multi-codepoint
     /// grapheme is (see [`grapheme`](Self::grapheme)): it is rare per cell and `Tile` has no room
-    /// left. So it is read here, not through [`Tile::style`].
+    /// left. So it is read here, not through [`Tile::style`](crate::tile::Tile::style).
     ///
     /// Cell backends have no sprite to recolour and ignore this entirely.
     #[must_use]
@@ -262,7 +264,7 @@ impl Grid {
     /// describes the artwork rather than the position. For a multi-cell span, tint the anchor;
     /// that is the cell a pixel backend draws the sprite from.
     ///
-    /// Setting [`Tint::None`] clears the tint, and drops the cell's side-table entry entirely if
+    /// Setting [`Tint::None`](crate::color::Tint::None) clears the tint, and drops the cell's side-table entry entirely if
     /// it held nothing else. Does nothing if `(x, y)` is out of bounds.
     pub fn set_tint(&mut self, layer: u8, x: u16, y: u16, tint: Tint) {
         if x >= self.width || y >= self.height {
@@ -313,7 +315,7 @@ impl Grid {
     }
 
     /// Copy tiles from `src` within `src_rect` to `self` at `(dst_x, dst_y)`
-    /// on `layer`. Empty tiles (nothing written; see [`Tile::is_empty`]) are
+    /// on `layer`. Empty tiles (nothing written; see [`Tile::is_empty`](crate::tile::Tile::is_empty)) are
     /// treated as transparent and skipped. An explicit space is copied and
     /// overwrites the destination.
     ///
@@ -353,16 +355,16 @@ impl Grid {
     /// colors with the given alpha factors, using `mode` to compute the
     /// blended color. `fg_alpha` and `bg_alpha` are in 0.0-1.0 range where
     /// 0.0 = keep destination, 1.0 = replace with src; for a non-
-    /// [`Linear`](BlendMode::Linear) `mode`, "replace with src" instead means
-    /// "replace with `mode`'s fully blended color" (see [`BlendMode`]).
+    /// [`Linear`](crate::grid::BlendMode::Linear) `mode`, "replace with src" instead means
+    /// "replace with `mode`'s fully blended color" (see [`BlendMode`](crate::grid::BlendMode)).
     ///
-    /// Blending operates on packed RGB values; [`Color::Default`] preserves
+    /// Blending operates on packed RGB values; [`Color::Default`](crate::color::Color::Default) preserves
     /// the destination. Non-RGB color variants (Ansi/Indexed) are passed
     /// through unblended, regardless of `mode`.
     ///
-    /// [`BlendMode::Linear`]'s per-channel color lerp is delegated to [`gem::Mix`]. The other
+    /// [`BlendMode::Linear`](crate::grid::BlendMode::Linear)'s per-channel color lerp is delegated to [`gem::Mix`]. The other
     /// modes delegate to [`alpha_blend::BlendMode`] (imported in this module as
-    /// `SeparableBlendMode` to avoid colliding with this crate's own [`BlendMode`]).
+    /// `SeparableBlendMode` to avoid colliding with this crate's own [`BlendMode`](crate::grid::BlendMode)).
     ///
     /// Like [`blit`](Self::blit) (see retroglyph#262/#263), walks `src`'s and `self`'s layer
     /// buffers directly by flat index instead of per-cell [`tile`](Self::tile)/
@@ -408,8 +410,8 @@ impl Grid {
     /// rather than from `dst_layer` (the layer this writes to on `self`).
     ///
     /// [`blit`](Self::blit) uses one `layer` for both sides, which is exactly right for two
-    /// grids sharing the same layer scheme (e.g. [`Surface::on_layer`](crate::Surface::on_layer)
-    /// copying within itself), but wrong for [`Surface::blit`](crate::Surface::blit)'s case: a
+    /// grids sharing the same layer scheme (e.g. [`Surface::on_layer`](crate::surface::Surface::on_layer)
+    /// copying within itself), but wrong for [`Surface::blit`](crate::surface::Surface::blit)'s case: a
     /// `src` that is a standalone, layer-0-only `Grid` (composed content like `BoxStyle::render`'s
     /// output), stamped onto a destination surface that may currently be on any layer. Calling
     /// [`blit`](Self::blit) with the destination's layer there looks up that same layer on `src`,
@@ -589,7 +591,7 @@ impl Grid {
     /// [`TileFlags::HAS_EXTRA`] is set.
     ///
     /// Unallocated layers are skipped. This is used by backends that need
-    /// the full frame on every draw (see [`crate::Output::needs_full_frame`]).
+    /// the full frame on every draw (see [`crate::backend::Output::needs_full_frame`]).
     ///
     /// This iterator is zero-allocation: it walks the layer buffers inline.
     pub fn layers(&self) -> impl Iterator<Item = DrawCell<'_>> + '_ {
@@ -620,18 +622,18 @@ impl Grid {
 
     /// Composite every allocated layer into `dst`'s layer 0, one tile per cell.
     ///
-    /// Used by [`crate::Terminal::present`] for backends that do not composite
-    /// layers themselves (see [`crate::Output::composites_layers`]). The rule
+    /// Used by [`crate::terminal::Terminal::present`] for backends that do not composite
+    /// layers themselves (see [`crate::backend::Output::composites_layers`]). The rule
     /// matches the software renderer's pixel semantics and the [`blit`](Self::blit)
     /// transparency convention:
     ///
     /// - Start from layer 0's tile (its `bg` fills the cell).
     /// - For each higher allocated layer, in ascending order: if the tile is
-    ///   not empty (see [`Tile::is_empty`]) replace the glyph, foreground,
+    ///   not empty (see [`Tile::is_empty`](crate::tile::Tile::is_empty)) replace the glyph, foreground,
     ///   offsets, flags, span, and extra; if its background is not
-    ///   [`Color::Default`], replace the background.
+    ///   [`Color::Default`](crate::color::Color::Default), replace the background.
     ///
-    /// The span fields travel with the flags they are keyed by (see [`Tile::span`]): a
+    /// The span fields travel with the flags they are keyed by (see [`Tile::span`](crate::tile::Tile::span)): a
     /// multi-cell span on a higher layer must arrive at a cell backend intact, or its covered
     /// cells lose the anchor they name.
     ///
@@ -702,10 +704,10 @@ impl Grid {
     }
 }
 
-/// Blend two [`Color`] values using `mode`. [`Color::Default`] preserves the
+/// Blend two [`Color`](crate::color::Color) values using `mode`. [`Color::Default`](crate::color::Color::Default) preserves the
 /// destination. Non-RGB source colors are returned as-is (no resolution).
 ///
-/// [`BlendMode::Linear`] is a per-channel sRGB-domain lerp (dst -> src by `t`) delegated to
+/// [`BlendMode::Linear`](crate::grid::BlendMode::Linear) is a per-channel sRGB-domain lerp (dst -> src by `t`) delegated to
 /// [`gem::Mix`], which is `no_std`-safe (round-half-away via `floor(x + 0.5)`, no `std`/`libm`
 /// float intrinsics). The other modes evaluate [`SeparableBlendMode::mix`] per channel in
 /// `0.0..=1.0` (converting u8 <-> f32 at the boundary; see [`blend_separable_channel`]), then lerp
@@ -1152,7 +1154,7 @@ mod tests {
 
     /// A caller-constructed `tile` can carry a stale [`TileFlags::SPAN_ANCHOR`]/
     /// [`TileFlags::SPAN_COVERED`] role only by having been read back out of some grid cell
-    /// (e.g. via [`tile`](Grid::tile)), since neither flag has a public builder. `put_tile` must
+    /// (e.g. via [`tile`](crate::grid::Grid::tile)), since neither flag has a public builder. `put_tile` must
     /// strip it rather than plant a dangling anchor: one that claims a footprint no covered cell
     /// agrees it owns (retroglyph#984).
     #[test]

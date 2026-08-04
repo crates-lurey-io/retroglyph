@@ -1,7 +1,7 @@
 //! In-memory backend for testing. Stores presented content and allows injecting synthetic events.
 //!
-//! [`Headless::format_view`] renders the current frame for snapshot testing (e.g. with `insta`)
-//! and [`Headless::push_event`] queues synthetic input; see ["Driving `Headless` with synthetic
+//! [`Headless::format_view`](crate::backend::Headless::format_view) renders the current frame for snapshot testing (e.g. with `insta`)
+//! and [`Headless::push_event`](crate::backend::Headless::push_event) queues synthetic input; see ["Driving `Headless` with synthetic
 //! events"](https://github.com/crates-lurey-io/retroglyph/blob/main/docs/testing.md#driving-headless-with-synthetic-events)
 //! for the full workflow.
 
@@ -60,7 +60,7 @@ impl Headless {
     }
 
     /// Returns the cursor's shape and blink behavior, as last set by
-    /// [`Cursor::set_cursor_style`].
+    /// [`Cursor::set_cursor_style`](crate::backend::Cursor::set_cursor_style).
     #[must_use]
     pub const fn cursor_style(&self) -> CursorStyle {
         self.cursor_style
@@ -107,13 +107,13 @@ impl Headless {
     /// as a snapshot diff here. Spacer cells (the trailing half of a wide glyph) are blanked the
     /// same way `format_view` blanks them, with no style of their own.
     ///
-    /// Each run of cells that share a [`Style`] is wrapped in a `\x1b[0m` reset followed by the
+    /// Each run of cells that share a [`Style`](crate::color::Style) is wrapped in a `\x1b[0m` reset followed by the
     /// SGR codes for that style's non-default foreground/background; a bare `Style::default()`
     /// run only gets the reset. This keeps every row self-contained (no state leaks across rows
     /// or into terminals that render the snapshot directly).
     ///
-    /// [`Color::Ansi`] and [`Color::Indexed`] map to their standard SGR codes (30-37/90-97 and
-    /// `38;5;n`/`48;5;n`); [`Color::Rgb`] maps to 24-bit SGR (`38;2;r;g;b`/`48;2;r;g;b`) rather
+    /// [`Color::Ansi`](crate::color::Color::Ansi) and [`Color::Indexed`](crate::color::Color::Indexed) map to their standard SGR codes (30-37/90-97 and
+    /// `38;5;n`/`48;5;n`); [`Color::Rgb`](crate::color::Color::Rgb) maps to 24-bit SGR (`38;2;r;g;b`/`48;2;r;g;b`) rather
     /// than being downgraded, so this reflects the style as authored, not as a particular
     /// terminal would render it.
     #[must_use]
@@ -359,7 +359,7 @@ mod tests {
 
     #[test]
     fn test_format_view_snapshot() {
-        use crate::Terminal;
+        use crate::terminal::Terminal;
         let backend = Headless::new(10, 3);
         let mut term = Terminal::new(backend);
         term.draw(|s| {
@@ -380,7 +380,7 @@ mod tests {
     /// `format_view` blanks out just above this test's code path.
     #[test]
     fn test_format_view_renders_span_fallback_glyphs() {
-        use crate::Terminal;
+        use crate::terminal::Terminal;
         let backend = Headless::new(6, 3);
         let mut term = Terminal::new(backend);
         term.draw(|s| {
@@ -398,7 +398,7 @@ mod tests {
 
     #[test]
     fn test_format_styled_unstyled_matches_format_view_text() {
-        use crate::Terminal;
+        use crate::terminal::Terminal;
         let backend = Headless::new(6, 2);
         let mut term = Terminal::new(backend);
         term.draw(|s| {
@@ -414,7 +414,7 @@ mod tests {
 
     #[test]
     fn test_format_styled_emits_fg_and_bg_sgr_on_change() {
-        use crate::Terminal;
+        use crate::terminal::Terminal;
         let backend = Headless::new(3, 1);
         let mut term = Terminal::new(backend);
         term.draw(|s| {
@@ -430,7 +430,7 @@ mod tests {
 
     #[test]
     fn test_format_styled_rgb_and_indexed() {
-        use crate::Terminal;
+        use crate::terminal::Terminal;
         let backend = Headless::new(2, 1);
         let mut term = Terminal::new(backend);
         term.draw(|s| {
@@ -450,7 +450,7 @@ mod tests {
 
     #[test]
     fn test_format_styled_spacer_cells_carry_no_style() {
-        use crate::Terminal;
+        use crate::terminal::Terminal;
         let backend = Headless::new(4, 1);
         let mut term = Terminal::new(backend);
         term.draw(|s| {

@@ -238,8 +238,9 @@ mod world {
 
     use std::collections::HashMap;
 
+    use retroglyph_core::color::{Color, Style};
+    use retroglyph_core::grid::Pos;
     use retroglyph_core::symbols::{Glyph, Pixel, quantize_half_block};
-    use retroglyph_core::{Color, Pos, Style};
 
     use super::noise::{fbm, hash01, ridge, warped_fbm};
 
@@ -2079,8 +2080,13 @@ mod world {
 }
 
 use hexal::{Direction, OddR, OffsetHex};
+use retroglyph_core::app::Frame;
+use retroglyph_core::backend::Backend;
+use retroglyph_core::camera::Camera;
+use retroglyph_core::color::{Color, Style};
 use retroglyph_core::event::{Event, KeyCode, KeyModifiers, MouseButton, MouseEventKind};
-use retroglyph_core::{Backend, Camera, Color, Frame, HasSize, Pos, Rect, Size, Style, Terminal};
+use retroglyph_core::grid::{HasSize, Pos, Rect, Size};
+use retroglyph_core::terminal::Terminal;
 use retroglyph_examples::Example;
 use retroglyph_widgets::{Constraint, Panel, Surface, Widget, split_h, truncate};
 

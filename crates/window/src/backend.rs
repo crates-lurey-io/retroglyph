@@ -1,20 +1,20 @@
-//! [`WindowBackend`]: the generic [`Backend`](retroglyph_core::Backend) implementation for
+//! [`WindowBackend`]: the generic [`Backend`](retroglyph_core::backend::Backend) implementation for
 //! windowed presenters.
 
 use crate::presenter::Presenter;
-use retroglyph_core::DrawCell;
+use retroglyph_core::backend::DrawCell;
 use retroglyph_core::backend::{Cursor, Input, Output};
 use retroglyph_core::event::{Event, coalesces_with};
 use retroglyph_core::grid::Size;
 use std::collections::VecDeque;
 use std::time::Duration;
 
-/// A [`Backend`](retroglyph_core::Backend) built from a [`Presenter`] plus an input event queue.
+/// A [`Backend`](retroglyph_core::backend::Backend) built from a [`Presenter`] plus an input event queue.
 ///
 /// [`Input`] and [`Output`] are independent facets of `Backend`, which does not fit a window as
 /// one type: some event loop owns input, while a per-renderer surface owns output.
 /// `WindowBackend` reunites the two (implementing `Output` by delegating to `P`, `Input` via
-/// its own event queue, and the no-op default `Cursor`), so [`Terminal`](retroglyph_core::Terminal)
+/// its own event queue, and the no-op default `Cursor`), so [`Terminal`](retroglyph_core::terminal::Terminal)
 /// gets the full `Backend` it needs, while renderer crates implement only [`Presenter`]. See the
 /// crate-level [Architecture](crate#architecture) section for the data-flow diagram.
 ///
@@ -37,7 +37,11 @@ use std::time::Duration;
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Backend, DrawCell, Event, Input, Output, Pos, Size, Terminal, Tile};
+/// use retroglyph_core::backend::{Backend, DrawCell, Input, Output};
+/// use retroglyph_core::event::Event;
+/// use retroglyph_core::grid::{Pos, Size};
+/// use retroglyph_core::terminal::Terminal;
+/// use retroglyph_core::tile::Tile;
 /// use retroglyph_window::{Presenter, WindowBackend, WindowHandle};
 /// use std::sync::Arc;
 /// use std::time::Duration;

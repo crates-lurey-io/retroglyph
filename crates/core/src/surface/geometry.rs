@@ -29,13 +29,14 @@ impl<'a> Surface<'a> {
     /// lands correctly for a surface whose area happens to start at the grid origin; anywhere
     /// else it silently misses. A widget that wants to place itself relative to its own bounds
     /// (e.g. a label in a corner) should reach for `local_area()`, or just [`width`](Self::width)/
-    /// [`height`](Self::height) directly, and never for `area()`'s own [`left`](Rect::left)/
-    /// [`top`](Rect::top).
+    /// [`height`](Self::height) directly, and never for `area()`'s own [`left`](crate::grid::Rect::left)/
+    /// [`top`](crate::grid::Rect::top).
     ///
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Grid, Rect, Surface};
+    /// use retroglyph_core::grid::{Grid, Rect};
+    /// use retroglyph_core::surface::Surface;
     ///
     /// let mut grid = Grid::new(10, 10);
     /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 10, 10), 0);
@@ -87,9 +88,9 @@ impl<'a> Surface<'a> {
         }
     }
 
-    /// Equivalent to [`self.on_layer(tier.as_u8())`](Surface::on_layer), for switching to one of
-    /// the workspace's named [`Layer`] tiers instead of a raw layer id. See [`Layer`]'s docs for
-    /// when to reach for this over a numeric [`Surface::on_layer`] call.
+    /// Equivalent to [`self.on_layer(tier.as_u8())`](crate::surface::Surface::on_layer), for switching to one of
+    /// the workspace's named [`Layer`](crate::surface::Layer) tiers instead of a raw layer id. See [`Layer`](crate::surface::Layer)'s docs for
+    /// when to reach for this over a numeric [`Surface::on_layer`](crate::surface::Surface::on_layer) call.
     #[must_use]
     pub const fn on_tier(&mut self, tier: Layer) -> Surface<'_> {
         self.on_layer(tier.as_u8())
@@ -124,7 +125,7 @@ impl<'a> Surface<'a> {
     /// flash would be harder to predict than replacing it.
     ///
     /// Applies to sprites only. A cell backend has no sprite to recolour and draws the cell's
-    /// glyph in its own [`Style`], tinted or not, so this is invisible there. See [`Tint`].
+    /// glyph in its own [`Style`](crate::color::Style), tinted or not, so this is invisible there. See [`Tint`](crate::color::Tint).
     ///
     /// This tint composes with the sheet's own colour treatment; see
     /// `retroglyph_window::tileset::SheetColor` and `retroglyph_window::sprite_cache::SpriteTint`
@@ -140,7 +141,9 @@ impl<'a> Surface<'a> {
     /// ```
     /// # fn main() {
     /// # fn run() -> Option<()> {
-    /// use retroglyph_core::{Grid, Rect, Style, Surface, Tint};
+    /// use retroglyph_core::color::{Style, Tint};
+    /// use retroglyph_core::grid::{Grid, Rect};
+    /// use retroglyph_core::surface::Surface;
     ///
     /// let mut grid = Grid::new(8, 4);
     /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 8, 4), 0);
@@ -180,7 +183,7 @@ impl<'a> Surface<'a> {
     /// [`fill_rect`](Self::fill_rect), [`clear_region`](Self::clear_region), and
     /// [`print_aligned`](Self::print_aligned)'s own `rect` are. Coordinates are otherwise
     /// unchanged: the sub-surface addresses the same space this one does, so a
-    /// sub-rect computed against [`Surface::area`] (e.g. by a [`layout`](crate::layout) split)
+    /// sub-rect computed against [`Surface::area`](crate::surface::Surface::area) (e.g. by a [`layout`](crate::layout) split)
     /// can be passed straight in. Because the clip is intersected rather than substituted,
     /// narrowing is monotonic: handing a surface down a layout tree can only ever tighten what a
     /// callee is able to draw into, never widen it.
@@ -201,7 +204,9 @@ impl<'a> Surface<'a> {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Grid, Pos, Rect, Style, Surface};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Pos, Rect};
+    /// use retroglyph_core::surface::Surface;
     ///
     /// let mut grid = Grid::new(6, 2);
     /// let mut screen = Surface::new(&mut grid, Rect::new(0, 0, 6, 2), 0);
@@ -245,7 +250,8 @@ impl<'a> Surface<'a> {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Grid, Rect, Surface};
+    /// use retroglyph_core::grid::{Grid, Rect};
+    /// use retroglyph_core::surface::Surface;
     ///
     /// let mut grid = Grid::new(8, 4);
     /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 8, 4), 0);
@@ -294,7 +300,9 @@ impl<'a> Surface<'a> {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Grid, Pos, Rect, Style, Surface};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Pos, Rect};
+    /// use retroglyph_core::surface::Surface;
     ///
     /// let mut grid = Grid::new(10, 10);
     /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 10, 10), 0);
@@ -334,14 +342,14 @@ impl<'a> Surface<'a> {
     /// Chaining `clip(...).translate(...)` directly works when the result is used right where
     /// it's produced (both `clip` and `translate` return a `Surface<'_>` borrowing the previous
     /// step for exactly that call), but a helper that hands the composed view back to its own
-    /// caller (for example [`Camera::surface`](crate::Camera::surface)) needs the two
+    /// caller (for example [`Camera::surface`](crate::camera::Camera::surface)) needs the two
     /// narrowings applied against a single `&mut self` borrow instead, so the returned surface
     /// can outlive the call. This does that.
     ///
     /// This intersects `area` with this surface's own area rather than replacing it the way
     /// [`scope`](Self::scope) does, so [`area`](Self::area)/[`width`](Self::width)/
     /// [`height`](Self::height) on the result can report something smaller than the `area`
-    /// argument. [`Camera::surface`](crate::Camera::surface) relies on exactly this: when the
+    /// argument. [`Camera::surface`](crate::camera::Camera::surface) relies on exactly this: when the
     /// world is smaller than the viewport, it hands in a viewport-sized `area` and depends on the
     /// intersection to shrink it back down to the world's own size. A caller that wants `area`
     /// to become exactly its argument, even reaching outside the parent's current area, should
@@ -350,7 +358,9 @@ impl<'a> Surface<'a> {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Grid, Pos, Rect, Style, Surface};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Pos, Rect};
+    /// use retroglyph_core::surface::Surface;
     ///
     /// let mut grid = Grid::new(10, 10);
     /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 10, 10), 0);
@@ -379,7 +389,7 @@ impl<'a> Surface<'a> {
 
     /// A styled view over this surface: same area and layer, but every draw call uses `style`
     /// without needing to pass it each time. Handy for a run of same-styled writes (e.g. filling
-    /// in a wall glyph over many cells) without repeating the [`Style`] at every call site.
+    /// in a wall glyph over many cells) without repeating the [`Style`](crate::color::Style) at every call site.
     pub const fn with_style(&mut self, style: Style) -> StyledSurface<'_, 'a> {
         StyledSurface {
             surface: self,
@@ -387,9 +397,9 @@ impl<'a> Surface<'a> {
         }
     }
 
-    /// Borrows the underlying [`Grid`] directly, with no clipping.
+    /// Borrows the underlying [`Grid`](crate::grid::Grid) directly, with no clipping.
     ///
-    /// Escape hatch for multi-layer or whole-grid operations (e.g. [`Grid::blit`]) that don't fit
+    /// Escape hatch for multi-layer or whole-grid operations (e.g. [`Grid::blit`](crate::grid::Grid::blit)) that don't fit
     /// this surface's clipped, single-layer model. Drawing into a sub-rect is not one of those:
     /// [`clip`](Self::clip) and [`scope`](Self::scope) narrow a surface without handing out the
     /// unclipped grid to do it.
@@ -407,12 +417,14 @@ impl<'a> Surface<'a> {
     ///
     /// Respects this surface's layer but not its clip, mirroring [`grid_mut`](Self::grid_mut) in
     /// that sense: a caller wanting a clipped read should check
-    /// [`self.clip_rect().contains(...)`](Rect::contains) first.
+    /// [`self.clip_rect().contains(...)`](crate::grid::Rect::contains) first.
     ///
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Grid, Rect, Style, Surface};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Rect};
+    /// use retroglyph_core::surface::Surface;
     ///
     /// let mut grid = Grid::new(4, 4);
     /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0);
@@ -436,7 +448,9 @@ impl<'a> Surface<'a> {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Color, Grid, Rect, Style, Surface};
+    /// use retroglyph_core::color::{Color, Style};
+    /// use retroglyph_core::grid::{Grid, Rect};
+    /// use retroglyph_core::surface::Surface;
     ///
     /// let mut grid = Grid::new(4, 4);
     /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0);

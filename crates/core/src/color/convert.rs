@@ -50,7 +50,7 @@ impl Color {
     pub const BRIGHT_WHITE: Self = Self::Ansi(AnsiColor::BrightWhite);
 
     /// Resolves this color to a concrete 24-bit `(r, g, b)` triple, substituting `default` for
-    /// [`Color::Default`].
+    /// [`Color::Default`](crate::color::Color::Default).
     ///
     /// This is the canonical color-to-RGB resolution every graphical backend shares, so that a
     /// glyph drawn through the CPU rasterizer (`retroglyph-software`) and the GPU atlas
@@ -109,9 +109,9 @@ impl Color {
 
     /// Linearly interpolates between two colors, always returning a concrete `Rgb` result.
     ///
-    /// Both inputs are resolved to `(r, g, b)` via [`Color::resolve_rgb`] before blending, so
+    /// Both inputs are resolved to `(r, g, b)` via [`Color::resolve_rgb`](crate::color::Color::resolve_rgb) before blending, so
     /// non-`Rgb` variants (`Ansi`, `Indexed`) contribute their real color rather than being
-    /// skipped. [`Color::Default`] has no intrinsic RGB value, so it falls back to
+    /// skipped. [`Color::Default`](crate::color::Color::Default) has no intrinsic RGB value, so it falls back to
     /// `(0, 0, 0)` when it appears as `a` and `(255, 255, 255)` when it appears as `b`.
     #[cfg(feature = "indexed-quant")]
     #[must_use]
@@ -125,11 +125,11 @@ impl Color {
 
     /// Applies `f` to this color's HSL representation and converts the result back to `Rgb`.
     ///
-    /// Shared by [`Color::lighten`], [`Color::darken`], [`Color::saturate`],
-    /// [`Color::desaturate`], and [`Color::complement`], which differ only in which
+    /// Shared by [`Color::lighten`](crate::color::Color::lighten), [`Color::darken`](crate::color::Color::darken), [`Color::saturate`](crate::color::Color::saturate),
+    /// [`Color::desaturate`](crate::color::Color::desaturate), and [`Color::complement`](crate::color::Color::complement), which differ only in which
     /// `gem::space::Hsl` method `f` calls. Non-`Rgb` variants are resolved to `(r, g, b)` via
-    /// [`Color::resolve_rgb`] before the transform is applied, rather than being returned
-    /// unchanged. [`Color::Default`] has no intrinsic RGB value, so it resolves to `(0, 0, 0)`.
+    /// [`Color::resolve_rgb`](crate::color::Color::resolve_rgb) before the transform is applied, rather than being returned
+    /// unchanged. [`Color::Default`](crate::color::Color::Default) has no intrinsic RGB value, so it resolves to `(0, 0, 0)`.
     #[cfg(feature = "indexed-quant")]
     fn map_hsl(self, f: impl FnOnce(gem::space::Hsl) -> gem::space::Hsl) -> Self {
         let (r, g, b) = self.resolve_rgb((0, 0, 0));
@@ -139,8 +139,8 @@ impl Color {
 
     /// Lightens a color by `amount` (0.0 = no change, 1.0 = white).
     ///
-    /// Non-`Rgb` variants are resolved to `(r, g, b)` via [`Color::resolve_rgb`] before the
-    /// transform is applied, rather than being returned unchanged. [`Color::Default`] has no
+    /// Non-`Rgb` variants are resolved to `(r, g, b)` via [`Color::resolve_rgb`](crate::color::Color::resolve_rgb) before the
+    /// transform is applied, rather than being returned unchanged. [`Color::Default`](crate::color::Color::Default) has no
     /// intrinsic RGB value, so it resolves to `(0, 0, 0)`.
     #[cfg(feature = "indexed-quant")]
     #[must_use]
@@ -150,8 +150,8 @@ impl Color {
 
     /// Darkens a color by `amount` (0.0 = no change, 1.0 = black).
     ///
-    /// Non-`Rgb` variants are resolved to `(r, g, b)` via [`Color::resolve_rgb`] before the
-    /// transform is applied, rather than being returned unchanged. [`Color::Default`] has no
+    /// Non-`Rgb` variants are resolved to `(r, g, b)` via [`Color::resolve_rgb`](crate::color::Color::resolve_rgb) before the
+    /// transform is applied, rather than being returned unchanged. [`Color::Default`](crate::color::Color::Default) has no
     /// intrinsic RGB value, so it resolves to `(0, 0, 0)`.
     #[cfg(feature = "indexed-quant")]
     #[must_use]
@@ -161,8 +161,8 @@ impl Color {
 
     /// Increases saturation of a color by `amount` (0.0–1.0).
     ///
-    /// Non-`Rgb` variants are resolved to `(r, g, b)` via [`Color::resolve_rgb`] before the
-    /// transform is applied, rather than being returned unchanged. [`Color::Default`] has no
+    /// Non-`Rgb` variants are resolved to `(r, g, b)` via [`Color::resolve_rgb`](crate::color::Color::resolve_rgb) before the
+    /// transform is applied, rather than being returned unchanged. [`Color::Default`](crate::color::Color::Default) has no
     /// intrinsic RGB value, so it resolves to `(0, 0, 0)`.
     #[cfg(feature = "indexed-quant")]
     #[must_use]
@@ -172,8 +172,8 @@ impl Color {
 
     /// Decreases saturation of a color by `amount` (0.0–1.0).
     ///
-    /// Non-`Rgb` variants are resolved to `(r, g, b)` via [`Color::resolve_rgb`] before the
-    /// transform is applied, rather than being returned unchanged. [`Color::Default`] has no
+    /// Non-`Rgb` variants are resolved to `(r, g, b)` via [`Color::resolve_rgb`](crate::color::Color::resolve_rgb) before the
+    /// transform is applied, rather than being returned unchanged. [`Color::Default`](crate::color::Color::Default) has no
     /// intrinsic RGB value, so it resolves to `(0, 0, 0)`.
     #[cfg(feature = "indexed-quant")]
     #[must_use]
@@ -183,8 +183,8 @@ impl Color {
 
     /// Returns the complementary color (hue shifted by 180 degrees).
     ///
-    /// Non-`Rgb` variants are resolved to `(r, g, b)` via [`Color::resolve_rgb`] before the
-    /// transform is applied, rather than being returned unchanged. [`Color::Default`] has no
+    /// Non-`Rgb` variants are resolved to `(r, g, b)` via [`Color::resolve_rgb`](crate::color::Color::resolve_rgb) before the
+    /// transform is applied, rather than being returned unchanged. [`Color::Default`](crate::color::Color::Default) has no
     /// intrinsic RGB value, so it resolves to `(0, 0, 0)`.
     #[cfg(feature = "indexed-quant")]
     #[must_use]
@@ -208,7 +208,7 @@ impl Color {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::Color;
+    /// use retroglyph_core::color::Color;
     ///
     /// let black = Color::Rgb { r: 0, g: 0, b: 0 };
     /// assert_eq!(black.to_indexed(), Color::Indexed(0));
@@ -219,7 +219,7 @@ impl Color {
     ///
     /// Backends that render to terminals without full RGB support can call this method to
     /// downgrade colors before emitting them; `retroglyph-core` never downgrades colors on
-    /// its own. See [`Color::to_ansi`] to quantize to the smaller 16-color ANSI palette.
+    /// its own. See [`Color::to_ansi`](crate::color::Color::to_ansi) to quantize to the smaller 16-color ANSI palette.
     #[must_use]
     pub fn to_indexed(self) -> Self {
         match self {
@@ -241,7 +241,7 @@ impl Color {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{AnsiColor, Color};
+    /// use retroglyph_core::color::{AnsiColor, Color};
     ///
     /// let pure_red = Color::Rgb { r: 255, g: 0, b: 0 };
     /// assert_eq!(pure_red.to_ansi(), Color::Ansi(AnsiColor::BrightRed));
@@ -251,7 +251,7 @@ impl Color {
     /// ```
     ///
     /// Use this method when rendering to terminals limited to 16 colors, or when a caller
-    /// otherwise needs to reduce color depth. See [`Color::to_indexed`] to quantize to the
+    /// otherwise needs to reduce color depth. See [`Color::to_indexed`](crate::color::Color::to_indexed) to quantize to the
     /// larger 256-color palette instead.
     #[must_use]
     pub fn to_ansi(self) -> Self {
@@ -269,7 +269,7 @@ impl Color {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::Color;
+    /// use retroglyph_core::color::Color;
     ///
     /// let gold = Color::from_named("gold");
     /// assert_eq!(gold, Some(Color::Rgb { r: 255, g: 215, b: 0 }));
@@ -438,7 +438,7 @@ impl Color {
     /// ```
     /// # fn main() {
     /// # fn run() -> Option<()> {
-    /// use retroglyph_core::Color;
+    /// use retroglyph_core::color::Color;
     ///
     /// let c = Color::from_hex("#ff8000")?;
     /// assert_eq!(c, Color::Rgb { r: 255, g: 128, b: 0 });

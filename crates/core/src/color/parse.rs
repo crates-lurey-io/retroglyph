@@ -6,7 +6,7 @@ use alloc::string::String;
 use super::Color;
 use super::ansi::AnsiColor;
 
-/// The name [`Color::fmt`] writes for an ANSI color, e.g. `"bright-red"`.
+/// The name [`Color::fmt`](crate::color::Color::fmt) writes for an ANSI color, e.g. `"bright-red"`.
 const fn ansi_name(color: AnsiColor) -> &'static str {
     match color {
         AnsiColor::Black => "black",
@@ -29,7 +29,7 @@ const fn ansi_name(color: AnsiColor) -> &'static str {
 }
 
 /// The inverse of [`ansi_name`]: matches a name with separators already stripped and lowercased
-/// (e.g. `"brightred"`), as produced by [`Color::from_str`]'s normalization.
+/// (e.g. `"brightred"`), as produced by [`Color::from_str`](crate::color::Color::from_str)'s normalization.
 fn parse_ansi_name(name: &str) -> Option<AnsiColor> {
     Some(match name {
         "black" => AnsiColor::Black,
@@ -54,7 +54,7 @@ fn parse_ansi_name(name: &str) -> Option<AnsiColor> {
 
 /// Parses `#rgb` or `#rrggbb` (case-insensitive) into an `(r, g, b)` triple.
 ///
-/// Self-contained rather than routed through [`Color::from_hex`], so [`Color`]'s
+/// Self-contained rather than routed through [`Color::from_hex`](crate::color::Color::from_hex), so [`Color`](crate::color::Color)'s
 /// [`FromStr`](core::str::FromStr) impl (and the `serde` feature built on it) works
 /// regardless of whether the `indexed-quant` feature (which `from_hex` needs for its
 /// [`gem::space::Srgb`] parsing) is enabled.
@@ -89,7 +89,7 @@ impl core::fmt::Display for Color {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{AnsiColor, Color};
+    /// use retroglyph_core::color::{AnsiColor, Color};
     ///
     /// assert_eq!(Color::Default.to_string(), "default");
     /// assert_eq!(Color::Ansi(AnsiColor::BrightRed).to_string(), "bright-red");
@@ -106,7 +106,7 @@ impl core::fmt::Display for Color {
     }
 }
 
-/// Error returned when parsing a [`Color`] from a string fails.
+/// Error returned when parsing a [`Color`](crate::color::Color) from a string fails.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ParseColorError;
 
@@ -131,7 +131,7 @@ impl core::str::FromStr for Color {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{AnsiColor, Color};
+    /// use retroglyph_core::color::{AnsiColor, Color};
     ///
     /// assert_eq!("default".parse(), Ok(Color::Default));
     /// assert_eq!("reset".parse(), Ok(Color::Default));

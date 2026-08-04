@@ -86,7 +86,7 @@ impl std::error::Error for SoftwareBackendError {
 /// use retroglyph_software::SoftwareBackendBuilder;
 /// use retroglyph_window::winit::{WindowConfig, run_windowed};
 /// use retroglyph_core::event::{Event, KeyCode};
-/// use retroglyph_core::Style;
+/// use retroglyph_core::color::Style;
 /// use std::time::Duration;
 ///
 /// let renderer = SoftwareBackendBuilder::new()
@@ -117,7 +117,8 @@ impl std::error::Error for SoftwareBackendError {
 /// use retroglyph_software::{SoftwareBackendBuilder, SoftwareRenderer};
 /// use retroglyph_core::color::Style;
 /// use retroglyph_core::grid::Pos;
-/// use retroglyph_core::{Color, DrawCell, Output};
+/// use retroglyph_core::backend::{DrawCell, Output};
+/// use retroglyph_core::color::Color;
 ///
 /// let opts = SoftwareBackendBuilder::new()
 ///     .grid_size(1, 1)

@@ -15,11 +15,11 @@ use alloc::vec;
 #[cfg(not(feature = "egc"))]
 use alloc::vec::Vec;
 
+use retroglyph_core::color::Style;
 #[cfg(feature = "egc")]
-use retroglyph_core::HasSize;
+use retroglyph_core::grid::HasSize;
 #[cfg(feature = "egc")]
-use retroglyph_core::Rect;
-use retroglyph_core::Style;
+use retroglyph_core::grid::Rect;
 #[cfg(feature = "egc")]
 use retroglyph_core::layout::TextLayout;
 #[cfg(feature = "egc")]
@@ -52,7 +52,7 @@ use crate::Surface;
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Grid, Rect};
+/// use retroglyph_core::grid::{Grid, Rect};
 /// use retroglyph_widgets::{Measure, Paragraph, Surface, Widget};
 ///
 /// let p = Paragraph::new("the quick brown fox jumps");
@@ -191,7 +191,7 @@ impl Widget for Paragraph<'_> {
 mod tests {
     use alloc::string::String;
 
-    use retroglyph_core::{Grid, Pos, Rect};
+    use retroglyph_core::grid::{Grid, Pos, Rect};
 
     use super::*;
 

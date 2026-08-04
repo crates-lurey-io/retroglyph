@@ -2,7 +2,9 @@
 
 use core::fmt::{self, Write as _};
 
-use retroglyph_core::{FrameStats, Rect, Style};
+use retroglyph_core::color::Style;
+use retroglyph_core::frames::FrameStats;
+use retroglyph_core::grid::Rect;
 
 use super::FRAME_HISTORY;
 use crate::Surface;
@@ -169,7 +171,7 @@ impl PerfRenderer for DefaultPerfRenderer {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::{Grid, Pos};
+    use retroglyph_core::grid::{Grid, Pos};
 
     use super::*;
 

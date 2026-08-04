@@ -7,13 +7,13 @@ use core::time::Duration;
 /// instead. This is for motion with no start or end (a pulsing indicator, a breathing effect):
 /// keep accumulating `elapsed` every frame and re-sample.
 ///
-/// Equivalent to [`oscillate_with_phase`] with `phase` `0.0`. Two callers driving independent
+/// Equivalent to [`oscillate_with_phase`](crate::animate::oscillate_with_phase) with `phase` `0.0`. Two callers driving independent
 /// pulses (say, a row of status dots) that both call plain `oscillate` with the same `elapsed`
-/// and `period` will always be perfectly in sync; use [`oscillate_with_phase`] to stagger them.
+/// and `period` will always be perfectly in sync; use [`oscillate_with_phase`](crate::animate::oscillate_with_phase) to stagger them.
 ///
 /// ```
 /// use core::time::Duration;
-/// use retroglyph_core::oscillate;
+/// use retroglyph_core::animate::oscillate;
 ///
 /// let period = Duration::from_secs(2);
 /// assert_eq!(oscillate(Duration::ZERO, period), 0.5); // sin(0) == 0, remapped to the midpoint
@@ -24,9 +24,9 @@ pub fn oscillate(elapsed: Duration, period: Duration) -> f32 {
     oscillate_with_phase(elapsed, period, 0.0)
 }
 
-/// [`oscillate`], offset by `phase` full cycles.
+/// [`oscillate`](crate::animate::oscillate), offset by `phase` full cycles.
 ///
-/// `phase` shifts where in the cycle sampling starts: `0.0` matches plain [`oscillate`], `0.25`
+/// `phase` shifts where in the cycle sampling starts: `0.0` matches plain [`oscillate`](crate::animate::oscillate), `0.25`
 /// starts a quarter-cycle ahead, and so on. Only `phase`'s fractional part matters (a whole
 /// number of cycles is no offset at all), and negative values are fine. This is what lets
 /// several callers share one clock's `elapsed` and `period` while still pulsing out of sync with
@@ -34,7 +34,7 @@ pub fn oscillate(elapsed: Duration, period: Duration) -> f32 {
 ///
 /// ```
 /// use core::time::Duration;
-/// use retroglyph_core::oscillate_with_phase;
+/// use retroglyph_core::animate::oscillate_with_phase;
 ///
 /// let period = Duration::from_secs(2);
 /// // A quarter cycle ahead of `elapsed = 0` is the same as `elapsed = period / 4` with no phase.

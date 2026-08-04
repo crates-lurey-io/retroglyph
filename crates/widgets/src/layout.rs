@@ -27,7 +27,7 @@
 //! [`split_v_flex`]/[`split_h_flex`]).
 use alloc::vec::Vec;
 
-use retroglyph_core::{HasSize, Rect, Size};
+use retroglyph_core::grid::{HasSize, Rect, Size};
 
 /// How a single pane claims space along the split axis.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -341,7 +341,7 @@ fn solve_n<const N: usize>(total: u16, constraints: &[Constraint; N]) -> [u16; N
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::Rect;
+/// use retroglyph_core::grid::Rect;
 /// use retroglyph_widgets::{Constraint, split_v};
 ///
 /// let area = Rect::new(0, 0, 20, 10);
@@ -376,7 +376,7 @@ pub fn split_v(area: Rect, constraints: &[Constraint]) -> Vec<Rect> {
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::Rect;
+/// use retroglyph_core::grid::Rect;
 /// use retroglyph_widgets::{Constraint, split_v_n};
 ///
 /// let area = Rect::new(0, 0, 20, 10);
@@ -408,7 +408,7 @@ pub fn split_v_n<const N: usize>(area: Rect, constraints: [Constraint; N]) -> [R
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::Rect;
+/// use retroglyph_core::grid::Rect;
 /// use retroglyph_widgets::{Constraint, split_h};
 ///
 /// let area = Rect::new(0, 0, 100, 5);
@@ -439,7 +439,7 @@ pub fn split_h(area: Rect, constraints: &[Constraint]) -> Vec<Rect> {
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::Rect;
+/// use retroglyph_core::grid::Rect;
 /// use retroglyph_widgets::{Constraint, split_h_n};
 ///
 /// let area = Rect::new(0, 0, 100, 5);
@@ -515,7 +515,7 @@ impl From<u16> for Spacing {
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::Rect;
+/// use retroglyph_core::grid::Rect;
 /// use retroglyph_widgets::{Constraint, Spacing, split_h_spaced};
 ///
 /// let area = Rect::new(0, 0, 59, 6);
@@ -647,7 +647,7 @@ const fn spacer_span(pos: u16, size: u16, spacing: Spacing) -> (u16, u16) {
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::Rect;
+/// use retroglyph_core::grid::Rect;
 /// use retroglyph_widgets::{Constraint, split_h_n_spaced};
 ///
 /// let area = Rect::new(0, 0, 59, 6);
@@ -1015,7 +1015,7 @@ impl Side {
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Rect, Size};
+/// use retroglyph_core::grid::{Rect, Size};
 /// use retroglyph_widgets::{Side, anchored_rect};
 ///
 /// let bounds = Rect::new(0, 0, 40, 20);

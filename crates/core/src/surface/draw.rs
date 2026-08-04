@@ -17,7 +17,7 @@ impl Surface<'_> {
     /// area's own top-left, matching [`put_signed`](Self::put_signed)'s convention), not an
     /// absolute grid coordinate: a local check against `(0, 0)..(width, height)` here, followed
     /// by re-adding [`area`](Self::area)'s own top-left, so a clipped area that does not itself
-    /// start at grid `(0, 0)` (e.g. [`Camera::surface`](crate::Camera::surface)'s
+    /// start at grid `(0, 0)` (e.g. [`Camera::surface`](crate::camera::Camera::surface)'s
     /// `clip_translate`) still resolves to the right absolute cell. The result is then checked
     /// against [`clip_rect`](Self::clip_rect), not `area`, since the clip, never the area, is
     /// what decides whether a write lands.
@@ -67,7 +67,7 @@ impl Surface<'_> {
     /// Applies this surface's tint to the cell just written at `(x, y)`.
     ///
     /// Called after a write rather than as part of one, because a glyph write drops whatever
-    /// tint the cell held (see [`Grid::set_tint`]); doing it in the other order would erase the
+    /// tint the cell held (see [`Grid::set_tint`](crate::grid::Grid::set_tint)); doing it in the other order would erase the
     /// tint being applied. Untinted surfaces skip the call entirely, so the ordinary text path
     /// never touches the side table.
     fn apply_tint(&mut self, x: u16, y: u16) {
@@ -95,7 +95,7 @@ impl Surface<'_> {
 
     /// Writes `grapheme` at the already-*absolute* grid coordinate `(x, y)` (post-[`shift`],
     /// or an equivalent translation a caller had to do by hand): the width-2 spacer-in-clip
-    /// check, [`Grid::write_grapheme`]'s wide-char bookkeeping, and this surface's tint.
+    /// check, [`Grid::write_grapheme`](crate::grid::Grid::write_grapheme)'s wide-char bookkeeping, and this surface's tint.
     ///
     /// Shared by [`put_grapheme`](Self::put_grapheme) and [`put_signed`](Self::put_signed),
     /// which cannot just call `put_grapheme` with its own local coordinates: `put_signed`
@@ -115,7 +115,7 @@ impl Surface<'_> {
     /// `true` unless `width` is 2 and the spacer cell it would need at `x + 1` falls outside
     /// this surface's clip.
     ///
-    /// [`Grid::put_tile`]/[`Grid::write_grapheme`] only refuse a wide write at the *grid*'s own
+    /// [`Grid::put_tile`](crate::grid::Grid::put_tile)/[`Grid::write_grapheme`](crate::grid::Grid::write_grapheme) only refuse a wide write at the *grid*'s own
     /// right edge, not the clip's, so every wide write site (both the `egc` grapheme path via
     /// [`write_grapheme_at`](Self::write_grapheme_at) and the plain-`char` path in
     /// [`put`](Self::put)/[`put_signed`](Self::put_signed)/[`put_offset`](Self::put_offset))
@@ -129,13 +129,15 @@ impl Surface<'_> {
     /// Place `ch` at `pos` in `style`. A no-op if `pos` is outside this surface's clip.
     ///
     /// If a pixel backend resolves `ch` to a sprite, that sprite is composited from its own
-    /// pixels: [`style.fg`](Style::fg) does not tint it, and `style.bg` shows through only where
+    /// pixels: [`style.fg`](crate::color::Style::fg) does not tint it, and `style.bg` shows through only where
     /// the sprite is transparent. See [`put_span`](Self::put_span).
     ///
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Grid, Pos, Rect, Style, Surface};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Pos, Rect};
+    /// use retroglyph_core::surface::Surface;
     ///
     /// let mut grid = Grid::new(4, 4);
     /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0);
@@ -173,14 +175,16 @@ impl Surface<'_> {
     /// out-of-bounds behavior).
     ///
     /// Scrolling/camera code (e.g. a viewport over a wider world) computes positions in a
-    /// coordinate space that can go negative relative to the viewport, which [`Pos`] (backed by
+    /// coordinate space that can go negative relative to the viewport, which [`Pos`](crate::grid::Pos) (backed by
     /// `u16`) cannot even express. `put_signed` takes that arithmetic directly, so a caller no
     /// longer clip-tests by hand before calling `put`.
     ///
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Grid, Pos, Rect, Style, Surface};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Pos, Rect};
+    /// use retroglyph_core::surface::Surface;
     ///
     /// let mut grid = Grid::new(4, 4);
     /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0);
@@ -243,7 +247,8 @@ impl Surface<'_> {
     ///
     /// ```
     /// use retroglyph_core::backend::Headless;
-    /// use retroglyph_core::{Style, Terminal};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::terminal::Terminal;
     ///
     /// let mut term = Terminal::new(Headless::new(6, 3));
     /// term.draw(|s| s.print((0, 0), "hello wrapped world", Style::default()))
@@ -346,7 +351,7 @@ impl Surface<'_> {
     /// ```
     /// use retroglyph_core::backend::Headless;
     /// use retroglyph_core::text::{Line, Span};
-    /// use retroglyph_core::Terminal;
+    /// use retroglyph_core::terminal::Terminal;
     ///
     /// let mut term = Terminal::new(Headless::new(5, 2));
     /// let line = Line::from(vec![Span::raw("hello"), Span::raw("world")]);
@@ -395,7 +400,7 @@ impl Surface<'_> {
     ///
     /// Wants a per-frame redrawn UI label (a status line, a centred title bar) that should not
     /// allocate: unlike [`TextLayout`](crate::layout::TextLayout), which only accepts a
-    /// [`Line`] (forcing an allocation to build one for every call), this
+    /// [`Line`](crate::text::Line) (forcing an allocation to build one for every call), this
     /// takes `&str` directly.
     ///
     /// The starting column is computed with saturating arithmetic, so `text` wider than `rect`
@@ -413,7 +418,9 @@ impl Surface<'_> {
     /// ```
     /// use retroglyph_core::backend::Headless;
     /// use retroglyph_core::layout::HAlign;
-    /// use retroglyph_core::{Rect, Style, Terminal};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::Rect;
+    /// use retroglyph_core::terminal::Terminal;
     ///
     /// let mut term = Terminal::new(Headless::new(6, 1));
     /// term.draw(|s| {
@@ -462,7 +469,9 @@ impl Surface<'_> {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Grid, Pos, Rect, Style, Surface};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Pos, Rect};
+    /// use retroglyph_core::surface::Surface;
     ///
     /// let mut grid = Grid::new(4, 4);
     /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0);
@@ -506,7 +515,7 @@ impl Surface<'_> {
     /// writing to: `grid` is typically a standalone buffer composed elsewhere (e.g.
     /// `BoxStyle::render`'s output, or `retroglyph-widgets`' `join_h`/`join_v`), and per their own
     /// docs those only ever populate layer 0. Reading this surface's own layer off `grid` instead
-    /// (what [`Grid::blit`]'s single `layer` parameter would do if called directly) finds nothing
+    /// (what [`Grid::blit`](crate::grid::Grid::blit)'s single `layer` parameter would do if called directly) finds nothing
     /// there whenever this surface isn't on layer 0, and the copy silently does nothing.
     ///
     /// Unlike a single-cell [`put`](Self::put), a write that starts outside this surface's clip is
@@ -524,7 +533,10 @@ impl Surface<'_> {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Grid, Layer, Rect, Style, Surface, Tile};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Rect};
+    /// use retroglyph_core::surface::{Layer, Surface};
+    /// use retroglyph_core::tile::Tile;
     ///
     /// let mut src = Grid::new(2, 2);
     /// src.put_tile(0, (0, 0), Tile::new('x', Style::default()));
@@ -590,8 +602,8 @@ impl Surface<'_> {
     }
 
     /// Writes a multi-cell span at `pos` on this surface's layer in `style`: one piece of
-    /// artwork occupying a block of cells rather than one, the [`Surface`] twin of
-    /// [`Grid::write_span`].
+    /// artwork occupying a block of cells rather than one, the [`Surface`](crate::surface::Surface) twin of
+    /// [`Grid::write_span`](crate::grid::Grid::write_span).
     ///
     /// `rows` holds one string per row of the footprint. Its first character is the **anchor**
     /// glyph, which a pixel backend looks up in its sprite cache; the rest are the span's **text
@@ -600,12 +612,12 @@ impl Surface<'_> {
     /// both pass without a borrowing pass over the rows; for the uniform case, see
     /// [`put_span_uniform`](Self::put_span_uniform).
     ///
-    /// See [`Grid::write_span`] for the full write semantics, and [`Grid::span_owner`] to
+    /// See [`Grid::write_span`](crate::grid::Grid::write_span) for the full write semantics, and [`Grid::span_owner`](crate::grid::Grid::span_owner) to
     /// hit-test the whole footprint.
     ///
     /// # `style` applies to the text fallback, not to the sprite
     ///
-    /// A sprite is composited from its own pixels. [`style.fg`](Style::fg) does not tint it;
+    /// A sprite is composited from its own pixels. [`style.fg`](crate::color::Style::fg) does not tint it;
     /// `style.bg` is still painted behind it, so it shows through wherever the sprite is
     /// transparent. Recoloring a shared sprite per cell is therefore not possible: draw a
     /// variant of the artwork instead, which is the usual tileset idiom.
@@ -620,7 +632,7 @@ impl Surface<'_> {
     /// `Some(())` once the whole span is written, or `None` having written nothing at all when
     /// `rows` is empty or ragged, either axis exceeds 255 cells, or the footprint does not fit
     /// entirely within this surface's own clip (not just the grid) at `pos`. The surface has
-    /// strictly more ways to refuse a span than [`Grid::write_span`] does, so a sprite that did
+    /// strictly more ways to refuse a span than [`Grid::write_span`](crate::grid::Grid::write_span) does, so a sprite that did
     /// not draw is answered here rather than in the backend.
     pub fn put_span<S: AsRef<str>>(
         &mut self,
@@ -644,8 +656,8 @@ impl Surface<'_> {
     }
 
     /// Writes a `size` multi-cell span at `pos` on this surface's layer in `style`: `anchor` in
-    /// the anchor cell, `fill` in every other cell of the footprint, the [`Surface`] twin of
-    /// [`Grid::write_span_uniform`].
+    /// the anchor cell, `fill` in every other cell of the footprint, the [`Surface`](crate::surface::Surface) twin of
+    /// [`Grid::write_span_uniform`](crate::grid::Grid::write_span_uniform).
     ///
     /// The uniform case of [`put_span`](Self::put_span), and what a sheet-driven renderer usually
     /// wants: one sprite, chosen at runtime, with the cells it covers blanked so nothing shows
@@ -667,7 +679,9 @@ impl Surface<'_> {
     /// ```
     /// # fn main() {
     /// # fn run() -> Option<()> {
-    /// use retroglyph_core::{Grid, Rect, Style, Surface};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Rect};
+    /// use retroglyph_core::surface::Surface;
     ///
     /// let mut grid = Grid::new(8, 4);
     /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 8, 4), 0);
@@ -721,7 +735,9 @@ impl Surface<'_> {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Grid, Offset, Pos, Rect, Style, Surface};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Offset, Pos, Rect};
+    /// use retroglyph_core::surface::Surface;
     ///
     /// let mut grid = Grid::new(4, 4);
     /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0);
@@ -771,14 +787,14 @@ impl Surface<'_> {
     }
 
     /// Clears this surface's own area, intersected with its clip (on its own layer), back to
-    /// [`Tile::default`].
+    /// [`Tile::default`](crate::tile::Tile::default).
     pub fn clear(&mut self) {
         let region = self.area.intersect(self.clip);
         self.grid.fill_region(self.layer, region, Tile::default());
     }
 
     /// Clears `rect` (clipped to this surface's own clip, on its own layer) back to
-    /// [`Tile::default`].
+    /// [`Tile::default`](crate::tile::Tile::default).
     ///
     /// `rect` is local to this surface's own [`area`](Self::area), the same convention
     /// [`fill_rect`](Self::fill_rect) and [`print_aligned`](Self::print_aligned) use for their
@@ -788,7 +804,9 @@ impl Surface<'_> {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Grid, Pos, Rect, Style, Surface};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Pos, Rect};
+    /// use retroglyph_core::surface::Surface;
     ///
     /// let mut grid = Grid::new(4, 4);
     /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0);

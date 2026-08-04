@@ -4,8 +4,8 @@
 //! Split into private submodules by concern, `animate`/`backend`/`testing`-style: `ansi` is the
 //! 16-color ANSI palette and the shared indexed/ANSI quantization machinery, `convert` is
 //! `Color`'s inherent methods (constants, RGB resolution, `gem` color-space conversions),
-//! `parse` is `Color`'s `Display`/`FromStr`/serde impls, `style` is [`Style`] itself, and `tint`
-//! is [`Tint`], sprite colour modulation.
+//! `parse` is `Color`'s `Display`/`FromStr`/serde impls, `style` is [`Style`](crate::color::Style) itself, and `tint`
+//! is [`Tint`](crate::color::Tint), sprite colour modulation.
 
 mod ansi;
 mod convert;
@@ -25,7 +25,7 @@ pub use tint::Tint;
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::Color;
+/// use retroglyph_core::color::Color;
 ///
 /// let named = Color::GREEN;
 /// let rgb = Color::Rgb { r: 255, g: 0, b: 0 };

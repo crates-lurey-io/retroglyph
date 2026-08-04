@@ -13,7 +13,7 @@
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use retroglyph_core::symbols::Pixel;
-use retroglyph_core::{quantize_half_block, quantize_quadrant, quantize_sextant};
+use retroglyph_core::symbols::{quantize_half_block, quantize_quadrant, quantize_sextant};
 use std::hint::black_box;
 
 /// Number of blocks quantized per `b.iter()` call, batched so the RNG/vec setup below is

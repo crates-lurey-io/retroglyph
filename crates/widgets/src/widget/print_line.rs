@@ -18,7 +18,7 @@ use crate::text::draw_clipped;
 /// ```
 /// use retroglyph_core::backend::Headless;
 /// use retroglyph_core::text::Line;
-/// use retroglyph_core::Terminal;
+/// use retroglyph_core::terminal::Terminal;
 /// use retroglyph_widgets::{PrintLine, Widget};
 ///
 /// let mut term = Terminal::new(Headless::new(20, 1));
@@ -94,8 +94,8 @@ mod tests {
     use alloc::string::String;
     use alloc::vec;
 
+    use retroglyph_core::grid::{Grid, Pos, Rect};
     use retroglyph_core::text::Span;
-    use retroglyph_core::{Grid, Pos, Rect};
 
     use super::*;
 

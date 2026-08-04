@@ -4,10 +4,10 @@
 //! plus foreground/background color pair best reconstructs that block. Three block shapes are
 //! supported, in increasing fidelity (and decreasing terminal compatibility):
 //!
-//! - [`quantize_half_block`]: 1x2 pixels -> `' '`/`▀`/`▄`/`█` (Unicode Block Elements, supported
+//! - [`quantize_half_block`](crate::symbols::quantize_half_block): 1x2 pixels -> `' '`/`▀`/`▄`/`█` (Unicode Block Elements, supported
 //!   almost everywhere monospace fonts render at all).
-//! - [`quantize_quadrant`]: 2x2 pixels -> the 16 quadrant block characters (`▘▝▀▖▌▞▛...`).
-//! - [`quantize_sextant`]: 2x3 pixels -> the 64 "Symbols for Legacy Computing" sextant
+//! - [`quantize_quadrant`](crate::symbols::quantize_quadrant): 2x2 pixels -> the 16 quadrant block characters (`▘▝▀▖▌▞▛...`).
+//! - [`quantize_sextant`](crate::symbols::quantize_sextant): 2x3 pixels -> the 64 "Symbols for Legacy Computing" sextant
 //!   characters, doubling vertical resolution again over quadrants. Newest and least
 //!   universally supported of the three (a 2022 Unicode addition).
 //!
@@ -24,7 +24,7 @@
 //! distance to whichever average it was assigned to. The split with the lowest total error wins,
 //! and its bit pattern selects the glyph directly (the glyph tables below are indexed by that
 //! same pattern, foreground bits set, read row-major). This exhaustive search is cheap here (at
-//! most 64 candidates, 6 pixels each, for [`quantize_sextant`]) and is the same technique
+//! most 64 candidates, 6 pixels each, for [`quantize_sextant`](crate::symbols::quantize_sextant)) and is the same technique
 //! notcurses' blitter chain documents using for its own 3x2 sextant solver.
 //!
 //! Ties (multiple patterns reconstructing a block with equally minimal error) resolve to the
@@ -46,8 +46,8 @@
 //! let white = (255, 255, 255);
 //! let glyph = quantize_quadrant([white, black, black, black]);
 //! assert_eq!(glyph.ch, '▘'); // top-left quadrant
-//! assert_eq!(glyph.fg, retroglyph_core::Color::Rgb { r: 255, g: 255, b: 255 });
-//! assert_eq!(glyph.bg, retroglyph_core::Color::Rgb { r: 0, g: 0, b: 0 });
+//! assert_eq!(glyph.fg, retroglyph_core::color::Color::Rgb { r: 255, g: 255, b: 255 });
+//! assert_eq!(glyph.bg, retroglyph_core::color::Color::Rgb { r: 0, g: 0, b: 0 });
 //! ```
 
 use crate::color::Color;
@@ -194,7 +194,7 @@ pub fn quantize_half_block(pixels: [impl Into<Pixel>; 2]) -> Glyph {
 /// Posterizes a 2x2 pixel block (`[top_left, top_right, bottom_left, bottom_right]`) to one of
 /// the 16 quadrant block glyphs plus two representative colors.
 ///
-/// Doubles both horizontal and vertical resolution over [`quantize_half_block`].
+/// Doubles both horizontal and vertical resolution over [`quantize_half_block`](crate::symbols::quantize_half_block).
 ///
 /// On the bundled pixel backends (`retroglyph-software`, `retroglyph-gl`), rendering these
 /// glyphs correctly requires a font that actually declares coverage for the quadrant block
@@ -218,7 +218,7 @@ pub fn quantize_half_block(pixels: [impl Into<Pixel>; 2]) -> Glyph {
 /// assert_eq!(glyph.ch, '▝'); // top-right quadrant
 /// ```
 ///
-/// See [`quantize_half_block`] for why this never panics.
+/// See [`quantize_half_block`](crate::symbols::quantize_half_block) for why this never panics.
 #[must_use]
 pub fn quantize_quadrant(pixels: [impl Into<Pixel>; 4]) -> Glyph {
     let pixels = pixels.map(Into::into);
@@ -228,12 +228,12 @@ pub fn quantize_quadrant(pixels: [impl Into<Pixel>; 4]) -> Glyph {
 /// Posterizes a 2-wide x 3-tall pixel block (`[top_left, top_right, mid_left, mid_right,
 /// bottom_left, bottom_right]`) to one of the 64 sextant glyphs plus two representative colors.
 ///
-/// The highest-fidelity option (doubles vertical resolution again over [`quantize_quadrant`]),
+/// The highest-fidelity option (doubles vertical resolution again over [`quantize_quadrant`](crate::symbols::quantize_quadrant)),
 /// and the newest/least universally supported: sextant glyphs come from a 2022 Unicode addition
 /// and need a font with "Symbols for Legacy Computing" coverage to render as blocks rather than
 /// tofu/replacement characters.
 ///
-/// Font coverage works the same way as [`quantize_quadrant`]'s: CP437 has no mapping for sextant
+/// Font coverage works the same way as [`quantize_quadrant`](crate::symbols::quantize_quadrant)'s: CP437 has no mapping for sextant
 /// glyphs either, so see that function's docs for the `FontChain` setup needed to render them.
 ///
 /// See the `16_subcell_image` example for `quantize_sextant` in action:
@@ -250,7 +250,7 @@ pub fn quantize_quadrant(pixels: [impl Into<Pixel>; 4]) -> Glyph {
 /// assert_eq!(glyph.ch, '🬀'); // top-left sextant only
 /// ```
 ///
-/// See [`quantize_half_block`] for why this never panics.
+/// See [`quantize_half_block`](crate::symbols::quantize_half_block) for why this never panics.
 #[must_use]
 pub fn quantize_sextant(pixels: [impl Into<Pixel>; 6]) -> Glyph {
     let pixels = pixels.map(Into::into);

@@ -19,7 +19,10 @@
 #![allow(missing_docs)]
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
-use retroglyph_core::{Color, Headless, Style, Terminal, Tile};
+use retroglyph_core::backend::Headless;
+use retroglyph_core::color::{Color, Style};
+use retroglyph_core::terminal::Terminal;
+use retroglyph_core::tile::Tile;
 use std::hint::black_box;
 
 /// Builds a `cols x rows` terminal with `layers` layers populated (layer 0..layers-1), each

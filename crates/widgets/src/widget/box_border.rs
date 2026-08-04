@@ -1,11 +1,11 @@
 //! [`BoxBorder`]: a single-line box border.
-use retroglyph_core::{Color, Style};
+use retroglyph_core::color::{Color, Style};
 
 use super::{BorderType, Widget};
 use crate::Surface;
 use crate::Theme;
 
-/// A single-line box border drawn around a [`Rect`](retroglyph_core::Rect).
+/// A single-line box border drawn around a [`Rect`](retroglyph_core::grid::Rect).
 ///
 /// The interior of the rectangle is not touched. `area` must be at least
 /// 2×2, or [`Widget::render`] is a no-op. `style` defaults to [`Theme::DARK`] (as if
@@ -14,7 +14,7 @@ use crate::Theme;
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Grid, Rect};
+/// use retroglyph_core::grid::{Grid, Rect};
 /// use retroglyph_widgets::{BoxBorder, Surface, Widget};
 ///
 /// let area = Rect::new(0, 0, 10, 4);
@@ -110,8 +110,9 @@ impl Widget for BoxBorder {
 
 #[cfg(test)]
 mod tests {
+    use retroglyph_core::color::Color;
+    use retroglyph_core::grid::{Grid, Pos, Rect};
     use retroglyph_core::symbols::border::PLAIN;
-    use retroglyph_core::{Color, Grid, Pos, Rect};
 
     use super::*;
 

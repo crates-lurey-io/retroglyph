@@ -5,13 +5,13 @@ use gem::rgb::Rgb888;
 /// How a sprite's own pixels are recoloured at draw time.
 ///
 /// A sprite is composited from the artwork's pixels, and a cell's
-/// [`Style::fg`](crate::Style::fg) does not touch it (see
-/// [`Surface::put_span`](crate::Surface::put_span)). A tint is the separate channel that does,
+/// [`Style::fg`](crate::color::Style::fg) does not touch it (see
+/// [`Surface::put_span`](crate::surface::Surface::put_span)). A tint is the separate channel that does,
 /// so one piece of artwork can serve a biome variant, a damage flash, or a shadowed copy of
 /// itself without a second sprite in the sheet.
 ///
 /// Pixel backends only. Cell backends have no sprite to recolour and ignore a tint entirely;
-/// they draw the cell's glyph in its own [`Style`](crate::Style), as always.
+/// they draw the cell's glyph in its own [`Style`](crate::color::Style), as always.
 ///
 /// # Why not reuse `fg`
 ///
@@ -19,7 +19,7 @@ use gem::rgb::Rgb888;
 /// works for them because their foreground colour has exactly one job and defaults to white, the
 /// identity of a multiply.
 ///
-/// Neither holds here. [`Color::Default`](crate::Color::Default) means "whatever foreground the
+/// Neither holds here. [`Color::Default`](crate::color::Color::Default) means "whatever foreground the
 /// terminal is configured for", not white, so it has no sensible reading as a modulation value.
 /// More importantly, a cell drawn as a sprite by a pixel backend is drawn as an `fg`-coloured
 /// *glyph* by a cell backend, and the colour that reads correctly as a solid character is not
@@ -67,7 +67,7 @@ use gem::rgb::Rgb888;
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::Tint;
+/// use retroglyph_core::color::Tint;
 ///
 /// // Grass artwork, dimmed toward its own shadow.
 /// let shadowed = Tint::multiply(128, 128, 128);
@@ -172,7 +172,7 @@ impl Tint {
     /// cannot be, since trait methods aren't const-callable on stable.
     ///
     /// ```rust
-    /// use retroglyph_core::Tint;
+    /// use retroglyph_core::color::Tint;
     /// use gem::rgb::Rgb888;
     ///
     /// const PX: Rgb888 = Tint::Multiply { r: 128, g: 128, b: 128 }
@@ -186,10 +186,10 @@ impl Tint {
     }
 
     /// A [`Multiply`](Self::Multiply) tint by `color`'s resolved RGB, falling back to `default`
-    /// for [`Color::Default`](crate::Color::Default) (which has no intrinsic reading as a
+    /// for [`Color::Default`](crate::color::Color::Default) (which has no intrinsic reading as a
     /// modulation value). Built for `retroglyph-window`'s sheet-level recolouring: a
     /// `SheetColor::Mask` sheet is tinted by the cell's own foreground colour this way before
-    /// the cell's own [`Tint`] is applied on top.
+    /// the cell's own [`Tint`](crate::color::Tint) is applied on top.
     #[must_use]
     pub const fn multiply_color(c: crate::color::Color, default: (u8, u8, u8)) -> Self {
         let (r, g, b) = c.resolve_rgb(default);

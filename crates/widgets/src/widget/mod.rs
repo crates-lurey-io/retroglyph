@@ -20,7 +20,7 @@
 //! [`Log`] report their item/row/message count directly, since none of them
 //! wrap; [`Panel`] reports its border-plus-padding chrome height, since it
 //! owns no content of its own to measure.
-use retroglyph_core::Frame;
+use retroglyph_core::app::Frame;
 
 use crate::Response;
 use crate::Sense;
@@ -80,7 +80,8 @@ pub use text_input::TextInput;
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Grid, Rect, Style};
+/// use retroglyph_core::color::Style;
+/// use retroglyph_core::grid::{Grid, Rect};
 /// use retroglyph_widgets::{Surface, Widget};
 ///
 /// struct Marker(char);
@@ -102,7 +103,7 @@ pub trait Widget {
     /// `(0, 0)` is `surface.area()`'s own top-left corner, not the underlying grid's. Placement
     /// should therefore be built from [`Surface::width`]/[`Surface::height`] (or
     /// [`Surface::local_area`] for a rect), never from `surface.area()`'s own
-    /// [`left`](retroglyph_core::Rect::left)/[`top`](retroglyph_core::Rect::top): those are
+    /// [`left`](retroglyph_core::grid::Rect::left)/[`top`](retroglyph_core::grid::Rect::top): those are
     /// absolute grid coordinates, and passing them straight to a drawing call only lands
     /// correctly for a surface whose area happens to start at the grid origin.
     fn render(&self, surface: &mut Surface<'_>);
@@ -115,7 +116,8 @@ pub trait Widget {
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Grid, Rect, Style};
+/// use retroglyph_core::color::Style;
+/// use retroglyph_core::grid::{Grid, Rect};
 /// use retroglyph_widgets::{Surface, StatefulWidget};
 ///
 /// struct Counter;
@@ -145,7 +147,7 @@ pub trait StatefulWidget {
     ///
     /// See [`Widget::render`]'s doc for why placement should come from
     /// [`Surface::width`]/[`Surface::height`]/[`Surface::local_area`], not `surface.area()`'s own
-    /// [`left`](retroglyph_core::Rect::left)/[`top`](retroglyph_core::Rect::top).
+    /// [`left`](retroglyph_core::grid::Rect::left)/[`top`](retroglyph_core::grid::Rect::top).
     fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State);
 }
 
@@ -180,10 +182,10 @@ pub trait Measure {
 /// Like [`StatefulWidget`], but for widgets whose state evolves with wall-clock time.
 ///
 /// Covers state like [`crate::ScrollState`]'s momentum/rubber-band physics or a
-/// [`Tween`](retroglyph_core::Tween)-driven transition, which advance on their own rather than
+/// [`Tween`](retroglyph_core::animate::Tween)-driven transition, which advance on their own rather than
 /// only in response to input.
 ///
-/// [`StatefulWidget`] has no way to reach the [`Frame`] an [`App`](retroglyph_core::App) already
+/// [`StatefulWidget`] has no way to reach the [`Frame`] an [`App`](retroglyph_core::app::App) already
 /// receives every frame, so a widget with time-based state has nowhere to advance it: not in
 /// `render` (no `Frame` parameter), and not in a second, app-defined call, because nothing
 /// enforces that call happening before `render` rather than after it: the two orders differ by
@@ -202,7 +204,8 @@ pub trait Measure {
 ///
 /// ```
 /// use core::time::Duration;
-/// use retroglyph_core::{Frame, Grid, Rect};
+/// use retroglyph_core::app::Frame;
+/// use retroglyph_core::grid::{Grid, Rect};
 /// use retroglyph_widgets::{AnimatedWidget, Surface};
 ///
 /// struct Blinker;
@@ -213,7 +216,7 @@ pub trait Measure {
 ///     fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State, frame: &Frame) {
 ///         *state += frame.delta;
 ///         let on = state.as_millis() / 500 % 2 == 0;
-///         surface.put((0, 0), if on { '*' } else { ' ' }, retroglyph_core::Style::new());
+///         surface.put((0, 0), if on { '*' } else { ' ' }, retroglyph_core::color::Style::new());
 ///     }
 /// }
 ///
@@ -262,7 +265,8 @@ pub trait AnimatedWidget {
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Grid, Rect, Style};
+/// use retroglyph_core::color::Style;
+/// use retroglyph_core::grid::{Grid, Rect};
 /// use retroglyph_widgets::{InteractiveWidget, Response, Sense, Surface};
 ///
 /// struct Marker(char);
@@ -275,7 +279,7 @@ pub trait AnimatedWidget {
 ///     }
 ///
 ///     fn render(&self, surface: &mut Surface<'_>, _state: &mut Self::State, response: Response<Id>) {
-///         let style = if response.hovered() { Style::new().bg(retroglyph_core::Color::RED) } else { Style::new() };
+///         let style = if response.hovered() { Style::new().bg(retroglyph_core::color::Color::RED) } else { Style::new() };
 ///         surface.put((0, 0), self.0, style);
 ///     }
 /// }
@@ -301,7 +305,7 @@ mod interactive_widget_tests {
     use alloc::vec;
     use alloc::vec::Vec;
 
-    use retroglyph_core::{Grid, Rect};
+    use retroglyph_core::grid::{Grid, Rect};
 
     use super::{InteractiveWidget, Response, Sense, Surface};
 
@@ -321,7 +325,7 @@ mod interactive_widget_tests {
             response: Response<Id>,
         ) {
             let glyph = if response.hovered() { '*' } else { '.' };
-            surface.put((0, 0), glyph, retroglyph_core::Style::new());
+            surface.put((0, 0), glyph, retroglyph_core::color::Style::new());
         }
     }
 
@@ -340,6 +344,6 @@ mod interactive_widget_tests {
                 Response::default(),
             );
         }
-        assert_eq!(grid[retroglyph_core::Pos::new(0, 0)].glyph(), '.');
+        assert_eq!(grid[retroglyph_core::grid::Pos::new(0, 0)].glyph(), '.');
     }
 }

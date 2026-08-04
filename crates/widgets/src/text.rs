@@ -6,8 +6,9 @@
 use alloc::borrow::ToOwned as _;
 use alloc::string::String;
 
+use retroglyph_core::color::Style;
+use retroglyph_core::grid::Pos;
 use retroglyph_core::text::{split_at_width, truncate_measured};
-use retroglyph_core::{Pos, Style};
 
 use crate::{Align, Surface};
 
@@ -71,7 +72,7 @@ pub fn draw_clipped(
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::{Grid, Rect};
+    use retroglyph_core::grid::{Grid, Rect};
 
     use super::*;
 

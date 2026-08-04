@@ -7,7 +7,7 @@
 //! instead of every frame), and none of it is worth anything in a shipped game, where nobody is
 //! reading the log.
 //!
-//! [`BuildMode::CURRENT`] names which kind of build this is, and [`dev_only!`] gates a block on
+//! [`BuildMode::CURRENT`](crate::dev::BuildMode::CURRENT) names which kind of build this is, and [`dev_only!`] gates a block on
 //! it. In a release build the const is `false`, the branch folds away, and everything inside it
 //! (message strings, the bookkeeping that dedupes them) is dropped as dead code.
 //!
@@ -35,7 +35,7 @@
 //! debug symbols (`[profile.profiling] inherits = "release"`, plus `debug = true`), and it is
 //! *supposed* to be one: measuring a build whose diagnostics differ from the shipped build
 //! measures the wrong program. So there are two modes here, and a profiling build resolves to
-//! [`Release`](BuildMode::Release).
+//! [`Release`](crate::dev::BuildMode::Release).
 //!
 //! That is also why the gate is written as "is this a dev build" rather than "is this not a
 //! release build". Flutter's own guidance on its `kReleaseMode` constant is to prefer `kDebugMode`
@@ -44,19 +44,19 @@
 //!
 //! # How a mode is chosen
 //!
-//! | Build | [`BuildMode::CURRENT`] |
+//! | Build | [`BuildMode::CURRENT`](crate::dev::BuildMode::CURRENT) |
 //! | --- | --- |
-//! | `cargo build`, `cargo test`, `cargo run` | [`Dev`](BuildMode::Dev) |
-//! | `cargo build --release` | [`Release`](BuildMode::Release) |
-//! | a profiling profile inheriting `release` | [`Release`](BuildMode::Release) |
-//! | any build with the `dev` feature on | [`Dev`](BuildMode::Dev) |
-//! | any build with `-C debug-assertions=on` | [`Dev`](BuildMode::Dev) |
+//! | `cargo build`, `cargo test`, `cargo run` | [`Dev`](crate::dev::BuildMode::Dev) |
+//! | `cargo build --release` | [`Release`](crate::dev::BuildMode::Release) |
+//! | a profiling profile inheriting `release` | [`Release`](crate::dev::BuildMode::Release) |
+//! | any build with the `dev` feature on | [`Dev`](crate::dev::BuildMode::Dev) |
+//! | any build with `-C debug-assertions=on` | [`Dev`](crate::dev::BuildMode::Dev) |
 //!
 //! The default signal is `debug_assertions`, which Cargo turns on for the `dev` profile and off
 //! for `release`. It follows whichever profile the consumer built with, so a game gets
 //! diagnostics from `cargo run` and none from `cargo run --release` without configuring anything.
 //!
-//! The `dev` feature forces [`Dev`](BuildMode::Dev) on regardless, for an optimized build that
+//! The `dev` feature forces [`Dev`](crate::dev::BuildMode::Dev) on regardless, for an optimized build that
 //! still reports. This is the equivalent of Unity's "Development Build" checkbox or Bevy's `dev`
 //! feature: release codegen, because an unoptimized build of a renderer is too slow to reproduce
 //! anything frame-dependent, but with the instrumentation left in.
@@ -124,7 +124,7 @@ impl BuildMode {
     }
 }
 
-/// Whether this build compiles in development diagnostics: [`BuildMode::CURRENT`] as a `bool`.
+/// Whether this build compiles in development diagnostics: [`BuildMode::CURRENT`](crate::dev::BuildMode::CURRENT) as a `bool`.
 ///
 /// Prefer [`dev_only!`](crate::dev_only) for gating a block. Reach for this constant directly
 /// when the shape of the code makes a macro awkward, such as an early return or a struct field
@@ -133,7 +133,7 @@ pub const DEV: bool = BuildMode::CURRENT.is_dev();
 
 /// Runs `body` only in a build that compiles in development diagnostics.
 ///
-/// Expands to `if DEV { body }`. Because [`DEV`] is a `const`, a release build folds the branch
+/// Expands to `if DEV { body }`. Because [`DEV`](crate::dev::DEV) is a `const`, a release build folds the branch
 /// away and drops `body` with it, including any message strings and bookkeeping it alone
 /// references.
 ///

@@ -29,10 +29,14 @@
 
 use std::time::Duration;
 
+use retroglyph_core::animate::{Easing, Tween};
+use retroglyph_core::app::Frame;
+use retroglyph_core::backend::Backend;
+use retroglyph_core::color::{AnsiColor, Color, Style};
 use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::{
-    AnsiColor, Backend, Color, Easing, Frame, Grid, Rect, Style, Terminal, Tile, Tween,
-};
+use retroglyph_core::grid::{Grid, Rect};
+use retroglyph_core::terminal::Terminal;
+use retroglyph_core::tile::Tile;
 use retroglyph_examples::Example;
 use retroglyph_widgets::{Constraint, Panel, Widget, split_h, split_v};
 

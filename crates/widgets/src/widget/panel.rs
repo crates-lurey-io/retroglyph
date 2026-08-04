@@ -1,8 +1,9 @@
 //! [`Panel`]: a bordered, titled panel.
 use alloc::vec::Vec;
 
+use retroglyph_core::color::{Color, Style};
+use retroglyph_core::grid::Rect;
 use retroglyph_core::text::truncate_measured;
-use retroglyph_core::{Color, Rect, Style};
 
 use super::{BorderType, BoxBorder, Measure, Widget};
 use crate::Surface;
@@ -50,7 +51,7 @@ pub struct PanelTitle<'a> {
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::{Grid, Rect};
+/// use retroglyph_core::grid::{Grid, Rect};
 /// use retroglyph_widgets::{Align, Panel, Surface, TitlePosition, Widget};
 ///
 /// let area = Rect::new(0, 0, 20, 5);
@@ -173,7 +174,7 @@ impl<'a> Panel<'a> {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::Rect;
+    /// use retroglyph_core::grid::Rect;
     /// use retroglyph_widgets::{Panel, Sides};
     ///
     /// let panel = Panel::new().padding(Sides::symmetric(0, 1));
@@ -335,7 +336,8 @@ impl TitleCursor {
 mod tests {
     use alloc::string::String;
 
-    use retroglyph_core::{Color, Grid, Pos};
+    use retroglyph_core::color::Color;
+    use retroglyph_core::grid::{Grid, Pos};
 
     use super::*;
 

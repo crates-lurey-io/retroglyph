@@ -1,7 +1,7 @@
 //! A scrolling viewport into a world larger than the screen.
 //!
-//! [`Camera`] is pure geometry: it converts between world coordinates (cells in
-//! some large space) and screen coordinates (cells in a [`Rect`] on the
+//! [`Camera`](crate::camera::Camera) is pure geometry: it converts between world coordinates (cells in
+//! some large space) and screen coordinates (cells in a [`Rect`](crate::grid::Rect) on the
 //! terminal), and reports which world cells are currently visible. It holds no
 //! rendering opinion, so it works with any drawing style and is testable
 //! without a backend.
@@ -11,16 +11,16 @@
 //! except near the edges, where it drifts toward the corner. A world smaller
 //! than the viewport pins the origin at `(0, 0)`, with all the slack on the
 //! right and bottom of the given viewport rect; use
-//! [`set_viewport_fitted`](Camera::set_viewport_fitted) instead of
-//! [`set_viewport`](Camera::set_viewport) when a world that may be smaller
+//! [`set_viewport_fitted`](crate::camera::Camera::set_viewport_fitted) instead of
+//! [`set_viewport`](crate::camera::Camera::set_viewport) when a world that may be smaller
 //! than its viewport (a fixed board, a generated map, a minimap) should be
 //! letterboxed and centered instead.
 //!
 //! See the `12_dungeon_scroll` example for `Camera` in action:
 //! <https://main.retroglyph.dev/examples/12_dungeon_scroll/terminal/>.
 //!
-//! [`Grid::from_charmap`](crate::Grid::from_charmap) builds a styled grid from an ASCII map or
-//! level string, one tile per character; combined with a [`Camera`] and multi-layer compositing,
+//! [`Grid::from_charmap`](crate::grid::Grid::from_charmap) builds a styled grid from an ASCII map or
+//! level string, one tile per character; combined with a [`Camera`](crate::camera::Camera) and multi-layer compositing,
 //! this is how a scrolling roguelike loads and follows a map larger than the screen (see the
 //! `11_sokoban` example for `from_charmap` itself, and `15_outpost_dashboard` for a `Camera` used
 //! alongside a UI).
@@ -28,7 +28,8 @@
 //! # Example
 //!
 //! ```
-//! use retroglyph_core::{Camera, Pos, Rect, Size};
+//! use retroglyph_core::camera::Camera;
+//! use retroglyph_core::grid::{Pos, Rect, Size};
 //!
 //! // A 10x10 viewport onto a 100x100 world.
 //! let mut cam = Camera::new(Rect::new(0, 0, 10, 10), Size::new(100, 100));
@@ -107,7 +108,8 @@ impl Camera {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Camera, Pos, Rect, Size};
+    /// use retroglyph_core::camera::Camera;
+    /// use retroglyph_core::grid::{Pos, Rect, Size};
     ///
     /// let mut cam = Camera::new(Rect::new(0, 0, 10, 10), Size::new(100, 100));
     /// cam.center_on(Pos::new(50, 50));
@@ -152,7 +154,8 @@ impl Camera {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Camera, Pos, Rect, Size};
+    /// use retroglyph_core::camera::Camera;
+    /// use retroglyph_core::grid::{Pos, Rect, Size};
     ///
     /// // A 20x20 viewport at (2, 2) over a 5x5 world: the effective viewport shrinks to 5x5
     /// // and centers within the given rect, instead of pinning to (2, 2).
@@ -205,7 +208,8 @@ impl Camera {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Camera, Pos, Rect, Size};
+    /// use retroglyph_core::camera::Camera;
+    /// use retroglyph_core::grid::{Pos, Rect, Size};
     ///
     /// let mut cam = Camera::new(Rect::new(0, 0, 10, 10), Size::new(100, 100));
     /// cam.set_origin(Pos::new(50, 50));
@@ -245,7 +249,8 @@ impl Camera {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Camera, Pos, Rect, Size};
+    /// use retroglyph_core::camera::Camera;
+    /// use retroglyph_core::grid::{Pos, Rect, Size};
     ///
     /// let mut cam = Camera::new(Rect::new(0, 0, 10, 10), Size::new(100, 100));
     /// cam.scroll_by(5, 3);
@@ -271,7 +276,8 @@ impl Camera {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Camera, Pos, Rect, Size};
+    /// use retroglyph_core::camera::Camera;
+    /// use retroglyph_core::grid::{Pos, Rect, Size};
     ///
     /// // A 10x10 viewport near the bottom-right corner of a 12x12 world: the origin clamps
     /// // to (2, 2), so the visible rect is narrower than the viewport rather than reading
@@ -328,12 +334,13 @@ impl Camera {
     /// wider than one cell (a hex, an iso diamond, a multi-cell sprite) where the *anchor*
     /// can be off-viewport while part of the content is still visible. This is the signed
     /// sibling for that case: it hands back the same math `world_to_screen` computes, minus the
-    /// culling, ready for [`Surface::put_signed`] to clip.
+    /// culling, ready for [`Surface::put_signed`](crate::surface::Surface::put_signed) to clip.
     ///
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Camera, Pos, Rect, Size};
+    /// use retroglyph_core::camera::Camera;
+    /// use retroglyph_core::grid::{Pos, Rect, Size};
     ///
     /// let mut cam = Camera::new(Rect::new(0, 0, 10, 10), Size::new(100, 100));
     /// cam.center_on(Pos::new(50, 50));
@@ -357,7 +364,7 @@ impl Camera {
     }
 
     /// A view of `surface` in this camera's world coordinate space, clipped to
-    /// [`visible_bounds`](Self::visible_bounds): [`Surface::clip_translate`] to the visible
+    /// [`visible_bounds`](Self::visible_bounds): [`Surface::clip_translate`](crate::surface::Surface::clip_translate) to the visible
     /// rect, by [`origin`](Self::origin).
     ///
     /// The returned surface's `put`, `put_signed`, `print`, and the rest of `Surface`'s
@@ -365,7 +372,7 @@ impl Camera {
     /// outside `visible_bounds` (including a multi-cell draw anchored off-screen, or - for a
     /// world smaller than the viewport - the dead margin past the world edge) is dropped by the
     /// surface's own bounds check, the same way [`world_to_offset`] composes with
-    /// [`Surface::put_signed`] by hand. This is that composition done once instead of at every
+    /// [`Surface::put_signed`](crate::surface::Surface::put_signed) by hand. This is that composition done once instead of at every
     /// call site.
     ///
     /// Clipping to `visible_bounds` rather than [`viewport`](Self::viewport) directly matches
@@ -379,7 +386,10 @@ impl Camera {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Camera, Grid, Pos, Rect, Size, Style, Surface};
+    /// use retroglyph_core::camera::Camera;
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Pos, Rect, Size};
+    /// use retroglyph_core::surface::Surface;
     ///
     /// let mut grid = Grid::new(20, 20);
     /// let mut root = Surface::new(&mut grid, Rect::new(0, 0, 20, 20), 0);
@@ -401,7 +411,10 @@ impl Camera {
     /// dropped, not written past the world into unused grid cells.
     ///
     /// ```
-    /// use retroglyph_core::{Camera, Grid, Pos, Rect, Size, Style, Surface};
+    /// use retroglyph_core::camera::Camera;
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Pos, Rect, Size};
+    /// use retroglyph_core::surface::Surface;
     ///
     /// let mut grid = Grid::new(20, 20);
     /// let mut root = Surface::new(&mut grid, Rect::new(0, 0, 20, 20), 0);
@@ -436,7 +449,8 @@ impl Camera {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Camera, Pos, Rect, Size};
+    /// use retroglyph_core::camera::Camera;
+    /// use retroglyph_core::grid::{Pos, Rect, Size};
     ///
     /// let mut cam = Camera::new(Rect::new(5, 5, 10, 10), Size::new(100, 100));
     /// cam.center_on(Pos::new(50, 50));
@@ -477,7 +491,8 @@ impl Camera {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Camera, Pos, Rect, Size};
+    /// use retroglyph_core::camera::Camera;
+    /// use retroglyph_core::grid::{Pos, Rect, Size};
     ///
     /// let mut cam = Camera::new(Rect::new(5, 5, 10, 10), Size::new(100, 100));
     /// cam.center_on(Pos::new(50, 50));

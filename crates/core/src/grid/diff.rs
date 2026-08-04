@@ -1,7 +1,5 @@
-//! [`Grid::diff`], the zero-allocation per-cell change iterator [`Terminal::present`] and the
+//! [`Grid::diff`](crate::grid::Grid::diff), the zero-allocation per-cell change iterator [`Terminal::present`](crate::terminal::Terminal::present) and the
 //! software backend build on, plus its per-layer [`LayerDiff`] helper.
-//!
-//! [`Terminal::present`]: crate::Terminal::present
 
 use super::{Grid, Pos, flat_index_to_xy};
 use crate::backend::DrawCell;
