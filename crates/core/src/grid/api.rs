@@ -431,13 +431,18 @@ impl Grid {
         else {
             return;
         };
+        // Every call site bounds-checks `x`/`y` (and, where relevant, the whole `x..x+width`
+        // range) against `self.width`/`self.height` before reaching here (`put_tile`,
+        // `write_grapheme`, `fill_region`'s already-clipped `rect`, `blit_with`'s per-cell `dx`
+        // check, and `write_span_cells`'s own footprint check). A `cx` past the row's own width
+        // would still compute an `idx` `< cap` below (just landing in the next row) and clear an
+        // unrelated cell instead of being treated as out of bounds, so this is asserted rather
+        // than silently trusted.
+        debug_assert!(
+            usize::from(x.saturating_add(width)) <= w,
+            "caller must bounds-check"
+        );
         for cx in x..x.saturating_add(width) {
-            // `cx` past the row's own width must not fall through to the flat-index check below:
-            // it would still be `< cap` (just landing in the next row) and clear an unrelated
-            // cell instead of being treated as out of bounds.
-            if usize::from(cx) >= w {
-                continue;
-            }
             let idx = usize::from(y) * w + usize::from(cx);
             if idx >= cap {
                 continue;
