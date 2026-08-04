@@ -13,9 +13,7 @@
 //! runs on every CI invocation, regardless of the feature matrix.
 
 use alpha_blend::channel::Channel;
-#[cfg(feature = "indexed-quant")]
 use gem::space::Srgb;
-#[cfg(feature = "indexed-quant")]
 use retroglyph_core::Color;
 
 /// Rounds `num / den` to the nearest integer, ties away from zero, using only `i64` arithmetic
@@ -58,7 +56,6 @@ fn multiply_and_scale_are_round_to_nearest_for_every_input() {
 /// `* 255.0` value has a fractional part >= 0.5, so for every target byte `t` in `1..=255` this
 /// picks an input whose scaled value is `t - 0.4` (fractional part `0.6`): round-to-nearest
 /// yields `t`, while the pre-#698 `as u8` truncation yields `t - 1`.
-#[cfg(feature = "indexed-quant")]
 #[test]
 fn from_srgb_rounds_to_nearest_not_truncates() {
     for t in 1u8..=255 {

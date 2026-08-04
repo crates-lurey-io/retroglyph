@@ -1,8 +1,48 @@
 //! The 16-color ANSI palette, and the shared indexed/ANSI quantization machinery `Color`'s
-//! `to_indexed`/`to_ansi`/`resolve_rgb` build on.
+//! `to_indexed`/`to_ansi`/`resolve_rgb` build on, including the [`Quantize`] metric that picks
+//! between them.
 
-#[cfg(feature = "indexed-quant")]
 use gem::space::Srgb;
+
+use super::palette_oklab::PALETTE_OKLAB;
+
+/// The distance metric [`Color::to_indexed_with`](super::Color::to_indexed_with) and
+/// [`Color::to_ansi_with`](super::Color::to_ansi_with) use to find a palette entry's nearest
+/// neighbour.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::{Color, Quantize};
+///
+/// let salmon = Color::Rgb { r: 250, g: 128, b: 114 };
+/// assert_eq!(salmon.to_indexed_with(Quantize::Perceptual), Color::Indexed(210));
+/// assert_eq!(salmon.to_indexed_with(Quantize::Euclidean), Color::Indexed(209));
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[non_exhaustive]
+pub enum Quantize {
+    /// Euclidean distance in the Oklab perceptually-uniform color space.
+    ///
+    /// Matches human color perception far better than raw RGB distance, at the cost of
+    /// converting the input color to Oklab (three `powf` and three `cbrt`) on every call. The
+    /// palette side of the comparison is precomputed, so that conversion is the whole cost.
+    ///
+    /// The default, and what [`Color::to_indexed`](super::Color::to_indexed) and
+    /// [`Color::to_ansi`](super::Color::to_ansi) use.
+    #[default]
+    Perceptual,
+
+    /// Euclidean distance over the raw 8-bit RGB channels.
+    ///
+    /// Integer-only and allocation-free, and for [`Color::to_indexed_with`](super::Color::to_indexed_with)
+    /// it finds the 6x6x6 cube's nearest point by rounding each channel independently rather than
+    /// scanning the cube. Perceptually worse than [`Perceptual`](Self::Perceptual) (it
+    /// over-weights green and under-weights blue), but it's the rule most terminal tooling
+    /// applies, so it's the one to pick when the output has to agree with another tool's
+    /// downgrade.
+    Euclidean,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 /// Standard 16-color ANSI palette.
@@ -127,9 +167,9 @@ const GRAYSCALE_RAMP: [u8; 24] = [
 /// Indices 0–15 are the 16 standard ANSI colors, 16–231 are the 6×6×6 RGB cube, and
 /// 232–255 are the grayscale ramp.
 ///
-/// Not feature-gated: [`Color::resolve_rgb`](super::Color::resolve_rgb) calls it on every build, so it must always compile
-/// regardless of the `indexed-quant` feature (the `to_indexed`-family callers below are `gem`-gated, but
-/// this table lookup itself has no `gem` dependency).
+/// `const` and integer-only: [`Color::resolve_rgb`](super::Color::resolve_rgb) calls it for every
+/// [`Indexed`](super::Color::Indexed) tile a pixel backend draws, and it's also what generates
+/// [`PALETTE_OKLAB`].
 pub(super) const fn indexed_to_rgb(index: u8) -> (u8, u8, u8) {
     if index < 16 {
         ANSI_COLORS[index as usize].to_rgb()
@@ -151,7 +191,6 @@ pub(super) const fn indexed_to_rgb(index: u8) -> (u8, u8, u8) {
 /// Ties (exactly halfway between two steps) round to the lower step: steps are
 /// scanned in ascending order and only a strictly closer step replaces the
 /// current best, so an equal-distance higher step never wins.
-#[cfg(any(not(feature = "indexed-quant"), test))]
 fn nearest_cube_step(value: u8) -> u8 {
     let value = i32::from(value);
     let mut best_index = 0u8;
@@ -170,8 +209,7 @@ fn nearest_cube_step(value: u8) -> u8 {
 /// cube, grayscale ramp, and the 16 ANSI colors, breaking ties by preferring the
 /// lower index.
 ///
-/// This is the fallback used by [`Color::to_indexed`](super::Color::to_indexed) without the `indexed-quant` feature, and
-/// is always available regardless of feature flags.
+/// Backs [`Quantize::Euclidean`] for [`Color::to_indexed_with`](super::Color::to_indexed_with).
 ///
 /// Checks the 16 ANSI colors, the cube's single nearest point (found by rounding each
 /// channel independently), and the grayscale ramp's single nearest point, rather than
@@ -179,7 +217,6 @@ fn nearest_cube_step(value: u8) -> u8 {
 /// finds the cube's closest point, and likewise for the single-channel grayscale ramp.
 /// Candidates are checked in ascending index order and only replace the current best
 /// on strictly smaller distance, so ties naturally resolve to the lower index.
-#[cfg(any(not(feature = "indexed-quant"), test))]
 fn cube_map_to_indexed(r: u8, g: u8, b: u8) -> u8 {
     let mut best_index = 0u8;
     let mut best_distance = u32::MAX;
@@ -224,9 +261,7 @@ fn cube_map_to_indexed(r: u8, g: u8, b: u8) -> u8 {
 /// Quantizes `(r, g, b)` to the nearest of the 16 standard ANSI colors, using
 /// euclidean RGB distance and breaking ties by preferring the lower index.
 ///
-/// This is the fallback used by [`Color::to_ansi`](super::Color::to_ansi) without the `indexed-quant` feature, and is
-/// always available regardless of feature flags.
-#[cfg(any(not(feature = "indexed-quant"), test))]
+/// Backs [`Quantize::Euclidean`] for [`Color::to_ansi_with`](super::Color::to_ansi_with).
 fn cube_map_to_ansi(r: u8, g: u8, b: u8) -> AnsiColor {
     let mut best = AnsiColor::Black;
     let mut best_distance = u32::MAX;
@@ -242,7 +277,6 @@ fn cube_map_to_ansi(r: u8, g: u8, b: u8) -> AnsiColor {
 
 /// Converts an 8-bit RGB channel triplet to `gem::space::Srgb`, the shared conversion behind
 /// every `Srgb::new(f32::from(r) / 255.0, ...)` call site in this module.
-#[cfg(feature = "indexed-quant")]
 pub(super) fn rgb_to_srgb(r: u8, g: u8, b: u8) -> Srgb {
     Srgb::new(
         f32::from(r) / 255.0,
@@ -252,99 +286,21 @@ pub(super) fn rgb_to_srgb(r: u8, g: u8, b: u8) -> Srgb {
 }
 
 /// Converts an 8-bit RGB channel triplet to Oklab.
-#[cfg(feature = "indexed-quant")]
 fn rgb_to_oklab(r: u8, g: u8, b: u8) -> gem::space::Oklab {
     gem::space::Oklab::from(rgb_to_srgb(r, g, b))
 }
 
-/// Builds the 256-entry table of [`gem::space::Oklab`] values for the 256-color palette
-/// (`indexed_to_rgb(0..256)` converted to Oklab), in index order.
-#[cfg(feature = "indexed-quant")]
-fn build_indexed_oklab_table() -> [gem::space::Oklab; 256] {
-    core::array::from_fn(|i| {
-        let (r, g, b) = indexed_to_rgb(u8::try_from(i).unwrap_or(u8::MAX));
-        rgb_to_oklab(r, g, b)
-    })
-}
-
-/// Builds the 16-entry table of [`gem::space::Oklab`] values for the 16 standard ANSI
-/// colors ([`ANSI_COLORS`] converted to Oklab), in index order.
-#[cfg(feature = "indexed-quant")]
-fn build_ansi_oklab_table() -> [gem::space::Oklab; 16] {
-    core::array::from_fn(|i| {
-        let (r, g, b) = ANSI_COLORS[i].to_rgb();
-        rgb_to_oklab(r, g, b)
-    })
-}
-
-/// The 256-color palette's Oklab table, as returned by [`indexed_oklab_table`]: a cached
-/// `'static` reference when `std` is enabled, or an owned array rebuilt per call otherwise.
-#[cfg(all(feature = "indexed-quant", feature = "std"))]
-type IndexedOklabTable = &'static [gem::space::Oklab; 256];
-#[cfg(all(feature = "indexed-quant", not(feature = "std")))]
-type IndexedOklabTable = [gem::space::Oklab; 256];
-
-/// The 16-color ANSI palette's Oklab table, as returned by [`ansi_oklab_table`]: a cached
-/// `'static` reference when `std` is enabled, or an owned array rebuilt per call otherwise.
-#[cfg(all(feature = "indexed-quant", feature = "std"))]
-type AnsiOklabTable = &'static [gem::space::Oklab; 16];
-#[cfg(all(feature = "indexed-quant", not(feature = "std")))]
-type AnsiOklabTable = [gem::space::Oklab; 16];
-
-/// Returns the 256-color palette's Oklab table.
-///
-/// `indexed_to_rgb` is a pure function of a compile-time-constant palette, but its Oklab
-/// conversion (`powf`/`cbrt`) isn't `const`-evaluable, so the table can't be a plain `const`.
-/// When the `std` feature is enabled, this caches the table behind a `OnceLock` so the
-/// conversion only ever runs once for all 256 entries, no matter how many times
-/// [`Color::to_indexed`](super::Color::to_indexed) is called; the hot path this feeds ([`ColorSupport::Indexed256`] in
-/// `retroglyph-terminal`'s draw loop) calls it once per cell, per frame.
-///
-/// `no_std` builds (this crate's `std` feature off) have no safe way to back a lazily
-/// initialized `static` without `unsafe` (forbidden workspace-wide), so they rebuild the table
-/// on every call instead; that path is expected to be cold.
-#[cfg(feature = "indexed-quant")]
-fn indexed_oklab_table() -> IndexedOklabTable {
-    #[cfg(feature = "std")]
-    {
-        static TABLE: std::sync::OnceLock<[gem::space::Oklab; 256]> = std::sync::OnceLock::new();
-        TABLE.get_or_init(build_indexed_oklab_table)
-    }
-    #[cfg(not(feature = "std"))]
-    {
-        build_indexed_oklab_table()
-    }
-}
-
-/// Returns the 16-color ANSI palette's Oklab table. See [`indexed_oklab_table`] for the
-/// caching rationale and the `no_std` fallback.
-#[cfg(feature = "indexed-quant")]
-fn ansi_oklab_table() -> AnsiOklabTable {
-    #[cfg(feature = "std")]
-    {
-        static TABLE: std::sync::OnceLock<[gem::space::Oklab; 16]> = std::sync::OnceLock::new();
-        TABLE.get_or_init(build_ansi_oklab_table)
-    }
-    #[cfg(not(feature = "std"))]
-    {
-        build_ansi_oklab_table()
-    }
-}
-
 /// Quantizes `(r, g, b)` to the nearest 256-color palette index using perceptual
 /// (Oklab) distance, breaking ties by preferring the lower index.
-#[cfg(feature = "indexed-quant")]
 fn perceptual_to_indexed(r: u8, g: u8, b: u8) -> u8 {
     let target = rgb_to_oklab(r, g, b);
-    let table = indexed_oklab_table();
     let mut best_index = 0u8;
     let mut best_distance = f32::MAX;
-    for index in 0u16..256 {
-        let index = u8::try_from(index).unwrap_or(u8::MAX);
-        let distance = target.distance_sq(table[index as usize]);
+    for (index, &entry) in PALETTE_OKLAB.iter().enumerate() {
+        let distance = target.distance_sq(entry);
         if distance < best_distance {
             best_distance = distance;
-            best_index = index;
+            best_index = u8::try_from(index).unwrap_or(u8::MAX);
         }
     }
     best_index
@@ -352,14 +308,16 @@ fn perceptual_to_indexed(r: u8, g: u8, b: u8) -> u8 {
 
 /// Quantizes `(r, g, b)` to the nearest of the 16 standard ANSI colors using
 /// perceptual (Oklab) distance, breaking ties by preferring the lower index.
-#[cfg(feature = "indexed-quant")]
+///
+/// Searches [`PALETTE_OKLAB`]'s first 16 entries rather than a table of its own: the 256-color
+/// palette opens with the 16 ANSI colors in [`ANSI_COLORS`] order, so those entries already are
+/// the ANSI palette's Oklab values.
 fn perceptual_to_ansi(r: u8, g: u8, b: u8) -> AnsiColor {
     let target = rgb_to_oklab(r, g, b);
-    let table = ansi_oklab_table();
     let mut best = AnsiColor::Black;
     let mut best_distance = f32::MAX;
-    for (i, ansi) in ANSI_COLORS.iter().enumerate() {
-        let distance = target.distance_sq(table[i]);
+    for (ansi, &entry) in ANSI_COLORS.iter().zip(&PALETTE_OKLAB) {
+        let distance = target.distance_sq(entry);
         if distance < best_distance {
             best_distance = distance;
             best = *ansi;
@@ -368,31 +326,24 @@ fn perceptual_to_ansi(r: u8, g: u8, b: u8) -> AnsiColor {
     best
 }
 
-/// Quantizes `(r, g, b)` to the nearest 256-color palette index, using perceptual
-/// (Oklab) distance when the `indexed-quant` feature is enabled, or euclidean RGB
-/// cube-mapping otherwise.
-pub(super) fn rgb_to_indexed(r: u8, g: u8, b: u8) -> u8 {
-    #[cfg(feature = "indexed-quant")]
-    {
-        perceptual_to_indexed(r, g, b)
-    }
-    #[cfg(not(feature = "indexed-quant"))]
-    {
-        cube_map_to_indexed(r, g, b)
+/// Quantizes `(r, g, b)` to the nearest 256-color palette index under `metric`, breaking ties by
+/// preferring the lower index.
+pub(super) fn rgb_to_indexed(r: u8, g: u8, b: u8, metric: Quantize) -> u8 {
+    match metric {
+        Quantize::Euclidean => cube_map_to_indexed(r, g, b),
+        // `Quantize` is `#[non_exhaustive]`: an unrecognized future metric falls back to the
+        // default rather than failing to compile.
+        _ => perceptual_to_indexed(r, g, b),
     }
 }
 
-/// Quantizes `(r, g, b)` to the nearest of the 16 standard ANSI colors, using
-/// perceptual (Oklab) distance when the `indexed-quant` feature is enabled, or euclidean RGB
-/// distance otherwise.
-pub(super) fn rgb_to_ansi(r: u8, g: u8, b: u8) -> AnsiColor {
-    #[cfg(feature = "indexed-quant")]
-    {
-        perceptual_to_ansi(r, g, b)
-    }
-    #[cfg(not(feature = "indexed-quant"))]
-    {
-        cube_map_to_ansi(r, g, b)
+/// Quantizes `(r, g, b)` to the nearest of the 16 standard ANSI colors under `metric`, breaking
+/// ties by preferring the lower index.
+pub(super) fn rgb_to_ansi(r: u8, g: u8, b: u8, metric: Quantize) -> AnsiColor {
+    match metric {
+        Quantize::Euclidean => cube_map_to_ansi(r, g, b),
+        // See `rgb_to_indexed` above for why this isn't an exhaustive match.
+        _ => perceptual_to_ansi(r, g, b),
     }
 }
 
@@ -458,7 +409,72 @@ mod tests {
         assert_eq!(AnsiColor::try_from(255), Err(InvalidAnsiIndex(255)));
     }
 
-    // ── cube-mapping fallback (always tested, regardless of `indexed-quant` feature) ─
+    // ── the generated Oklab palette table ────────────────────────────────────────────
+
+    /// The largest per-channel deviation tolerated between a [`PALETTE_OKLAB`] entry and the same
+    /// color converted at runtime.
+    ///
+    /// Not zero, because the table's literals were generated under one float backend and the
+    /// comparison runs under whichever of `std`/`libm` the build selected; those disagree by a few
+    /// ULP in `powf`/`cbrt`. Far tighter than the gap between any two palette entries, so a
+    /// genuinely wrong or stale entry still fails.
+    const PALETTE_EPSILON: f32 = 1e-5;
+
+    #[test]
+    fn test_palette_oklab_matches_computed_table() {
+        for (index, &entry) in PALETTE_OKLAB.iter().enumerate() {
+            let (r, g, b) = indexed_to_rgb(u8::try_from(index).expect("index is 0..256"));
+            let computed = rgb_to_oklab(r, g, b);
+            for (label, generated, computed) in [
+                ("l", entry.l, computed.l),
+                ("a", entry.a, computed.a),
+                ("b", entry.b, computed.b),
+            ] {
+                assert!(
+                    (generated - computed).abs() <= PALETTE_EPSILON,
+                    "palette entry {index} channel {label}: {generated} != {computed}"
+                );
+            }
+        }
+    }
+
+    /// Quantization itself, not just the table, must be unchanged by using generated literals:
+    /// a nearest-neighbour search only cares about the *ordering* of distances, so an entry could
+    /// drift within [`PALETTE_EPSILON`] and still flip a near-tie.
+    #[test]
+    fn test_palette_oklab_quantizes_identically_to_computed_table() {
+        let computed: [gem::space::Oklab; 256] = core::array::from_fn(|i| {
+            let (r, g, b) = indexed_to_rgb(u8::try_from(i).expect("index is 0..256"));
+            rgb_to_oklab(r, g, b)
+        });
+
+        // Every 17th value per channel: the 16^3 grid hits both palette entries and the midpoints
+        // between them, where a tie is most likely to flip.
+        for r in (0..=255u8).step_by(17) {
+            for g in (0..=255u8).step_by(17) {
+                for b in (0..=255u8).step_by(17) {
+                    let target = rgb_to_oklab(r, g, b);
+                    let nearest = |table: &[gem::space::Oklab; 256]| {
+                        let mut best = (0usize, f32::MAX);
+                        for (i, &entry) in table.iter().enumerate() {
+                            let distance = target.distance_sq(entry);
+                            if distance < best.1 {
+                                best = (i, distance);
+                            }
+                        }
+                        best.0
+                    };
+                    assert_eq!(
+                        nearest(&PALETTE_OKLAB),
+                        nearest(&computed),
+                        "rgb({r}, {g}, {b})"
+                    );
+                }
+            }
+        }
+    }
+
+    // ── `Quantize::Euclidean`'s cube-mapping ────────────────────────────────────────────
 
     #[test]
     fn test_nearest_cube_step_boundaries() {
