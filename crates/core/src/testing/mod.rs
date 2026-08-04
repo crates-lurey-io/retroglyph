@@ -34,10 +34,20 @@ use core::time::Duration;
 /// Fixed per-frame delta [`TestHarness::step`](crate::testing::TestHarness::step) hands to [`App::update`](crate::app::App::update).
 ///
 /// Headless tests have no wall clock; this exists only so [`Frame::delta`](crate::app::Frame::delta)-driven code (tweens,
-/// [`FrameClock`](crate::frames::FrameClock)) advances instead of stalling.
+/// [`FrameClock`](crate::frames::FrameClock)) advances instead of stalling. 16ms is one frame at
+/// ~60fps; the value is otherwise arbitrary, but it is load-bearing for any test that counts steps
+/// to reach an animation state: a duration-D animation finishes in `ceil(D / 16ms)` steps, so
+/// changing this shifts those step counts.
 pub const STEP_DELTA: Duration = Duration::from_millis(16);
 
-/// Default step budget for [`TestHarness::run`](crate::testing::TestHarness::run).
+/// Default step budget for [`TestHarness::run`](crate::testing::TestHarness::run) before it treats a
+/// non-draining event queue as a stuck app and panics.
+///
+/// Sized to comfortably clear any single queued gesture (a click is two events, the two-frame rule
+/// costs a frame each), with headroom, while still failing fast on an app that never drains its
+/// input. The exact value is picked by feel, not measured; a test with a legitimately long settle
+/// should call [`settle`](crate::testing::TestHarness::settle) with a larger budget rather than
+/// raise this shared default.
 pub const DEFAULT_MAX_STEPS: u32 = 64;
 
 /// Drives an [`App`](crate::app::App) against a [`Headless`](crate::backend::Headless) backend: queues synthetic input, steps frames, and

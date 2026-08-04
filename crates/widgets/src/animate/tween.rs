@@ -34,6 +34,10 @@ pub struct Tween {
 
 impl Tween {
     /// [`duration`](Self::duration)'s default if never overridden: 200ms.
+    ///
+    /// 200ms is the usual "fast UI transition" window: long enough to register as motion rather than a
+    /// snap, short enough that it does not feel sluggish on a hover/focus change. It is a default for
+    /// convenience, not a constraint; any call that cares sets [`duration`](Self::duration) explicitly.
     pub const DEFAULT_DURATION: Duration = Duration::from_millis(200);
 
     /// A new tween animating from `from` to `to` over [`DEFAULT_DURATION`](Self::DEFAULT_DURATION)
