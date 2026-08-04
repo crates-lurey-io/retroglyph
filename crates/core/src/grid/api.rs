@@ -107,19 +107,25 @@ impl Grid {
         grid
     }
 
-    /// Returns the width of the grid.
+    /// The grid's width in cells (columns), not pixels. Valid column indices are `0..width`; a
+    /// `Pos` with `x >= width` is out of bounds (see [`Grid`]'s out-of-bounds drawing rule).
+    ///
+    /// Always at least 1: [`new`](Self::new) refuses a zero width, though [`resize`](Self::resize)
+    /// can later shrink it to 0.
     #[must_use]
     pub const fn width(&self) -> u16 {
         self.width
     }
 
-    /// Returns the height of the grid.
+    /// The grid's height in cells (rows), not pixels. Valid row indices are `0..height`; a `Pos`
+    /// with `y >= height` is out of bounds. May be 0 (an empty grid with no rows).
     #[must_use]
     pub const fn height(&self) -> u16 {
         self.height
     }
 
-    /// Returns the grid's dimensions.
+    /// The grid's dimensions in cells: `Size::new(self.width(), self.height())`. See
+    /// [`width`](Self::width)/[`height`](Self::height) for the per-axis bounds and units.
     #[must_use]
     pub const fn size(&self) -> Size {
         Size::new(self.width, self.height)
