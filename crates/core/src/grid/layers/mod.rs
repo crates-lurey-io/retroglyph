@@ -241,6 +241,20 @@ impl Grid {
             .get_mut(pos)
     }
 
+    /// [`tile_mut`](Self::tile_mut), allocating `layer` if it is not allocated yet.
+    ///
+    /// `None` only when `pos` is out of bounds, which (as in [`set_extra`](Self::set_extra))
+    /// leaves `layer` unallocated rather than allocating a buffer nothing can be written to.
+    /// Shares `tile_mut`'s caveat: this is a raw `&mut Tile`, so it performs none of
+    /// [`put_tile`](Self::put_tile)'s span or overlap repair.
+    pub(crate) fn tile_mut_or_alloc(&mut self, layer: u8, pos: Pos) -> Option<&mut Tile> {
+        if pos.x >= self.width || pos.y >= self.height {
+            return None;
+        }
+        let gpos = to_grixy_pos(pos);
+        self.layer_or_alloc(layer).buf.get_mut(gpos)
+    }
+
     /// Deallocates `layer`, freeing its buffer entirely rather than clearing its content in
     /// place.
     ///

@@ -5,7 +5,7 @@
 //! events"](https://github.com/crates-lurey-io/retroglyph/blob/main/docs/testing.md#driving-headless-with-synthetic-events)
 //! for the full workflow.
 
-use crate::backend::{Cursor, CursorStyle, Input, Output};
+use crate::backend::{Cursor, CursorStyle, DrawCell, Input, Output};
 use crate::color::Color;
 use crate::color::Style;
 use crate::event::{Event, coalesces_with};
@@ -21,7 +21,8 @@ use ixy::HasSize;
 ///
 /// Stores presented content and allows injecting synthetic events.
 pub struct Headless {
-    grid: Grid,
+    layers: Grid,
+    composited: Option<Grid>,
     cursor_visible: bool,
     cursor_pos: Pos,
     cursor_style: CursorStyle,
@@ -33,7 +34,8 @@ impl Headless {
     #[must_use]
     pub fn new(width: u16, height: u16) -> Self {
         Self {
-            grid: Grid::new(width, height),
+            layers: Grid::new(width, height),
+            composited: None,
             cursor_visible: false,
             cursor_pos: Pos::default(),
             cursor_style: CursorStyle::default(),
@@ -41,10 +43,44 @@ impl Headless {
         }
     }
 
-    /// Returns a reference to the grid.
+    /// Returns the composited frame: every layer this backend has been sent, flattened into a
+    /// single layer under the [`TileFlags::EMPTY`](crate::tile::TileFlags) transparency rule
+    /// documented on [`crate::grid`].
+    ///
+    /// For the usual case, a backend left at the default
+    /// [`composites_layers`](Output::composites_layers) of `false`, [`crate::terminal::Terminal::present`]
+    /// has already flattened the frame and only layer 0 is ever written, so this is simply the
+    /// received content. Use [`layer_grid`](Self::layer_grid) to inspect the raw per-layer state
+    /// instead.
     #[must_use]
-    pub const fn grid(&self) -> &Grid {
-        &self.grid
+    pub fn grid(&self) -> &Grid {
+        self.composited.as_ref().unwrap_or(&self.layers)
+    }
+
+    /// Returns the raw, un-composited per-layer state, as received.
+    ///
+    /// Only interesting for a backend wrapping this one that returns `true` from
+    /// [`composites_layers`](Output::composites_layers) and so receives the multi-layer stream:
+    /// this is what lets a test assert which layer a cell arrived on, rather than only what the
+    /// composited frame looks like. Otherwise identical to [`grid`](Self::grid).
+    #[must_use]
+    pub const fn layer_grid(&self) -> &Grid {
+        &self.layers
+    }
+
+    /// Recomputes [`grid`](Self::grid) from [`layer_grid`](Self::layer_grid).
+    ///
+    /// A no-op while only layer 0 has ever been written, which keeps the single-layer path (every
+    /// cell backend) free of both the flatten and the second grid's allocation.
+    fn recomposite(&mut self) {
+        if self.layers.max_layer() == 0 {
+            return;
+        }
+        let size = self.layers.size();
+        let dst = self
+            .composited
+            .get_or_insert_with(|| Grid::new(size.width(), size.height()));
+        self.layers.flatten_into(dst);
     }
 
     /// Returns the cursor visibility.
@@ -88,10 +124,11 @@ impl Headless {
     /// Space cells are rendered as `·` so layout is visible in text diffs.
     #[must_use]
     pub fn format_view(&self) -> String {
+        let grid = self.grid();
         let mut out = String::new();
-        for y in 0..self.grid.height() {
-            for x in 0..self.grid.width() {
-                let cell = &self.grid[Pos::new(x, y)];
+        for y in 0..grid.height() {
+            for x in 0..grid.width() {
+                let cell = &grid[Pos::new(x, y)];
                 let (glyph, is_spacer) = Self::display_glyph(cell);
                 out.push(if is_spacer { ' ' } else { glyph });
             }
@@ -118,11 +155,12 @@ impl Headless {
     /// terminal would render it.
     #[must_use]
     pub fn format_styled(&self) -> String {
+        let grid = self.grid();
         let mut out = String::new();
-        for y in 0..self.grid.height() {
+        for y in 0..grid.height() {
             let mut current: Option<Style> = None;
-            for x in 0..self.grid.width() {
-                let cell = &self.grid[Pos::new(x, y)];
+            for x in 0..grid.width() {
+                let cell = &grid[Pos::new(x, y)];
                 let (glyph, is_spacer) = Self::display_glyph(cell);
                 let style = if is_spacer {
                     Style::default()
@@ -208,19 +246,25 @@ impl Output for Headless {
 
     fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = crate::backend::DrawCell<'a>>,
+        I: Iterator<Item = DrawCell<'a>>,
     {
         for cell in content {
             let pos = cell.pos;
             // A `DrawCell` is already-resolved content from some source grid, replayed here
-            // cell-by-cell at that same source position, not a caller placing a new tile at an
-            // arbitrary destination. `put_tile`'s sanitizing (span role, `WIDE_CHAR`/spacer
-            // synthesis, overlap clearing) exists for the latter; using it here would strip
-            // `SPAN_ANCHOR`/`SPAN_COVERED` from a faithfully-positioned replay (retroglyph#984)
-            // the same way it should from a moved one, so this writes straight through `tile_mut`
-            // instead. `tile_mut` never fails to find layer 0 (always allocated) or an in-bounds
-            // `pos` (sourced from this same grid's own geometry).
-            if let Some(t) = self.grid.tile_mut(0, pos) {
+            // cell-by-cell at that same source position and on that same source layer, not a
+            // caller placing a new tile at an arbitrary destination. `put_tile`'s sanitizing
+            // (span role, `WIDE_CHAR`/spacer synthesis, overlap clearing) exists for the latter;
+            // using it here would strip `SPAN_ANCHOR`/`SPAN_COVERED` from a faithfully-positioned
+            // replay (retroglyph#984) the same way it should from a moved one, so this writes
+            // straight through `tile_mut_or_alloc` instead. That never fails on an in-bounds `pos`
+            // (sourced from this same grid's own geometry).
+            //
+            // Keeping each layer separate rather than folding everything onto layer 0 is what
+            // makes a raw multi-layer stream replay correctly (retroglyph#1084): the stream is a
+            // per-layer diff, so a cell occluded on a higher layer this frame and revealed the
+            // next arrives only as the higher layer's erase, with nothing resent for the layer
+            // below. Only retained per-layer state can composite that back.
+            if let Some(t) = self.layers.tile_mut_or_alloc(cell.layer, pos) {
                 *t = *cell.tile;
             }
             // Rebuild the side-table entry from the parts that arrived, so a headless capture
@@ -229,13 +273,20 @@ impl Output for Headless {
                 grapheme: cell.grapheme.map(alloc::sync::Arc::from),
                 tint: cell.tint,
             };
-            self.grid.set_extra(0, pos.x, pos.y, extra);
+            self.layers.set_extra(cell.layer, pos.x, pos.y, extra);
         }
+        self.recomposite();
         Ok(())
     }
 
     fn resize(&mut self, size: Size) {
-        self.grid.resize(size.width(), size.height());
+        self.layers.resize(size.width(), size.height());
+        // Resized in lockstep rather than dropped: `flatten_into` requires matching dimensions,
+        // and `Grid::resize` preserves the overlapping region, so the composited view survives a
+        // resize the same way a real backend's surface would.
+        if let Some(composited) = self.composited.as_mut() {
+            composited.resize(size.width(), size.height());
+        }
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
@@ -243,11 +294,14 @@ impl Output for Headless {
     }
 
     fn size(&self) -> Size {
-        Size::new(self.grid.width(), self.grid.height())
+        Size::new(self.layers.width(), self.layers.height())
     }
 
     fn clear(&mut self) -> Result<(), Self::Error> {
-        self.grid.clear_all();
+        self.layers.clear_all();
+        if let Some(composited) = self.composited.as_mut() {
+            composited.clear_all();
+        }
         Ok(())
     }
 }
@@ -355,6 +409,119 @@ mod tests {
             }))
         ));
         assert_eq!(backend.poll_event(Duration::ZERO), Some(moved(3)));
+    }
+
+    /// A transparent (untouched, `EMPTY`) cell on a higher layer must not erase opaque content
+    /// below it when the raw multi-layer stream is replayed (retroglyph#1084). `Grid::diff`
+    /// yields every cell of a newly allocated layer, so the blank parts of layer 1 arrive right
+    /// after layer 0's real content.
+    #[test]
+    fn draw_layers_treats_empty_higher_layer_cells_as_transparent() {
+        let mut backend = Headless::new(3, 1);
+        let a = Tile::new('a', Style::default());
+        let hash = Tile::new('#', Style::default());
+        let blank = Tile::default();
+        backend
+            .draw_layers(
+                [
+                    DrawCell::on_layer(0, Pos::new(0, 0), &a),
+                    // Layer 1 arrives in full, blanks included.
+                    DrawCell::on_layer(1, Pos::new(0, 0), &blank),
+                    DrawCell::on_layer(1, Pos::new(1, 0), &blank),
+                    DrawCell::on_layer(1, Pos::new(2, 0), &hash),
+                ]
+                .into_iter(),
+            )
+            .expect("draw_layers failed");
+        assert_eq!(backend.format_view(), "a·#\n");
+    }
+
+    /// The stream is a per-layer *diff*, so revealing a cell sends only the erase on the layer
+    /// that used to occlude it. Nothing is resent for the layer below, which is why `Headless`
+    /// has to retain each layer rather than composite eagerly into one grid.
+    #[test]
+    fn draw_layers_reveals_the_layer_below_when_an_occluder_is_erased() {
+        let mut backend = Headless::new(3, 1);
+        let a = Tile::new('a', Style::default());
+        let hash = Tile::new('#', Style::default());
+        let blank = Tile::default();
+        backend
+            .draw_layers(
+                [
+                    DrawCell::on_layer(0, Pos::new(0, 0), &a),
+                    DrawCell::on_layer(1, Pos::new(0, 0), &hash),
+                ]
+                .into_iter(),
+            )
+            .expect("draw_layers failed");
+        assert_eq!(backend.format_view(), "#··\n", "layer 1 occludes layer 0");
+
+        // Only layer 1's erase is sent: layer 0 is unchanged, so it contributes nothing.
+        backend
+            .draw_layers(core::iter::once(DrawCell::on_layer(
+                1,
+                Pos::new(0, 0),
+                &blank,
+            )))
+            .expect("draw_layers failed");
+        assert_eq!(
+            backend.format_view(),
+            "a··\n",
+            "erasing the occluder must restore layer 0's tile, which was never resent"
+        );
+    }
+
+    /// An explicit space is `EMPTY`-clear and so stays opaque, matching `flatten_into` and the
+    /// transparency model documented on [`crate::grid`].
+    #[test]
+    fn draw_layers_keeps_an_explicit_space_on_a_higher_layer_opaque() {
+        let mut backend = Headless::new(3, 1);
+        let a = Tile::new('a', Style::default());
+        let space = Tile::new(' ', Style::default());
+        backend
+            .draw_layers(
+                [
+                    DrawCell::on_layer(0, Pos::new(0, 0), &a),
+                    DrawCell::on_layer(1, Pos::new(0, 0), &space),
+                ]
+                .into_iter(),
+            )
+            .expect("draw_layers failed");
+        assert_eq!(backend.format_view(), "···\n");
+    }
+
+    /// `layer_grid` reports where a cell actually landed, which the composited `grid` cannot.
+    #[test]
+    fn layer_grid_exposes_the_raw_per_layer_stream() {
+        let mut backend = Headless::new(3, 1);
+        let a = Tile::new('a', Style::default());
+        let hash = Tile::new('#', Style::default());
+        backend
+            .draw_layers(
+                [
+                    DrawCell::on_layer(0, Pos::new(0, 0), &a),
+                    DrawCell::on_layer(1, Pos::new(0, 0), &hash),
+                ]
+                .into_iter(),
+            )
+            .expect("draw_layers failed");
+        let raw = backend.layer_grid();
+        assert_eq!(raw.tile(0, Pos::new(0, 0)).map(Tile::glyph), Some('a'));
+        assert_eq!(raw.tile(1, Pos::new(0, 0)).map(Tile::glyph), Some('#'));
+        assert_eq!(backend.grid()[Pos::new(0, 0)].glyph(), '#');
+    }
+
+    /// The single-layer path (every cell backend, which receives a pre-flattened stream) must
+    /// not allocate the composited grid at all: `grid` is the received content directly.
+    #[test]
+    fn single_layer_stream_skips_the_composited_grid() {
+        let mut backend = Headless::new(3, 1);
+        let a = Tile::new('a', Style::default());
+        backend
+            .draw_layers(core::iter::once(DrawCell::on_layer(0, Pos::new(0, 0), &a)))
+            .expect("draw_layers failed");
+        assert!(backend.composited.is_none());
+        assert_eq!(backend.format_view(), "a··\n");
     }
 
     #[test]
