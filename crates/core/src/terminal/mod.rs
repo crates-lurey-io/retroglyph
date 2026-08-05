@@ -140,9 +140,20 @@ impl<B: Backend> Terminal<B> {
 
     /// Resize both grids to `width` × `height` cells.
     ///
+    /// Unlike [`new`](Self::new), a `width` of 0 does not panic here: a terminal can be resized
+    /// down to zero columns (a minimized or zero-width window) and back up again, and the
+    /// single-layer present path keeps working at zero width. A `height` of 0 is likewise fine.
+    ///
     /// Content within the overlapping region is preserved in the current grid.
     /// The previous grid is cleared so the next [`present`](Self::present) redraws
     /// the entire new surface rather than diffing stale data.
+    ///
+    /// # Panics
+    ///
+    /// A zero-width terminal only supports the single-layer fast path. If any layer above 0 is
+    /// allocated when [`present`](Self::present) runs at zero width, `present` panics while
+    /// building its flatten buffers (see [`Grid::new`]); either avoid multi-layer drawing at zero
+    /// width, or [`drop_layer`](Self::drop_layer) every layer above 0 first.
     pub fn resize(&mut self, width: u16, height: u16) {
         self.current.resize(width, height);
         self.previous.resize(width, height);
@@ -291,6 +302,25 @@ mod tests {
         // Resizing back up afterwards still works.
         term.resize(10, 10);
         assert_eq!(term.size(), Size::new(10, 10));
+    }
+
+    #[test]
+    #[should_panic(expected = "Grid width must be at least 1")]
+    fn test_terminal_present_multi_layer_at_zero_width_panics() {
+        // Pins the `# Panics` case documented on `resize`: once layer 1 is allocated, resizing
+        // down to zero width and presenting hits `present`'s multi-layer flatten branch, which
+        // rebuilds its buffers with `Grid::new` at the current size and panics (retroglyph#1130).
+        //
+        // Allocate layer 1 through `surface()` rather than `draw()`: `draw` also presents, which
+        // swaps `current`/`previous` and clears the new `current`, undoing the allocation before
+        // this test can resize. A `put` on a layer at zero width would also miss: it is clipped
+        // out by the (now zero-width) surface area and never allocates the layer at all.
+        let mut term = Terminal::new(Headless::new(10, 10));
+        term.surface()
+            .on_layer(1)
+            .put((0, 0), 'B', Style::default());
+        term.resize(0, 10);
+        let _ = term.present();
     }
 
     #[test]
