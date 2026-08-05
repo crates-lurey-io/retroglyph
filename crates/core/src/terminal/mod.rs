@@ -316,7 +316,9 @@ mod tests {
         // this test can resize. A `put` on a layer at zero width would also miss: it is clipped
         // out by the (now zero-width) surface area and never allocates the layer at all.
         let mut term = Terminal::new(Headless::new(10, 10));
-        term.surface().on_layer(1).put((0, 0), 'B', Style::default());
+        term.surface()
+            .on_layer(1)
+            .put((0, 0), 'B', Style::default());
         term.resize(0, 10);
         let _ = term.present();
     }
