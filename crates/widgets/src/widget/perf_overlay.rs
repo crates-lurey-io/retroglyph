@@ -160,10 +160,12 @@ impl<const N: usize> Widget for PerfOverlay<'_, N> {
     fn render(&self, surface: &mut Surface<'_>) {
         let area = surface.area();
         // 2 rows go to the top and bottom border, so height 3 is the smallest that leaves a
-        // readout row: a hard bound derived from `inner`'s `area.height() - 2` below. The width
-        // 4 floor (2 border columns + 2 interior) is a conservative minimum, not a hard lower
-        // bound: the interior would still be non-empty at width 3. Picked by eye to avoid
-        // drawing a 1-column-wide readout that clips to nothing useful.
+        // readout row: a hard bound derived from `inner`'s `area.height() - 2` below, matching
+        // the height half of this guard exactly. The width 4 floor is looser than the true hard
+        // bound: `inner`'s `area.width() - 2` only actually underflows and panics at width 1
+        // (verified: width 2 and 3 both render without panicking, just with a squeezed 0- or
+        // 1-column-wide interior). 4 is a conservative floor above that width-2 minimum, picked
+        // by eye to avoid drawing a readout so narrow it clips to nothing useful.
         if area.width() < 4 || area.height() < 3 {
             return;
         }
