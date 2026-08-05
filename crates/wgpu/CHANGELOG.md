@@ -7,6 +7,20 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
+## [0.1.0+retroglyph-wgpu](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-wgpu-v0.0.0-reserved...retroglyph-wgpu-v0.1.0) - 2026-08-05
+
+### Features
+
+- [a07318f](https://github.com/crates-lurey-io/retroglyph/commit/a07318f2cd43689151924daed8b3e26c759fff7a) _(wgpu)_ Add a wgpu rendering backend by `@matanlurey` in [#1177](https://github.com/crates-lurey-io/retroglyph/pull/1177)
+
+### Bug Fixes
+
+- [f7b64e5](https://github.com/crates-lurey-io/retroglyph/commit/f7b64e52ad8503169520ec56547805143288860f) _(workspace)_ Stop a test-only feature of core from gating every publish by `@matanlurey` in [#1182](https://github.com/crates-lurey-io/retroglyph/pull/1182)
+
+### Documentation
+
+- [86a2554](https://github.com/crates-lurey-io/retroglyph/commit/86a25545b9ed6aa761c1d1a4b2328d72cb619e96) _(workspace)_ Settle sRGB sprite compositing as deliberate, not a defect by `@matanlurey` in [#1183](https://github.com/crates-lurey-io/retroglyph/pull/1183)
+
 ## [0.1.0+retroglyph-wgpu] - unreleased
 
 ### Features
