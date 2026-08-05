@@ -7,6 +7,62 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
+## [0.3.0+retroglyph-terminal-wasm](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v0.2.1...retroglyph-terminal-wasm-v0.3.0) - 2026-08-05
+
+### Features
+
+- [2191caa](https://github.com/crates-lurey-io/retroglyph/commit/2191caaf14991ef8e326a4e70b7be9c7aa6e3a61) _(core)_ Mark KeyEvent and MouseEvent as #[non_exhaustive] by `@crates-lurey-io-agent[bot]` in [#1110](https://github.com/crates-lurey-io/retroglyph/pull/1110) [**breaking**]
+
+- [dcc27ab](https://github.com/crates-lurey-io/retroglyph/commit/dcc27abd91e5207cdbcfcda20884f585ef7141b5) _(core)_ Add Output/Cursor/Input backend conformance harness by `@crates-lurey-io-agent[bot]` in [#858](https://github.com/crates-lurey-io/retroglyph/pull/858)
+
+- [7285384](https://github.com/crates-lurey-io/retroglyph/commit/7285384840caf1188e17b92f40d2f911192d7481) _(terminal-wasm)_ Ship app_entry! FFI macro, Terminal<TerminalWasm> resize helper, and key-table.js by `@crates-lurey-io-agent[bot]` in [#752](https://github.com/crates-lurey-io/retroglyph/pull/752)
+
+- [99a96e1](https://github.com/crates-lurey-io/retroglyph/commit/99a96e14cf1714f8c98d5d436cfc85c8e8efb70a) _(workspace)_ Sync Cargo feature docs from Cargo.toml via gen-features by `@matanlurey` in [#881](https://github.com/crates-lurey-io/retroglyph/pull/881)
+
+### Bug Fixes
+
+- [3db8411](https://github.com/crates-lurey-io/retroglyph/commit/3db8411e5b608bb051c3c791ae235a2e783bdc74) _(core)_ Coalesce same-button Drag events like Moved by `@crates-lurey-io-agent[bot]` in [#969](https://github.com/crates-lurey-io/retroglyph/pull/969)
+
+- [65cf452](https://github.com/crates-lurey-io/retroglyph/commit/65cf45213af94f2d8b50ed34d99c7e536bd50f49) _(core,window,terminal-wasm)_ Consolidate Mouse(Moved) coalescing into core::event::coalesces_with by `@crates-lurey-io-agent[bot]` in [#819](https://github.com/crates-lurey-io/retroglyph/pull/819)
+
+- [9ef6697](https://github.com/crates-lurey-io/retroglyph/commit/9ef669728e36a3ecfb900f8595da3749eab227c2) _(crossterm)_ Drop DrawCell::pos outside size() before writing by `@crates-lurey-io-agent[bot]` in [#866](https://github.com/crates-lurey-io/retroglyph/pull/866)
+
+- [6d9955c](https://github.com/crates-lurey-io/retroglyph/commit/6d9955c638570ff713459b0ba24d540a767b64c1) _(crossterm, terminal-wasm)_ Reset tracked cursor on set_cursor_position by `@crates-lurey-io-agent[bot]` in [#785](https://github.com/crates-lurey-io/retroglyph/pull/785)
+
+- [a4e9d5e](https://github.com/crates-lurey-io/retroglyph/commit/a4e9d5ed31d5f34cc99ea48fd59d1b8273b63025) _(terminal-wasm)_ Reset SGR attributes before erasing in clear() by `@crates-lurey-io-agent[bot]` in [#786](https://github.com/crates-lurey-io/retroglyph/pull/786)
+
+- [f7b64e5](https://github.com/crates-lurey-io/retroglyph/commit/f7b64e52ad8503169520ec56547805143288860f) _(workspace)_ Stop a test-only feature of core from gating every publish by `@matanlurey` in [#1182](https://github.com/crates-lurey-io/retroglyph/pull/1182)
+
+### Refactor
+
+- [740ddec](https://github.com/crates-lurey-io/retroglyph/commit/740ddec3085e6d9ac9ea320adeb6dc432f18b68c) _(core)_ Remove all root re-exports from retroglyph-core by `@crates-lurey-io-agent[bot]` in [#1106](https://github.com/crates-lurey-io/retroglyph/pull/1106)
+
+- [bdda080](https://github.com/crates-lurey-io/retroglyph/commit/bdda0804db5c1a26fadd7e779cb769454463e76c) _(core)_ Fold style.rs into color.rs, split color.rs into private submodules by `@crates-lurey-io-agent[bot]` in [#910](https://github.com/crates-lurey-io/retroglyph/pull/910)
+
+- [449f62e](https://github.com/crates-lurey-io/retroglyph/commit/449f62e52bc45d49140ffa47887e335104730558) _(core)_ Add KeyModifiers::from_bits_truncate/from_parts, collapse duplicate mappers by `@crates-lurey-io-agent[bot]` in [#839](https://github.com/crates-lurey-io/retroglyph/pull/839)
+
+- [57ce0e5](https://github.com/crates-lurey-io/retroglyph/commit/57ce0e50b379b099649503d0714ab2d75a2d02b9) _(core, software)_ Bump ixy/grixy to 0.7 and adopt Rect \* Size for cell-to-pixel scaling by `@crates-lurey-io-agent[bot]` in [#880](https://github.com/crates-lurey-io/retroglyph/pull/880)
+
+- [27df867](https://github.com/crates-lurey-io/retroglyph/commit/27df867123f3a8adfc5c770377824c9d59caee01) _(terminal, crossterm, terminal-wasm)_ Sink draw_frame/end_frame/clear_screen/move_cursor_to/set_cursor_visible/s by `@crates-lurey-io-agent[bot]` in [#818](https://github.com/crates-lurey-io/retroglyph/pull/818)
+
+### Documentation
+
+- [c1e04d8](https://github.com/crates-lurey-io/retroglyph/commit/c1e04d8eba676c7b7e79d8afcffe81e78ff77fdf) _(core,terminal,crossterm,window,gl,widgets)_ Remove ' -- ' and em-dash prose tics, drop filler 'deliberately' by `@crates-lurey-io-agent[bot]` in [#744](https://github.com/crates-lurey-io/retroglyph/pull/744)
+
+- [35571e0](https://github.com/crates-lurey-io/retroglyph/commit/35571e0c422b0f81cdaa43b6c583bd2f582d23b4) _(terminal, crossterm, terminal-wasm)_ Dedupe doc-comment boilerplate across sibling methods by `@crates-lurey-io-agent[bot]` in [#740](https://github.com/crates-lurey-io/retroglyph/pull/740)
+
+- [e3cd5ff](https://github.com/crates-lurey-io/retroglyph/commit/e3cd5ff3abec99d398cdc00b49e8005cc496307f) _(workspace)_ Rewrite doc comments that narrate the change that produced them by `@crates-lurey-io-agent[bot]` in [#1174](https://github.com/crates-lurey-io/retroglyph/pull/1174)
+
+- [49d801e](https://github.com/crates-lurey-io/retroglyph/commit/49d801eb4b2b1cba2166d99a379a77af5295f739) _(workspace)_ Add Vale prose-style lint by `@matanlurey` in [#875](https://github.com/crates-lurey-io/retroglyph/pull/875)
+
+- [d8cb194](https://github.com/crates-lurey-io/retroglyph/commit/d8cb1949b0a7066002f5f39fdf22be5fe8052c8d) _(uncategorized)_ Document Cargo features per crate (README + lib.rs) by `@matanlurey` in [#630](https://github.com/crates-lurey-io/retroglyph/pull/630)
+
+### Backend
+
+- [87cf3a5](https://github.com/crates-lurey-io/retroglyph/commit/87cf3a5d6e93e3cde8a06c6dadd81d4eee7356ad) _(uncategorized)_ Cover Cursor::set_cursor_style in Headless and conformance by `@crates-lurey-io-agent[bot]` in [#922](https://github.com/crates-lurey-io/retroglyph/pull/922)
+
+**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v0.2.1...retroglyph-terminal-wasm-v0.3.0
+
 ## [0.2.1+retroglyph-terminal-wasm](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v0.2.0...retroglyph-terminal-wasm-v0.2.1) - 2026-07-31
 
 ### Features

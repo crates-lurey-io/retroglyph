@@ -44,7 +44,7 @@ serde = ["dep:serde", "retroglyph-core/serde"]
 std = ["retroglyph-core/std"]
 
 [dependencies]
-retroglyph-core = { path = "../core", version = "0.5.0", default-features = false }
+retroglyph-core = { path = "../core", version = "0.6.0", default-features = false }
 # `Camera::scroll_by`'s signed delta: `Pos<u16>::saturating_add_signed` takes a `Pos<i32>`, and
 # `retroglyph-core` only re-exports the `Pos<u16>` alias, so this needs the crate directly rather
 # than going through `retroglyph-core`.
