@@ -27,6 +27,12 @@ pub struct ScrollPhysics {
 
 impl ScrollPhysics {
     /// The default scroll physics parameters as a constant.
+    ///
+    /// The spring pair (`stiffness`/`damping`) is close to but deliberately under critical
+    /// damping: critical would be `damping = 2 * sqrt(stiffness) = 2 * sqrt(180) ~= 26.8`, and
+    /// `24.0` sits just below that, so the rubber band settles with one small visible bounce
+    /// rather than a dead stop. `friction` and the `stiffness` magnitude were tuned by feel for a
+    /// row-per-item viewport at ~60fps, not derived; treat them as adjustable.
     pub const DEFAULT: Self = Self {
         friction: 4.5,
         stiffness: 180.0,
@@ -61,6 +67,9 @@ pub struct ScrollState {
     dragging: bool,
     time_accumulator: f32,
     last_pointer_y: f32,
+    /// Recent (time, pointer-y) samples for estimating fling velocity at drag end. Four is enough
+    /// to average out one jittery pointer report while staying inside the ~150ms look-back window
+    /// `calculate_fling_velocity` uses; more just holds staler samples the window discards anyway.
     samples: [Option<(f32, f32)>; 4],
     samples_idx: usize,
     physics: ScrollPhysics,
@@ -186,7 +195,11 @@ impl ScrollState {
         }
 
         let max_offset = max_offset.max(0.0);
-        let max_step = 0.008; // 8ms maximum step size for stable spring integration
+        // 8ms cap so a long frame delta is integrated as several small spring steps instead of
+        // one large one. The explicit spring integration below diverges once a single step grows
+        // past roughly `1 / sqrt(stiffness)` seconds; 8ms stays well inside that for the default
+        // stiffness of 180 and still subdivides a dropped-to-30fps 33ms frame into 5 steps.
+        let max_step = 0.008;
         let mut remaining = dt_secs;
 
         while remaining > 0.0 {
@@ -198,7 +211,9 @@ impl ScrollState {
                 self.velocity *= retroglyph_core::math::exp(-self.physics.friction * step);
                 self.offset += self.velocity * step;
 
-                // Stop moving if velocity becomes tiny
+                // Stop moving once velocity drops below 0.05 items/second: below this the
+                // remaining motion is imperceptible per frame, so snapping to zero avoids an
+                // indefinite exponential tail that never quite reaches exactly 0.0.
                 if self.velocity.abs() < 0.05 {
                     self.velocity = 0.0;
                 }
@@ -214,7 +229,10 @@ impl ScrollState {
                 self.velocity += acceleration * step;
                 self.offset += self.velocity * step;
 
-                // Snap when close enough to target and nearly stopped
+                // Snap to target once within 0.01 items and slower than 0.2 items/second: both
+                // thresholds were picked by feel as "close enough to be indistinguishable", not
+                // derived; the pair together avoids a spring that oscillates forever chasing an
+                // exact zero.
                 if (self.offset - target).abs() < 0.01 && self.velocity.abs() < 0.2 {
                     self.offset = target;
                     self.velocity = 0.0;
@@ -281,6 +299,8 @@ impl ScrollState {
     /// Apply a scroll wheel impulse directly to velocity.
     pub fn scroll_by_wheel(&mut self, delta: f32) {
         if !self.dragging {
+            // One wheel notch -> 12 items/second of fling; paired with `friction: 4.5` this coasts
+            // a notch roughly two-to-three rows before stopping. Tuned by feel, not derived.
             self.velocity += delta * 12.0;
         }
     }
@@ -336,8 +356,8 @@ impl ScrollState {
     fn calculate_fling_velocity(&self) -> f32 {
         let mut valid = [None; 4];
         let mut count = 0;
-        for i in 0..4 {
-            let idx = (self.samples_idx + i) % 4;
+        for i in 0..self.samples.len() {
+            let idx = (self.samples_idx + i) % self.samples.len();
             if let Some(sample) = self.samples[idx] {
                 valid[count] = Some(sample);
                 count += 1;
@@ -352,7 +372,9 @@ impl ScrollState {
         // above (which fills `valid[0..count]` in order) and is always `Some`.
         let newest = valid[count - 1].expect("valid[count - 1] is populated for count >= 2");
 
-        // If latest sample is older than 100ms, drag paused (no fling)
+        // If the latest sample is older than 100ms, the pointer stopped moving before the drag
+        // ended (drag paused, not a fling): 100ms is long enough that a genuinely flinging finger
+        // would still be producing fresh samples, but short enough to reject a deliberate pause.
         if self.time_accumulator - newest.0 > 0.1 {
             return 0.0;
         }
@@ -362,6 +384,9 @@ impl ScrollState {
         for i in (0..count - 1).rev() {
             // `i` ranges over `0..count - 1`, all populated by the loop above.
             let sample = valid[i].expect("valid[i] is populated for i < count");
+            // 150ms look-back: recent enough to reflect the finger's final motion, long enough
+            // to smooth over one or two skipped/jittery pointer reports. Widening it would average
+            // in motion from earlier in the drag that no longer reflects the release speed.
             if newest.0 - sample.0 <= 0.15 {
                 oldest = sample;
             } else {
@@ -370,6 +395,8 @@ impl ScrollState {
         }
 
         let dt = newest.0 - oldest.0;
+        // Guard against dividing by a near-zero time delta, which would produce a huge spurious
+        // velocity from two samples that are really just one pointer report apart.
         if dt < 0.01 {
             return 0.0;
         }
