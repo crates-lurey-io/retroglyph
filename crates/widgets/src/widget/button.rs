@@ -182,6 +182,7 @@ impl<Id> InteractiveWidget<Id> for Button<'_> {
         let local_area = surface.area().at_origin();
         fill_rect(surface, local_area, ' ', style);
 
+        // Center row, biased toward the bottom for even heights (integer division floors).
         let y = height / 2;
         let _ = draw_clipped(surface, (0, y), width, self.label, Align::Center, style);
     }

@@ -205,6 +205,8 @@ impl Tabs<'_> {
             if let Some(divider) = self.divider
                 && index + 1 < self.titles.len()
             {
+                // Divider column: floor of half the inter-tab gap, so it sits just left of center
+                // for an even `column_spacing`.
                 let mid = x + text_width + self.column_spacing / 2;
                 if mid < area.width() {
                     surface.put((mid, 0), divider, Style::new());
