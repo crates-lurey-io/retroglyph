@@ -1,4 +1,33 @@
-//! [`Ui`]: a per-frame context pairing a [`Surface`] with an [`Interaction`].
+//! [`Ui`]: one frame's [`Surface`] and [`Interaction`] paired, so a call site names an `area`/`id`
+//! once and gets both hit-testing and drawing from it.
+//!
+//! You rarely build a `Ui` yourself. [`Interaction::frame`](crate::Interaction::frame) runs one
+//! frame's `begin_frame`/`end_frame` lifecycle and hands its closure a ready `Ui`; [`Ui::new`] is
+//! the escape hatch for callers driving that lifecycle by hand. From there [`Ui::show`] hit-tests
+//! and draws an [`InteractiveWidget`] from one `area`/`id`, [`Ui::draw`]
+//! renders a plain [`Widget`], and [`Ui::vertical`]/[`Ui::horizontal`] open a cursor
+//! that allocates areas for [`show_sized`](Ui::show_sized)/[`draw_sized`](Ui::draw_sized) so a call
+//! site never computes a child `Rect` by hand.
+//!
+//! ```
+//! use retroglyph_core::backend::Headless;
+//! use retroglyph_core::grid::Rect;
+//! use retroglyph_core::terminal::Terminal;
+//! use retroglyph_widgets::{Interaction, Sense};
+//!
+//! #[derive(Clone, Copy, PartialEq, Eq)]
+//! enum WidgetId {
+//!     Save,
+//! }
+//!
+//! let mut term = Terminal::new(Headless::new(20, 10));
+//! let mut interaction = Interaction::<WidgetId>::new();
+//! let clicked = interaction.frame(&mut term.surface(), |ui| {
+//!     let area = Rect::new(0, 0, 10, 1);
+//!     ui.interaction().interact(area, WidgetId::Save, Sense::click()).clicked()
+//! });
+//! assert!(!clicked); // nothing clicked yet: no input was fed in
+//! ```
 
 use retroglyph_core::grid::Rect;
 use retroglyph_core::surface::Surface;
@@ -106,6 +135,9 @@ pub struct Ui<'s, 'g, Id> {
 
 impl<'s, 'g, Id> Ui<'s, 'g, Id> {
     /// A `Ui` pairing `surface` with `interaction` for one frame, enabled.
+    ///
+    /// The low-level constructor; prefer [`Interaction::frame`](crate::Interaction::frame), which
+    /// builds this and runs the frame lifecycle for you.
     #[must_use]
     pub const fn new(surface: &'s mut Surface<'g>, interaction: &'s mut Interaction<Id>) -> Self {
         Self {
