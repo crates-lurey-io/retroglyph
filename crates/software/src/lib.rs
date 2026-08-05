@@ -270,10 +270,21 @@ impl SoftwareRenderer {
         }
     }
 
-    /// Returns a slice of the rendered pixel buffer (`0x00RRGGBB` format).
+    /// The rendered pixel buffer, row-major, one `u32` per physical pixel.
     ///
-    /// The buffer length is `cols * (glyph_width * scale) * rows * (glyph_height * scale)`.
-    /// Each `u32` is a packed RGB pixel with the top byte unused.
+    /// Each pixel is `0x00RRGGBB`: eight bits per channel with the top byte unused (not an alpha
+    /// channel, and not premultiplied). Index a pixel as `y * width + x`, where `width = cols *
+    /// glyph_width * scale` and the buffer length is `width * rows * glyph_height * scale`. Both
+    /// dimensions come from this renderer's
+    /// [`CellGeometry`], so prefer deriving them from
+    /// [`surface_size`](CellGeometry::surface_size) over recomputing the
+    /// product by hand.
+    ///
+    /// The contents are whatever the last draw call left behind: [`Output::draw_layers`] writes
+    /// directly into this buffer rather than through an intermediate frame, so calling this
+    /// between draw calls (before the frame is complete) yields a partially drawn buffer rather
+    /// than an error. A [`resize`](Output::resize) reallocates the buffer, so the returned
+    /// slice's contents and length are only valid until the next resize.
     ///
     /// This is always available: there is no `Option` wrapper because
     /// `SoftwareRenderer` is guaranteed to have an active rendering context.
