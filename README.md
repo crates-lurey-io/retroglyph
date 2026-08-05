@@ -93,9 +93,9 @@ Want a native window or a browser tab instead of a real terminal? See
 
 ## Examples
 
-`examples/examples/*.rs` has 21 runnable examples, from a minimal `01_hello_world` up to
-`21_text_input`, with `15_outpost_dashboard` a flagship dashboard exercising animation, touch-sized
-controls, and a responsive layout. Every example runs on every backend unchanged:
+`examples/examples/*.rs` has 22 runnable examples, from a minimal `01_hello_world` up to
+`22_random_tiles`, with `15_outpost_dashboard` a flagship dashboard exercising animation,
+touch-sized controls, and a responsive layout. Every example runs on every backend unchanged:
 
 ```sh
 cargo run --example 12_dungeon_scroll --features crossterm  # real terminal
