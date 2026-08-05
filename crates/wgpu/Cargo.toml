@@ -41,18 +41,20 @@ retroglyph-core = { path = "../core", version = "0.5.0", default-features = fals
 # The glyph source (BitmapFont + unscii16) lives in retroglyph-window's winit-free `font` module,
 # which this crate already depends on for `Presenter`. `default-font` forwards to window's feature.
 retroglyph-window = { path = "../window", version = "0.4.1", default-features = false }
-# `default-features = false` drops two things this backend deliberately does not want:
+# `default-features = false` drops two things this crate has no code for today:
 #
-# - `webgpu` (and the `web` stack it pulls in: wasm-bindgen, js-sys, web-sys). `Presenter::
-#   init_surface` is synchronous, and `request_adapter`/`request_device` can only be driven to
-#   completion by blocking, which a browser main thread cannot do. See the crate docs' "Platform
-#   support" section.
+# - `webgpu` (and the `web` stack it pulls in: wasm-bindgen, js-sys, web-sys). Turning it on would
+#   compile, but nothing here drives the async device request a browser needs; the crate docs'
+#   "Platform support" section describes the deferred-init design that would.
 # - `gles`. OpenGL ES/WebGL2 is what `retroglyph-gl` already covers, from a codebase that targets
 #   the GL feature floor directly; routing it through wgpu's translation layer would add a second
 #   way to reach the same drivers without adding a platform.
 #
 # What is left is the modern explicit-API set: Vulkan (Linux/Android/Windows), Metal (Apple), and
-# D3D12 (Windows). `wgsl` is naga's WGSL front end, required to compile `src/*.wgsl` at all.
+# D3D12 (Windows). Naming all three costs nothing on any one target: `wgpu-hal` gates each backend
+# to the platforms it runs on, so a macOS build compiles the Metal stack and no Vulkan, and a Linux
+# build compiles `ash` and no Metal. `wgsl` is naga's WGSL front end, required to compile
+# `src/*.wgsl` at all.
 wgpu = { version = "30", default-features = false, features = [
   "std",
   "wgsl",

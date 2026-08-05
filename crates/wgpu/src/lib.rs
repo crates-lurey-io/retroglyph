@@ -47,22 +47,40 @@
 //! | | `retroglyph-wgpu` | `retroglyph-gl` |
 //! | --- | --- | --- |
 //! | APIs | Vulkan, Metal, D3D12 | OpenGL 3.3, WebGL2 |
-//! | Browser | no (see [Platform support](#platform-support)) | yes, WebGL2 |
+//! | Browser | not yet (see [Platform support](#platform-support)) | yes, WebGL2 |
 //! | `unsafe` in the backend | none | unavoidable (every GL call) |
+//! | Direct dependencies, transitively | 85 crates | 54 crates |
+//! | Clean debug build of the crate | 15s | 7s |
 //! | Offscreen render tests | every platform | Linux/EGL only |
-//! | Dependency weight | heavier (naga, per-API HALs) | lighter (`glow` + `glutin`) |
 //!
-//! Pick `retroglyph-gl` for a browser target or the smallest dependency tree; pick this one for
-//! validation-layer diagnostics, a modern driver path, and a backend with no `unsafe` in it.
+//! The dependency and build-time figures are for one host (macOS, `--all-features`); the ratio is
+//! what matters, not the absolute numbers. The difference is `naga` (the shader front end that
+//! compiles this crate's WGSL) plus `wgpu-core` (the validation and state-tracking layer that
+//! makes the API safe), not the three backend APIs: only one hardware abstraction layer compiles
+//! per platform, since `wgpu-hal`'s backends are target-gated. A macOS build pulls the Metal
+//! stack and no Vulkan; a Linux build pulls `ash` and no Metal.
+//!
+//! Pick `retroglyph-gl` for a browser target today, or when a smaller dependency tree matters more
+//! than the rest. Pick this one for validation-layer diagnostics, a modern driver path, and a
+//! backend with no `unsafe` in it.
 //!
 //! # Platform support
 //!
-//! Native only. `wgpu`'s browser path (WebGPU) needs `request_adapter` and `request_device` driven
-//! to completion asynchronously, and [`Presenter::init_surface`] is synchronous, which a browser's
-//! main thread cannot bridge: it has no way to block. `retroglyph-gl` covers the browser through
-//! WebGL2, whose context creation is synchronous, so nothing is lost by this crate not trying.
-//! The `webgpu` and `gles` wgpu features are therefore both off (see this crate's `Cargo.toml` for
-//! the full reasoning).
+//! Native today. The browser is not supported yet, and the obstacle is this crate's, not `wgpu`'s:
+//! WebGPU is a browser API and `wgpu` targets it directly.
+//!
+//! What blocks it is that [`Presenter::init_surface`] is synchronous while `request_adapter` and
+//! `request_device` are not, and a browser's main thread has no way to block on a future. The way
+//! around that is to defer rather than block: `Instance::create_surface` *is* synchronous, so
+//! `init_surface` can create the surface from the canvas, spawn the adapter and device request,
+//! and return; [`present`](Presenter::present) already no-ops until a device exists, so the first
+//! few frames would simply be blank until it lands. That is a real design with real costs (a
+//! shared-state cell, blank startup frames, and a wasm-only dependency set), and it is not
+//! implemented here.
+//!
+//! `retroglyph-gl` covers the browser through WebGL2, whose context creation is synchronous, so
+//! there is a working browser backend either way. The `webgpu` and `gles` wgpu features are off
+//! (see this crate's `Cargo.toml`).
 //!
 //! # Environment variables
 //!
@@ -131,9 +149,9 @@ pub use retroglyph_window::font::{self as font, BitmapFont, FontChain};
 use gpu::{GpuContext, WindowSurface};
 use instance::{Cell, FLAG_HAS_BG, FLAG_HAS_GLYPH};
 use renderer::{GpuResources, LayerRange};
-use retroglyph_core::HasSize;
 use retroglyph_core::backend::{DrawCell, Output};
 use retroglyph_core::color::Color;
+use retroglyph_core::grid::HasSize;
 use retroglyph_core::grid::Size;
 use retroglyph_core::tile::Tile;
 use retroglyph_window::atlas::GlyphAtlas;
@@ -1244,8 +1262,8 @@ mod sprite_layer_tests {
 #[cfg(all(test, feature = "default-font"))]
 mod conformance {
     use crate::{Cell, WgpuBackendBuilder, WgpuRenderer};
-    use retroglyph_core::HasSize as _;
     use retroglyph_core::backend::{DrawCell, Output};
+    use retroglyph_core::grid::HasSize as _;
     use retroglyph_core::grid::Size;
     use retroglyph_core::testing::conformance::{Observable, fnv1a};
 
