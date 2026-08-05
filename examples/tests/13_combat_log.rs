@@ -19,12 +19,11 @@ mod support;
 mod combat_log;
 
 use combat_log::CombatLog;
-use retroglyph_core::app::Frame;
-use retroglyph_core::backend::Headless;
 use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
 use retroglyph_core::grid::Pos;
-use retroglyph_core::terminal::Terminal;
+use retroglyph_core::testing::TestHarness;
 use retroglyph_examples::{Example, HEADLESS_FRAME_DELTA};
+use support::TestApp;
 
 /// A plain, unmodified key press.
 const fn key(code: KeyCode) -> Event {
@@ -32,30 +31,23 @@ const fn key(code: KeyCode) -> Event {
 }
 
 /// Drives `E` through one synthetic key event per tick, returning each frame's
-/// [`Headless::format_view`] text.
+/// [`Headless::format_view`](retroglyph_core::backend::Headless::format_view) text.
 ///
-/// Not migrated to [`TestHarness`](retroglyph_core::testing::TestHarness) (retroglyph#1001):
-/// `CombatLog::draw` integrates `ScrollState`'s wheel momentum against `frame.delta`, calibrated
-/// against [`HEADLESS_FRAME_DELTA`]'s 100ms (see its own doc comment), not `TestHarness::step`'s
-/// fixed 16ms -- `mouse_wheel_scrolls_the_log_with_momentum` below counts idle frames to prove the
-/// physics settle, and that count is only meaningful at the delta it was tuned against.
+/// `with_step_delta(HEADLESS_FRAME_DELTA)` (retroglyph#1001): `CombatLog::draw` integrates
+/// `ScrollState`'s wheel momentum against `frame.delta`, calibrated against
+/// [`HEADLESS_FRAME_DELTA`]'s 100ms (see its own doc comment). The
+/// `mouse_wheel_scrolls_the_log_with_momentum` test below counts idle frames to prove the physics
+/// settle, and that count is only meaningful at the delta it was tuned against, so this matches
+/// it rather than taking [`TestHarness::step`]'s default 16ms.
 fn drive<E: Example>(events: &[Event]) -> String {
-    let backend = Headless::new(50, 25);
-    let mut term = Terminal::new(backend);
-    let mut state = E::init(&mut term);
+    let mut harness = TestHarness::new(50, 25).with_step_delta(HEADLESS_FRAME_DELTA);
+    let mut app = TestApp(E::init(harness.term_mut()));
 
     let mut views = Vec::new();
-    for (i, event) in events.iter().enumerate() {
-        term.backend_mut().push_event(event.clone());
-        let frame = Frame {
-            delta: HEADLESS_FRAME_DELTA,
-            frame: i as u64,
-        };
-        if !state.tick(&mut term, &frame) {
-            break;
-        }
-        term.present().ok();
-        views.push(term.backend().format_view());
+    for event in events {
+        harness.push_event(event.clone());
+        harness.step(&mut app);
+        views.push(harness.view());
     }
     views.join("\n--- frame ---\n")
 }
