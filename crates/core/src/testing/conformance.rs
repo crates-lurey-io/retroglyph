@@ -3,8 +3,8 @@
 //! Each of the five backends in this workspace answers the same handful of obligations
 //! ([`Output::clear`](crate::backend::Output::clear)/[`Output::resize`](crate::backend::Output::resize) resetting internal state, out-of-range [`DrawCell`](crate::backend::DrawCell)
 //! positions, cursor tracking staying in sync with external writes, [`Input::push_event`](crate::backend::Input::push_event)
-//! coalescing consecutive `Mouse(Moved)` events) independently, and nothing previously checked
-//! that the answers agreed. This module is that check: [`assert_output_contract`],
+//! coalescing consecutive `Mouse(Moved)` events) independently. This module is what holds
+//! those independent answers to a single agreed contract: [`assert_output_contract`],
 //! [`assert_cursor_contract`], and [`assert_input_contract`] each drive a backend through one
 //! facet's obligations and panic on the first violation, so a backend crate wires one of them
 //! into a `#[test]` and gets every future regression in that facet for free.

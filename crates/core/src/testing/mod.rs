@@ -3,9 +3,10 @@
 //! Also home to [`conformance`](crate::testing::conformance), the cross-backend harness that
 //! tests a raw [`Backend`](crate::backend::Backend) facet against its own trait contract.
 //!
-//! [`TestHarness`](crate::testing::TestHarness) exists so every consumer stops rewriting the same loop by hand
-//! (retroglyph#612): `Headless` gives a test a backend and [`Headless::push_event`](crate::backend::Headless::push_event); everything
-//! between that and an assertion used to be the consumer's own problem. Feature-gated
+//! [`TestHarness`](crate::testing::TestHarness) owns the drive-until-settled loop that a test
+//! would otherwise hand-roll around `Headless` (retroglyph#612): `Headless` supplies the backend
+//! and [`Headless::push_event`](crate::backend::Headless::push_event), and the harness supplies
+//! everything between that and the assertion. Feature-gated
 //! (`testing`), no effect on release builds. Not a UI-testing framework: no assertions, no
 //! matchers, no fixtures, just the loop and the input synthesis that otherwise gets rewritten per
 //! consumer. See ["Driving an `App` with `TestHarness`"](https://github.com/crates-lurey-io/retroglyph/blob/main/docs/testing.md#driving-an-app-with-testharness)

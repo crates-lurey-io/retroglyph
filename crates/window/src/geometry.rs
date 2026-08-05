@@ -4,12 +4,12 @@ use retroglyph_core::grid::Pos;
 
 /// The pixel geometry of a fixed cell grid: a glyph size and an integer scale.
 ///
-/// [`Presenter::cell_size`](crate::Presenter::cell_size)'s contract (physical pixels,
-/// `glyph x scale`, never DPI-auto-scaled) had no code embodiment: each graphical backend
-/// re-derived `glyph_w * scale` (and `cols * cell_w` for the surface) on its own, in slightly
-/// different integer types, so the shared rule could drift. This is that rule as one small,
-/// `const`, testable value type. A backend stores one and returns [`cell_size`](Self::cell_size)
-/// from `Presenter::cell_size`.
+/// The single code embodiment of [`Presenter::cell_size`](crate::Presenter::cell_size)'s
+/// contract: physical pixels, `glyph x scale`, never DPI-auto-scaled.
+///
+/// Every graphical backend stores one of these and returns [`cell_size`](Self::cell_size) from
+/// `Presenter::cell_size`, rather than re-deriving `glyph_w * scale` (and `cols * cell_w` for the
+/// surface) per backend in its own integer types, which lets the shared rule drift.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CellGeometry {
     /// Glyph width in unscaled font pixels.

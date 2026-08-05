@@ -469,8 +469,8 @@ mod tests {
     /// pushed into the backend *after* the driver would have already woken from the idle wait
     /// (`Headless::poll_event` ignores its timeout and returns immediately either way), so this
     /// mainly documents the contract at the type level: `event_driven: false` is accepted and the
-    /// loop still terminates, i.e. the non-blocking `Idle` shape from before this change remains
-    /// available for animated apps. Real blocking behavior (`event_driven: true` actually parking
+    /// loop still terminates, i.e. the non-blocking `Idle` shape is a supported option for
+    /// animated apps. Real blocking behavior (`event_driven: true` actually parking
     /// the thread) can only be observed on a backend that genuinely blocks, like crossterm --
     /// see that crate's own tests.
     struct IdleThenExit {

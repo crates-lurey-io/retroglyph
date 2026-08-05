@@ -760,10 +760,8 @@ mod tests {
     }
 
     /// `BlendMode::Linear` at `t == 0.0` keeps the destination and at `t == 1.0` uses the source,
-    /// matching `blit_alpha`'s doc comment (this direction was actually inverted before this
-    /// change: the underlying `gem::Mix` call had `src`/`dst` swapped, so `t == 0.0` used
-    /// to return `src` and `t == 1.0` returned `dst`. No prior tests covered `blit_alpha`, so
-    /// this had shipped unnoticed).
+    /// matching `blit_alpha`'s doc comment. The underlying `gem::Mix` call takes its arguments in
+    /// the opposite order, so this pins the direction against a silent `src`/`dst` swap.
     #[test]
     fn test_grid_blit_alpha_linear_direction() {
         let mut src = Grid::new(1, 1);
