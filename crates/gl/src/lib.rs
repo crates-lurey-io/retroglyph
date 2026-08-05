@@ -78,9 +78,7 @@
 
 pub mod config;
 
-mod atlas;
 mod error;
-mod glyphs;
 mod renderer;
 mod shaders;
 #[cfg(feature = "tilesets")]
@@ -118,7 +116,6 @@ pub use error::SurfaceError;
 pub use retroglyph_window::font::{self as font, BitmapFont, FontChain};
 
 use context::GlContext;
-use glyphs::GlyphCache;
 use renderer::{FLAG_HAS_BG, FLAG_HAS_GLYPH, GlResources, Instance};
 use retroglyph_core::backend::DrawCell;
 use retroglyph_core::backend::Output;
@@ -126,6 +123,7 @@ use retroglyph_core::color::Color;
 use retroglyph_core::grid::HasSize;
 use retroglyph_core::grid::Size;
 use retroglyph_core::tile::Tile;
+use retroglyph_window::atlas::GlyphAtlas;
 use retroglyph_window::palette::{DEFAULT_BG, DEFAULT_FG};
 #[cfg(feature = "tilesets")]
 use retroglyph_window::sprite_cache::SpriteTint;
@@ -157,7 +155,7 @@ struct ReadmeDoctests;
 /// exists, `present` uploads changed cells and issues the single instanced draw call.
 pub struct GlRenderer {
     /// Character-to-atlas-slot map for the bitmap font (grid-packed, issue #367).
-    glyphs: GlyphCache,
+    glyphs: GlyphAtlas,
     cols: u16,
     rows: u16,
     /// Cell/surface pixel geometry (glyph size x scale); the single source of the `cell_size`
@@ -206,7 +204,7 @@ impl GlRenderer {
     /// Glyph cells wider or taller than 255 unscaled pixels are clamped to 255 (the
     /// [`CellGeometry`] limit).
     #[allow(clippy::cast_possible_truncation)]
-    pub(crate) fn new(glyphs: GlyphCache, cols: u16, rows: u16, scale: u16) -> Self {
+    pub(crate) fn new(glyphs: GlyphAtlas, cols: u16, rows: u16, scale: u16) -> Self {
         let (cell_w, cell_h) = glyphs.cell_size();
         let geometry = CellGeometry::new(cell_w.min(255) as u8, cell_h.min(255) as u8, scale);
         let space_glyph = glyphs.space_slot();
@@ -306,7 +304,7 @@ impl GlRenderer {
         flavor: GlslFlavor,
     ) -> Result<GlResources, SurfaceError> {
         let (w, h) = self.surface_size;
-        let atlas = self.glyphs.initial_atlas();
+        let atlas = self.glyphs.data();
         #[cfg_attr(not(feature = "tilesets"), allow(unused_mut))]
         let mut res = GlResources::new(gl, flavor, &atlas, self.cell_count())?;
         res.upload(gl, &self.layers[0]);

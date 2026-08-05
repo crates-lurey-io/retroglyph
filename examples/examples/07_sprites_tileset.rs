@@ -1,10 +1,10 @@
 //! 07: Sprites (tileset)
 //!
-//! `retroglyph-software`'s and `retroglyph-gl`'s `tilesets` feature: a PNG sprite sheet
-//! (`assets/tileset.png`, 4 tiles of 8x16 pixels, matching the embedded default font's own cell
-//! size exactly, so no custom grid or scale is needed) loaded via
-//! [`TilesetOptions`](retroglyph_window::tileset::TilesetOptions) and registered on both
-//! graphical backends' builders. Each tile is keyed to an ASCII glyph via
+//! `retroglyph-software`'s, `retroglyph-gl`'s, and `retroglyph-wgpu`'s `tilesets` feature: a PNG
+//! sprite sheet (`assets/tileset.png`, 4 tiles of 8x16 pixels, matching the embedded default
+//! font's own cell size exactly, so no custom grid or scale is needed) loaded via
+//! [`TilesetOptions`](retroglyph_window::tileset::TilesetOptions) and registered on every
+//! graphical backend's builder. Each tile is keyed to an ASCII glyph via
 //! [`Codepage::Custom`](retroglyph_window::tileset::Codepage::Custom): `#` (wall), `.` (floor),
 //! `@` (player), `$` (coin). The same glyph that looks up a sprite on a pixel backend is also
 //! the correct human-readable ASCII fallback everywhere else, so terminal and headless backends
@@ -18,7 +18,7 @@
 //! carries its own text fallback:
 //!
 //! ```text
-//! [==]        one 4x2 chest sprite on the software and GL backends,
+//! [==]        one 4x2 chest sprite on the software, GL, and wgpu backends,
 //! |__|        these eight glyphs on a terminal
 //! ```
 //!
@@ -59,6 +59,7 @@
 //! cargo run --example 07_sprites_tileset --features crossterm
 //! cargo run --example 07_sprites_tileset --features software
 //! cargo run --example 07_sprites_tileset --features gl
+//! cargo run --example 07_sprites_tileset --features wgpu
 //! cargo run --example 07_sprites_tileset  # headless fallback, prints a few frames to stdout
 //! ```
 //!
@@ -310,15 +311,16 @@ impl SpritesTileset {
 
 /// The example's two sprite sheets, as backend-agnostic options.
 ///
-/// Shared verbatim by [`SpritesTileset::configure_software`] and
-/// [`SpritesTileset::configure_gl`]: the two builders are different types, but the tilesets they
-/// register are the same ones, so they are described once here.
+/// Shared verbatim by [`SpritesTileset::configure_software`],
+/// [`SpritesTileset::configure_gl`], and [`SpritesTileset::configure_wgpu`]: the three builders
+/// are different types, but the tilesets they register are the same ones, so they are described
+/// once here.
 ///
 /// The first sheet is the one-cell room tiles; the second is the chest, a single 32x32 sprite
 /// that covers the 4x2 cells [`CHEST_ART`] spans. Nothing in the tileset says how many cells a
 /// sprite occupies -- that is declared per draw call, by
 /// [`Surface::put_span`](retroglyph_core::surface::Surface::put_span).
-#[cfg(any(feature = "software", feature = "gl"))]
+#[cfg(any(feature = "software", feature = "gl", feature = "wgpu"))]
 fn tilesets() -> [retroglyph_window::tileset::TilesetOptions; 2] {
     use retroglyph_window::tileset::{Codepage, TilesetOptions};
 
@@ -364,6 +366,17 @@ impl Example for SpritesTileset {
         tilesets()
             .into_iter()
             .fold(builder, retroglyph_gl::GlBackendBuilder::tileset)
+    }
+
+    /// Registers the same sheets on the wgpu backend, so the native Vulkan/Metal/D3D12 build
+    /// renders sprites rather than falling back to bitmap glyphs.
+    #[cfg(feature = "wgpu")]
+    fn configure_wgpu(
+        builder: retroglyph_wgpu::WgpuBackendBuilder,
+    ) -> retroglyph_wgpu::WgpuBackendBuilder {
+        tilesets()
+            .into_iter()
+            .fold(builder, retroglyph_wgpu::WgpuBackendBuilder::tileset)
     }
 
     fn tick<B: Backend>(

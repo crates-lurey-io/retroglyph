@@ -1141,8 +1141,10 @@ impl Example for OutpostDashboard {
     // instead of rendering at a fixed 50x25 grid wherever it lands on the page: this is a
     // flagship, app-like dashboard meant to be the whole page (see the module doc comment's
     // "genuine responsiveness" bullet), and a fixed small grid leaves most of a phone screen
-    // black -- see `Example::fill_viewport`.
-    #[cfg(any(feature = "software", feature = "gl"))]
+    // black -- see `Example::fill_viewport`. Has no effect on `wgpu` (no browser variant here, so no viewport to
+    // fill), but the override still needs to cover it or the trait's own default (`false`) would
+    // apply there instead, which is harmless here but would be an inconsistency to explain away.
+    #[cfg(any(feature = "software", feature = "gl", feature = "wgpu"))]
     fn fill_viewport() -> bool {
         true
     }

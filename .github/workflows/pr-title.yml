@@ -46,6 +46,7 @@ jobs:
             terminal-wasm
             software
             gl
+            wgpu
             window
             widgets
             examples

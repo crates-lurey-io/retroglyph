@@ -44,6 +44,7 @@ dependents, but a leaf-crate change bumps only that crate.
 | [`-window`](crates/window)               | Shared `winit` windowing layer for windowed backends                      | [![retroglyph-window version](https://img.shields.io/crates/v/retroglyph-window.svg)](https://docs.rs/retroglyph-window)                      |
 | [`-software`](crates/software)           | Pixel backend via `softbuffer`: native window or browser canvas           | [![retroglyph-software version](https://img.shields.io/crates/v/retroglyph-software.svg)](https://docs.rs/retroglyph-software)                |
 | [`-gl`](crates/gl)                       | GPU backend via `glow`: OpenGL 3.3 (native) and WebGL2 (wasm)             | [![retroglyph-gl version](https://img.shields.io/crates/v/retroglyph-gl.svg)](https://docs.rs/retroglyph-gl)                                  |
+| [`-wgpu`](crates/wgpu)                   | GPU backend via `wgpu`: Vulkan, Metal, and D3D12 (native)                 | [![retroglyph-wgpu version](https://img.shields.io/crates/v/retroglyph-wgpu.svg)](https://docs.rs/retroglyph-wgpu)                            |
 | [`-widgets`](crates/widgets)             | Builder-struct widgets: panels, gauges, tables, sparklines, layout        | [![retroglyph-widgets version](https://img.shields.io/crates/v/retroglyph-widgets.svg)](https://docs.rs/retroglyph-widgets)                   |
 
 See [`crates/core`](crates/core) for the Grid API, double buffering, stateful drawing, text

@@ -3106,8 +3106,10 @@ impl Example for Overworld {
 
     // Fill the whole browser viewport on the wasm backends (software Canvas2D and GL WebGL2)
     // instead of the fixed 50x25 grid: this is a pannable overworld that should use every cell
-    // the viewport offers -- see `Example::fill_viewport`.
-    #[cfg(any(feature = "software", feature = "gl"))]
+    // the viewport offers -- see `Example::fill_viewport`. Has no effect on `wgpu` (no browser variant here,
+    // no viewport to fill), but the override needs to cover it or the trait's own default
+    // (`false`) would apply there instead.
+    #[cfg(any(feature = "software", feature = "gl", feature = "wgpu"))]
     fn fill_viewport() -> bool {
         true
     }

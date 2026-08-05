@@ -10,12 +10,12 @@
 // is intentional, so it's allowed crate-locally.
 #![allow(clippy::redundant_pub_crate)]
 
-use crate::atlas::{ATLAS_COLS, ATLAS_ROWS, AtlasData};
 use crate::error::SurfaceError;
 use crate::shaders::{GlslFlavor, Shader, source};
 #[cfg(feature = "tilesets")]
 use crate::sprites::{SpriteInstance, SpriteSet};
 use glow::HasContext as _;
+use retroglyph_window::atlas::{ATLAS_COLS, ATLAS_ROWS, AtlasData};
 
 /// Per-cell instance data, tightly packed to 16 bytes and uploaded straight to the GPU.
 ///

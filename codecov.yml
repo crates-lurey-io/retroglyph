@@ -35,6 +35,10 @@ flags:
     paths:
       - crates/gl/src/
     carryforward: true
+  wgpu:
+    paths:
+      - crates/wgpu/src/
+    carryforward: true
   window:
     paths:
       - crates/window/src/
@@ -76,6 +80,10 @@ component_management:
       name: gl
       flag_regexes:
         - ^gl$
+    - component_id: wgpu
+      name: wgpu
+      flag_regexes:
+        - ^wgpu$
     - component_id: window
       name: window
       flag_regexes:
