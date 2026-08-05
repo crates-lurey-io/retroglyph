@@ -19,12 +19,11 @@ mod support;
 mod mouse;
 
 use mouse::Mouse;
-use retroglyph_core::app::Frame;
-use retroglyph_core::backend::Headless;
 use retroglyph_core::event::{Event, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use retroglyph_core::grid::Pos;
-use retroglyph_core::terminal::Terminal;
-use retroglyph_examples::{Example, HEADLESS_FRAME_DELTA};
+use retroglyph_core::testing::TestHarness;
+use retroglyph_examples::Example;
+use support::TestApp;
 
 const fn mouse_event(kind: MouseEventKind, x: u16, y: u16) -> Event {
     Event::Mouse(MouseEvent::new(kind, Pos { x, y }, KeyModifiers::NONE))
@@ -33,24 +32,16 @@ const fn mouse_event(kind: MouseEventKind, x: u16, y: u16) -> Event {
 /// Drives `Mouse` through `events` (one per tick, `None` meaning "tick with no input"),
 /// returning each frame's rendered text.
 fn drive(events: &[Option<Event>]) -> String {
-    let backend = Headless::new(50, 25);
-    let mut term = Terminal::new(backend);
-    let mut state = Mouse::init(&mut term);
+    let mut harness = TestHarness::new(50, 25);
+    let mut app = TestApp(Mouse::init(harness.term_mut()));
 
     let mut views = Vec::new();
-    for (i, event) in events.iter().enumerate() {
+    for event in events {
         if let Some(event) = event {
-            term.backend_mut().push_event(event.clone());
+            harness.push_event(event.clone());
         }
-        let frame = Frame {
-            delta: HEADLESS_FRAME_DELTA,
-            frame: i as u64,
-        };
-        if !state.tick(&mut term, &frame) {
-            break;
-        }
-        term.present().ok();
-        views.push(term.backend().format_view());
+        harness.step(&mut app);
+        views.push(harness.view());
     }
     views.join("\n--- frame ---\n")
 }
@@ -73,22 +64,14 @@ fn headless_snapshot_motion_unavailable_fallback() {
     // MOTION_GRACE_TICKS: the fallback note must appear rather than a blank frame.
     // 3 representative frames (start, mid-grace, past-grace) rather than all 125+ --
     // enough to pin the transition without an unreadable multi-hundred-line snapshot.
-    let backend = Headless::new(50, 25);
-    let mut term = Terminal::new(backend);
-    let mut state = Mouse::init(&mut term);
+    let mut harness = TestHarness::new(50, 25);
+    let mut app = TestApp(Mouse::init(harness.term_mut()));
 
     let mut views = Vec::new();
-    for i in 1..=130u64 {
-        let frame = Frame {
-            delta: HEADLESS_FRAME_DELTA,
-            frame: i,
-        };
-        if !state.tick(&mut term, &frame) {
-            break;
-        }
-        term.present().ok();
+    for i in 1..=130u32 {
+        harness.step(&mut app);
         if matches!(i, 1 | 60 | 130) {
-            views.push(format!("-- tick {i} --\n{}", term.backend().format_view()));
+            views.push(format!("-- tick {i} --\n{}", harness.view()));
         }
     }
     insta::assert_snapshot!(views.join("\n"));

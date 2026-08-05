@@ -38,6 +38,12 @@ const fn mouse(kind: MouseEventKind, x: u16, y: u16) -> Event {
 
 /// Drives `E` through one synthetic event per tick, returning each frame's
 /// [`Headless::format_view`] text.
+///
+/// Not migrated to [`TestHarness`](retroglyph_core::testing::TestHarness) (retroglyph#1001):
+/// `OutpostDashboard::advance` tweens stat values and rises/expires floating acknowledgement text
+/// from `frame.delta`, calibrated against [`HEADLESS_FRAME_DELTA`]'s 100ms (see its own doc
+/// comment), not `TestHarness::step`'s fixed 16ms -- switching would change how far those
+/// animations have moved by the time each test below asserts on them.
 fn drive_sized<E: Example>(width: u16, height: u16, events: &[Event]) -> (E, Vec<String>) {
     let backend = Headless::new(width, height);
     let mut term = Terminal::new(backend);

@@ -33,6 +33,12 @@ const fn key(code: KeyCode) -> Event {
 
 /// Drives `E` through one synthetic key event per tick, returning each frame's
 /// [`Headless::format_view`] text.
+///
+/// Not migrated to [`TestHarness`](retroglyph_core::testing::TestHarness) (retroglyph#1001):
+/// `CombatLog::draw` integrates `ScrollState`'s wheel momentum against `frame.delta`, calibrated
+/// against [`HEADLESS_FRAME_DELTA`]'s 100ms (see its own doc comment), not `TestHarness::step`'s
+/// fixed 16ms -- `mouse_wheel_scrolls_the_log_with_momentum` below counts idle frames to prove the
+/// physics settle, and that count is only meaningful at the delta it was tuned against.
 fn drive<E: Example>(events: &[Event]) -> String {
     let backend = Headless::new(50, 25);
     let mut term = Terminal::new(backend);

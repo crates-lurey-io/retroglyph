@@ -64,6 +64,11 @@ fn draw_at(width: u16, height: u16) -> (Overworld, String) {
 /// `last_minimap_rect`, and a real interactive loop always draws at least once before any input
 /// arrives, so mouse events aimed at the sidebar on the very first driven tick need that state
 /// to already exist.
+///
+/// Not migrated to [`TestHarness`](retroglyph_core::testing::TestHarness) (retroglyph#1001):
+/// `Overworld::tick` accumulates `self.time` from `frame.delta`, calibrated against
+/// [`HEADLESS_FRAME_DELTA`]'s 100ms (see its own doc comment), not `TestHarness::step`'s fixed
+/// 16ms.
 fn drive_sized(width: u16, height: u16, events: &[Event]) -> (Overworld, Vec<String>) {
     let backend = Headless::new(width, height);
     let mut term = Terminal::new(backend);

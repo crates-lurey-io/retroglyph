@@ -30,6 +30,12 @@ const fn key(code: KeyCode) -> Event {
 
 /// Drives `E` through one synthetic key event per tick, returning each frame's
 /// [`Headless::format_view`] text.
+///
+/// Not migrated to [`TestHarness`](retroglyph_core::testing::TestHarness) (retroglyph#1001):
+/// `Sokoban::tick` feeds `frame.delta` to `player`/`boxes`' slide animation, calibrated against
+/// [`HEADLESS_FRAME_DELTA`]'s 100ms (see its own doc comment), not `TestHarness::step`'s fixed
+/// 16ms -- switching would desync how many ticks the solve sequence below needs to see each push
+/// settle.
 fn drive<E: Example>(events: &[Event]) -> String {
     let backend = Headless::new(50, 25);
     let mut term = Terminal::new(backend);

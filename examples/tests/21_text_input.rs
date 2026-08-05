@@ -22,39 +22,34 @@ mod support;
 #[allow(dead_code)] // `main`/the `wasm_entry!` FFI surface aren't exercised by these tests
 mod text_input;
 
-use retroglyph_core::app::Frame;
-use retroglyph_core::backend::{CursorStyle, Headless};
+use retroglyph_core::backend::CursorStyle;
 use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use retroglyph_core::grid::Pos;
-use retroglyph_core::terminal::Terminal;
-use retroglyph_examples::{Example, HEADLESS_FRAME_DELTA};
+use retroglyph_core::testing::TestHarness;
+use retroglyph_examples::Example;
+use support::TestApp;
 use text_input::TextInputDemo;
 
 /// Drives `TextInputDemo` through `events` (one batch of zero or more events per tick) against a
 /// fresh 50x25 headless backend, returning each frame's rendered text (joined for
-/// `insta::assert_snapshot!`) alongside the terminal itself, so a caller can also inspect
-/// `term.backend()`'s recorded cursor state after the last frame.
-fn drive(events: &[&[Event]]) -> (String, Terminal<Headless>) {
-    let backend = Headless::new(50, 25);
-    let mut term = Terminal::new(backend);
-    let mut state = TextInputDemo::init(&mut term);
+/// `insta::assert_snapshot!`) alongside the harness itself, so a caller can also inspect
+/// `harness.term().backend()`'s recorded cursor state after the last frame.
+fn drive(events: &[&[Event]]) -> (String, TestHarness) {
+    let mut harness = TestHarness::new(50, 25);
+    let mut app = TestApp(TextInputDemo::init(harness.term_mut()));
 
     let mut views = Vec::new();
-    for (i, batch) in events.iter().enumerate() {
+    for batch in events {
+        // Pushed straight onto the backend (bypassing `TestHarness`'s own single-event queue),
+        // like the raw `Headless::push_event` this replaces: a whole batch has to land in the
+        // same `update` call, not be drip-fed one event per `step`.
         for event in *batch {
-            term.backend_mut().push_event(event.clone());
+            harness.term_mut().backend_mut().push_event(event.clone());
         }
-        let frame = Frame {
-            delta: HEADLESS_FRAME_DELTA,
-            frame: i as u64,
-        };
-        if !state.tick(&mut term, &frame) {
-            break;
-        }
-        term.present().ok();
-        views.push(term.backend().format_view());
+        harness.step(&mut app);
+        views.push(harness.view());
     }
-    (views.join("\n--- frame ---\n"), term)
+    (views.join("\n--- frame ---\n"), harness)
 }
 
 /// A `NONE`-modifier key press, the shape every event below needs.
@@ -81,22 +76,22 @@ fn headless_snapshot_types_navigates_backspaces_and_cycles_style() {
 
 #[test]
 fn cursor_position_and_visibility_track_the_fields_caret() {
-    let (_, term) = drive(&[&[]]);
-    assert!(term.backend().cursor_visible());
+    let (_, harness) = drive(&[&[]]);
+    assert!(harness.term().backend().cursor_visible());
     // Empty field, cursor at 0: the caret sits on the panel interior's first column.
-    assert_eq!(term.backend().cursor_position(), Pos::new(2, 5));
+    assert_eq!(harness.term().backend().cursor_position(), Pos::new(2, 5));
 
-    let (_, term) = drive(&[&[key(KeyCode::Char('h')), key(KeyCode::Char('i'))]]);
+    let (_, harness) = drive(&[&[key(KeyCode::Char('h')), key(KeyCode::Char('i'))]]);
     // Cursor after "hi" (display column 2 of the value) lands two columns further right.
-    assert_eq!(term.backend().cursor_position(), Pos::new(4, 5));
+    assert_eq!(harness.term().backend().cursor_position(), Pos::new(4, 5));
 
-    let (_, term) = drive(&[&[
+    let (_, harness) = drive(&[&[
         key(KeyCode::Char('h')),
         key(KeyCode::Char('i')),
         key(KeyCode::Home),
     ]]);
     // Home moves the cursor back to the start without changing the value.
-    assert_eq!(term.backend().cursor_position(), Pos::new(2, 5));
+    assert_eq!(harness.term().backend().cursor_position(), Pos::new(2, 5));
 }
 
 #[test]
@@ -113,8 +108,12 @@ fn tab_cycles_through_every_cursor_style_and_wraps() {
     for (n, &want) in expected.iter().enumerate() {
         let batches: Vec<Vec<Event>> = (0..n).map(|_| vec![key(KeyCode::Tab)]).collect();
         let batch_refs: Vec<&[Event]> = batches.iter().map(Vec::as_slice).collect();
-        let (_, term) = drive(&batch_refs);
-        assert_eq!(term.backend().cursor_style(), want, "after {n} tab(s)");
+        let (_, harness) = drive(&batch_refs);
+        assert_eq!(
+            harness.term().backend().cursor_style(),
+            want,
+            "after {n} tab(s)"
+        );
     }
 }
 
