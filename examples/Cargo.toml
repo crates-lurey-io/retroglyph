@@ -21,6 +21,10 @@ retroglyph-widgets = { path = "../crates/widgets", version = "0.4.1" }
 retroglyph-crossterm = { path = "../crates/crossterm", version = "0.2.3", optional = true }
 retroglyph-software = { path = "../crates/software", version = "0.5.1", optional = true }
 retroglyph-gl = { path = "../crates/gl", version = "0.2.1", optional = true }
+# Native-only (see the `wgpu` feature below): a plain optional dependency rather than a
+# `target.'cfg(not(target_arch = "wasm32"))'` one, since Cargo features can't restrict a
+# dependency to a target either, and every wasm32 build already leaves this feature off.
+retroglyph-wgpu = { path = "../crates/wgpu", version = "0.1.0", optional = true }
 retroglyph-window = { path = "../crates/window", version = "0.4.1", optional = true }
 # Optional, wasm32-only in practice: see the `wasm-terminal` feature below.
 # Declared as a plain (non-target-gated) optional dependency because Cargo
@@ -75,6 +79,23 @@ gl = [
   "dep:retroglyph-window",
   "retroglyph-gl/default-font",
   "retroglyph-gl/tilesets",
+]
+# The GPU (Vulkan/Metal/D3D12) backend via `wgpu`. A windowed backend like `software`/`gl`, and
+# mutually exclusive with both in practice: `launch::<E>()` prefers `software`, then `gl`, then
+# this. Pulls in `default-font`/`tilesets` for the same reasons `gl` does.
+#
+# Native only as wired here, unlike `software`/`gl`. `retroglyph-wgpu` itself renders in a browser
+# through WebGPU; this gallery just has no wgpu wasm variant yet, which needs a `wasm_entry!`
+# branch and an entry in `tools/build-wasm-example.sh`. Every `#[cfg(target_arch = "wasm32")]` branch this
+# crate has for `software`/`gl` (the wasm canvas path, `wasm_entry!`'s start shim, the FPS
+# overlay's floating button, `tools/build-wasm-example.sh`'s variant list) has no `wgpu`
+# counterpart, so a `wasm32` build with this feature enabled compiles but behaves exactly like one
+# with it off: there is nothing wasm32-specific in this feature to compile in.
+wgpu = [
+  "dep:retroglyph-wgpu",
+  "dep:retroglyph-window",
+  "retroglyph-wgpu/default-font",
+  "retroglyph-wgpu/tilesets",
 ]
 # WASM-only: drives a Terminal<Headless> from a browser requestAnimationFrame
 # loop instead of a canvas/window. See `wasm_entry!`'s wasm-headless branch.

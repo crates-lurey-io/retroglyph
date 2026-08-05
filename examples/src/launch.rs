@@ -14,13 +14,28 @@
 //! can't produce. See [`wasm_entry!`](crate::wasm_entry) for that part.
 
 use retroglyph_core::app::Frame;
-#[cfg(any(feature = "crossterm", feature = "software", feature = "gl"))]
+#[cfg(any(
+    feature = "crossterm",
+    feature = "software",
+    feature = "gl",
+    feature = "wgpu"
+))]
 use retroglyph_core::app::{App, Flow};
 use retroglyph_core::backend::Backend;
 use retroglyph_core::terminal::Terminal;
-#[cfg(any(feature = "crossterm", feature = "software", feature = "gl"))]
+#[cfg(any(
+    feature = "crossterm",
+    feature = "software",
+    feature = "gl",
+    feature = "wgpu"
+))]
 use retroglyph_widgets::PerfOverlayApp;
-#[cfg(any(feature = "crossterm", feature = "software", feature = "gl"))]
+#[cfg(any(
+    feature = "crossterm",
+    feature = "software",
+    feature = "gl",
+    feature = "wgpu"
+))]
 use retroglyph_widgets::Widget as _;
 #[cfg(feature = "crossterm")]
 use std::rc::Rc;
@@ -96,6 +111,23 @@ pub trait Example: Default + Sized + 'static {
         builder
     }
 
+    /// Customize the wgpu backend's builder before it's built.
+    ///
+    /// The wgpu counterpart of [`configure_software`](Self::configure_software)/
+    /// [`configure_gl`](Self::configure_gl), for the same reason `configure_gl` is its own method
+    /// rather than a shared one: `WgpuBackendBuilder` is yet another type, from yet another crate.
+    /// An example that registers a tileset needs to register it on every graphical backend it
+    /// supports, or the native wgpu build renders bitmap glyphs where software/gl render sprites.
+    ///
+    /// Default: `builder` unchanged, i.e. [`run_wgpu`]'s standard 50x25-at-2x grid with no
+    /// tileset.
+    #[cfg(feature = "wgpu")]
+    fn configure_wgpu(
+        builder: retroglyph_wgpu::WgpuBackendBuilder,
+    ) -> retroglyph_wgpu::WgpuBackendBuilder {
+        builder
+    }
+
     /// Whether the windowed backend's window should fill the browser viewport on `wasm32`
     /// (see [`WindowConfig::fill_viewport`](retroglyph_window::winit::WindowConfig::fill_viewport))
     /// instead of rendering at its natural grid size wherever it lands on the page.
@@ -104,10 +136,11 @@ pub trait Example: Default + Sized + 'static {
     /// own default -- most demos should render at a fixed, predictable grid size. Override this
     /// (returning `true`) for an app-like example meant to be the whole page, e.g. one with a
     /// pannable world that benefits from every cell the viewport can offer, especially on a small
-    /// mobile screen -- see `15_outpost_dashboard.rs`. Read by both [`run_software`] and
-    /// [`run_gl`], so it applies to the software (`Canvas2D`) and GL (WebGL2) wasm backends alike;
-    /// has no effect on native.
-    #[cfg(any(feature = "software", feature = "gl"))]
+    /// mobile screen -- see `15_outpost_dashboard.rs`. Read by [`run_software`], [`run_gl`], and
+    /// [`run_wgpu`], so it applies to every windowed backend alike; only the first two have a
+    /// `wasm32` build to fill a viewport on, so it has no effect on native or on `retroglyph-wgpu`,
+    /// which this gallery has no browser variant for.
+    #[cfg(any(feature = "software", feature = "gl", feature = "wgpu"))]
     fn fill_viewport() -> bool {
         false
     }
@@ -149,7 +182,12 @@ pub trait Example: Default + Sized + 'static {
 /// drawing the readout on top -- generically, the same way on every backend. See that type's docs
 /// for why this needed no bespoke per-backend plumbing here beyond the wasm floating button (see
 /// [`WasmToggleApp`]).
-#[cfg(any(feature = "crossterm", feature = "software", feature = "gl"))]
+#[cfg(any(
+    feature = "crossterm",
+    feature = "software",
+    feature = "gl",
+    feature = "wgpu"
+))]
 struct ExampleApp<E> {
     state: Option<E>,
     /// Multiplier applied to [`Frame::delta`] before the example sees it, from
@@ -177,7 +215,12 @@ struct ExampleApp<E> {
 /// number is ignored in favour of `1.0`: this is a debugging/capture aid, and a typo in it should
 /// not silently freeze or reverse an example's animation. Always `1.0` on `wasm32` (nothing sets
 /// environment variables there).
-#[cfg(any(feature = "crossterm", feature = "software", feature = "gl"))]
+#[cfg(any(
+    feature = "crossterm",
+    feature = "software",
+    feature = "gl",
+    feature = "wgpu"
+))]
 fn time_scale() -> f64 {
     scale_from_env(std::env::var("RG_TIME_SCALE").ok().as_deref())
 }
@@ -185,7 +228,12 @@ fn time_scale() -> f64 {
 /// [`time_scale`]'s parsing, split out so it's testable without mutating the process environment
 /// (`std::env::set_var` is `unsafe` in edition 2024, and `unsafe_code` is forbidden
 /// workspace-wide).
-#[cfg(any(feature = "crossterm", feature = "software", feature = "gl"))]
+#[cfg(any(
+    feature = "crossterm",
+    feature = "software",
+    feature = "gl",
+    feature = "wgpu"
+))]
 fn scale_from_env(value: Option<&str>) -> f64 {
     value
         .and_then(|value| value.trim().parse::<f64>().ok())
@@ -193,7 +241,12 @@ fn scale_from_env(value: Option<&str>) -> f64 {
         .unwrap_or(1.0)
 }
 
-#[cfg(any(feature = "crossterm", feature = "software", feature = "gl"))]
+#[cfg(any(
+    feature = "crossterm",
+    feature = "software",
+    feature = "gl",
+    feature = "wgpu"
+))]
 impl<E> ExampleApp<E> {
     fn new() -> Self {
         Self {
@@ -203,7 +256,12 @@ impl<E> ExampleApp<E> {
     }
 }
 
-#[cfg(any(feature = "crossterm", feature = "software", feature = "gl"))]
+#[cfg(any(
+    feature = "crossterm",
+    feature = "software",
+    feature = "gl",
+    feature = "wgpu"
+))]
 impl<B: Backend, E: Example> App<B> for ExampleApp<E> {
     fn update(&mut self, term: &mut Terminal<B>, frame: &Frame) -> Flow {
         let state = self.state.get_or_insert_with(|| E::init(term));
@@ -232,7 +290,12 @@ impl<B: Backend, E: Example> App<B> for ExampleApp<E> {
 /// of the built-in [`Compact`](retroglyph_widgets::PerfOverlayMode::Compact) readout. One toggle
 /// key press now cycles `Off -> Compact -> Full -> Off` for every example in the gallery; see
 /// [`PerfOverlayApp::cycle_with`] for why this needs no per-example wiring.
-#[cfg(any(feature = "crossterm", feature = "software", feature = "gl"))]
+#[cfg(any(
+    feature = "crossterm",
+    feature = "software",
+    feature = "gl",
+    feature = "wgpu"
+))]
 fn perf_overlay_app<E: Example>(
     inner: ExampleApp<E>,
     backend: &'static str,
@@ -255,13 +318,14 @@ fn perf_overlay_app<E: Example>(
 ///
 /// A plain pass-through everywhere else: the click-detection body below only compiles in on
 /// `wasm32` with a windowed backend enabled, so this wrapper costs nothing on native or on the
-/// crossterm/headless backends (neither of which uses it).
-#[cfg(any(feature = "software", feature = "gl"))]
+/// crossterm/headless backends (neither of which uses it). `retroglyph-wgpu` has no `wasm32`
+/// build at all, so on that backend this is unconditionally a pass-through.
+#[cfg(any(feature = "software", feature = "gl", feature = "wgpu"))]
 struct WasmToggleApp<E: Example> {
     inner: PerfOverlayApp<ExampleApp<E>>,
 }
 
-#[cfg(any(feature = "software", feature = "gl"))]
+#[cfg(any(feature = "software", feature = "gl", feature = "wgpu"))]
 impl<B: Backend, E: Example> App<B> for WasmToggleApp<E> {
     fn update(&mut self, term: &mut Terminal<B>, frame: &Frame) -> Flow {
         #[cfg(target_arch = "wasm32")]
@@ -315,12 +379,13 @@ impl<B: Backend, E: Example> App<B> for CrosstermToggleApp<E> {
 /// footing: the headless and terminal ones are already driven by an unconditional
 /// `requestAnimationFrame` loop in their HTML templates (see
 /// `docs/templates/examples/terminal-template.html`), so this is what makes the software and GL
-/// canvases tick the same way rather than being the odd two out.
+/// canvases tick the same way rather than being the odd two out. `retroglyph-wgpu` has no
+/// `wasm32` build, so for it this only ever means one frame per vsync on native.
 ///
 /// 60 specifically because that's the common display refresh rate, so on native it lands one frame
 /// per vsync without a partial-interval sleep; on `wasm32` the number is advisory and the browser's
 /// `requestAnimationFrame` cadence wins either way.
-#[cfg(any(feature = "software", feature = "gl"))]
+#[cfg(any(feature = "software", feature = "gl", feature = "wgpu"))]
 const TARGET_FPS: Option<u32> = Some(60);
 
 /// Runs `E` on the software (winit + softbuffer/Canvas2D) backend.
@@ -411,6 +476,43 @@ pub fn run_gl<E: Example>() {
         .fill_viewport(E::fill_viewport());
     let app = WasmToggleApp::<E> {
         inner: perf_overlay_app(ExampleApp::<E>::new(), "gl"),
+    };
+    retroglyph_window::winit::run_app(config, renderer, app).expect("event loop failed");
+}
+
+// ── wgpu backend ────────────────────────────────────────────────────────────
+
+/// Runs `E` on the GPU (Vulkan/Metal/D3D12, via `wgpu`) backend.
+///
+/// Builds a 50x25 window at `scale(2)` sized to fit via
+/// [`WindowConfig::fit`](retroglyph_window::winit::WindowConfig::fit), then drives it with
+/// `retroglyph-window`'s winit `App` driver -- the same driver `run_software`/`run_gl` use, since
+/// `WgpuRenderer` is a `Presenter` too. Customization goes through [`Example::configure_wgpu`]
+/// rather than [`Example::configure_software`]/[`Example::configure_gl`], since all three backends
+/// have different builder types.
+///
+/// Unlike `run_software`/`run_gl`, this has no `wasm32` branch yet. `retroglyph-wgpu` itself does
+/// render in a browser through WebGPU; what's missing is this gallery's plumbing for it (a
+/// `wasm_entry!` branch and an entry in `tools/build-wasm-example.sh`). [`Example::fill_viewport`]
+/// is therefore honored here purely for symmetry with the other two windowed backends and has no
+/// observable effect, since native ignores it too.
+///
+/// # Panics
+///
+/// Panics if the wgpu backend fails to initialize, or if the event loop fails to start.
+#[cfg(feature = "wgpu")]
+pub fn run_wgpu<E: Example>() {
+    let renderer = E::configure_wgpu(
+        retroglyph_wgpu::WgpuBackendBuilder::new()
+            .grid_size(50, 25)
+            .scale(2),
+    )
+    .build()
+    .expect("failed to initialize wgpu backend");
+    let config = retroglyph_window::winit::WindowConfig::fit(&renderer, E::NAME, TARGET_FPS, false)
+        .fill_viewport(E::fill_viewport());
+    let app = WasmToggleApp::<E> {
+        inner: perf_overlay_app(ExampleApp::<E>::new(), "wgpu"),
     };
     retroglyph_window::winit::run_app(config, renderer, app).expect("event loop failed");
 }
@@ -601,12 +703,12 @@ pub fn run_headless_stdout<E: Example>() {
 
 // ── Backend dispatch ─────────────────────────────────────────────────────────
 //
-// Mutually exclusive by construction: at most one of these `launch` items is
-// compiled in for any given feature set, mirroring the old rg_run! macro's
-// priority (software > crossterm > wasm-headless > wasm-terminal > headless
-// stdout fallback). `wasm-headless`/`wasm-terminal` on non-wasm32 targets
-// (e.g. `cargo check --features wasm-headless` on a host) fall through to the
-// headless-stdout arm, so every feature combination stays host-checkable.
+// Mutually exclusive by construction: at most one of these `launch` items is compiled in for any
+// given feature set, mirroring the old rg_run! macro's priority, extended with `wgpu` as a third
+// windowed tier below `gl`: software > gl > wgpu > crossterm > wasm-headless > wasm-terminal >
+// headless stdout fallback. `wasm-headless`/`wasm-terminal` on non-wasm32 targets (e.g. `cargo
+// check --features wasm-headless` on a host) fall through to the headless-stdout arm, so every
+// feature combination stays host-checkable.
 
 /// Picks a backend from the crate's enabled Cargo features and runs `E` on
 /// it. Call this (and nothing else) from every example's `main`.
@@ -622,8 +724,18 @@ pub fn launch<E: Example>() {
     run_gl::<E>();
 }
 
+/// See [`launch`]'s software-enabled overload. `wgpu` is the other GPU windowed backend; it loses
+/// to `software`/`gl` if either is also enabled, the same way `gl` loses to `software`.
+#[cfg(all(feature = "wgpu", not(any(feature = "software", feature = "gl"))))]
+pub fn launch<E: Example>() {
+    run_wgpu::<E>();
+}
+
 /// See [`launch`]'s software-enabled overload.
-#[cfg(all(feature = "crossterm", not(any(feature = "software", feature = "gl"))))]
+#[cfg(all(
+    feature = "crossterm",
+    not(any(feature = "software", feature = "gl", feature = "wgpu"))
+))]
 pub fn launch<E: Example>() {
     run_crossterm::<E>().expect("crossterm backend failed");
 }
@@ -657,6 +769,7 @@ pub fn launch<E: Example>() {
     feature = "crossterm",
     feature = "software",
     feature = "gl",
+    feature = "wgpu",
     all(feature = "wasm-headless", target_arch = "wasm32"),
     all(feature = "wasm-terminal", target_arch = "wasm32"),
 )))]
@@ -664,7 +777,15 @@ pub fn launch<E: Example>() {
     run_headless_stdout::<E>();
 }
 
-#[cfg(all(test, any(feature = "crossterm", feature = "software", feature = "gl")))]
+#[cfg(all(
+    test,
+    any(
+        feature = "crossterm",
+        feature = "software",
+        feature = "gl",
+        feature = "wgpu"
+    )
+))]
 mod tests {
     use super::scale_from_env;
 

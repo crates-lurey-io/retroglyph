@@ -8,7 +8,7 @@
 //! example list is just "every `.rs` file in that directory," discovered at
 //! runtime rather than hardcoded or read from `cargo metadata`.
 //!
-//! Each backend has a WASM counterpart: press `w` at the backend prompt to
+//! Each backend has a WASM counterpart, except wgpu: press `w` at the backend prompt to
 //! toggle between native and WASM before picking a backend. A WASM choice is
 //! built and packaged with the same real HTML/JS template the docs site uses
 //! (via `tools/build-wasm-example.sh`), then served from a throwaway local
@@ -17,7 +17,12 @@
 //! function and so only ever showed anything for the windowed variants
 //! (Software and GL, which start a winit event loop from `main`); Headless
 //! and Terminal are driven by JS calling specific exported functions in a
-//! loop, which only the real templates do.
+//! loop, which only the real templates do. wgpu has no WASM variant in this
+//! gallery, so its `Backend` entry below has no `w`-toggle counterpart and
+//! toggling WASM while it's selected has nothing to switch to. That's a gap in
+//! the gallery's build plumbing, not in the backend: `retroglyph-wgpu` renders
+//! in a browser through WebGPU. Wiring a variant means a `wasm_entry!` branch
+//! plus an entry in `tools/build-wasm-example.sh`.
 //!
 //! Run with `cargo run --bin runner` (or `--release` to also run the picked
 //! native example in release mode; ignored for WASM choices, which always
@@ -33,33 +38,39 @@ use std::process::ExitCode;
 /// value for the native variant (`None` means "run with no backend feature
 /// enabled," i.e. the headless stdout fallback -- only ever true for the
 /// native Headless entry), and the WASM variant name `tools/build-wasm-
-/// example.sh` understands (`headless`/`terminal`/`software`/`gl`).
+/// example.sh` understands (`headless`/`terminal`/`software`/`gl`), or
+/// `None` for a backend this gallery has no WASM variant for (wgpu).
 struct Backend {
     label: &'static str,
     native_features: Option<&'static str>,
-    wasm_variant: &'static str,
+    wasm_variant: Option<&'static str>,
 }
 
 const BACKENDS: &[Backend] = &[
     Backend {
         label: "Headless",
         native_features: None,
-        wasm_variant: "headless",
+        wasm_variant: Some("headless"),
     },
     Backend {
         label: "Crossterm (real terminal) / Terminal (browser, xterm.js-style ANSI)",
         native_features: Some("crossterm"),
-        wasm_variant: "terminal",
+        wasm_variant: Some("terminal"),
     },
     Backend {
         label: "Software (a window) / Software (browser, canvas)",
         native_features: Some("software"),
-        wasm_variant: "software",
+        wasm_variant: Some("software"),
     },
     Backend {
         label: "GL (a window, OpenGL 3.3) / WebGL2 (browser, canvas)",
         native_features: Some("gl"),
-        wasm_variant: "gl",
+        wasm_variant: Some("gl"),
+    },
+    Backend {
+        label: "wgpu (a window, Vulkan/Metal/D3D12; no WASM variant in this gallery yet)",
+        native_features: Some("wgpu"),
+        wasm_variant: None,
     },
 ];
 
@@ -108,6 +119,9 @@ fn prompt_choice(prompt: &str, options: &[String]) -> Option<usize> {
 /// Prompts for a backend (1/2/3), with `w` toggling native vs. WASM before
 /// a numeric choice is entered. Returns the chosen backend index and whether
 /// WASM was toggled on when the choice was made.
+///
+/// Picking a backend with no WASM variant (wgpu: `wasm_variant` is `None`) while `w` is toggled on
+/// re-prompts instead of returning, so [`run_wasm_preview`] never sees a backend it can't build.
 fn prompt_backend() -> Option<(usize, bool)> {
     let mut wasm = false;
     loop {
@@ -138,6 +152,13 @@ fn prompt_backend() -> Option<(usize, bool)> {
 
         let choice: usize = trimmed.parse().ok()?;
         let idx = choice.checked_sub(1).filter(|&i| i < BACKENDS.len())?;
+        if wasm && BACKENDS[idx].wasm_variant.is_none() {
+            println!(
+                "{} has no WASM variant in this gallery; pick another backend or toggle WASM off.",
+                BACKENDS[idx].label
+            );
+            continue;
+        }
         return Some((idx, wasm));
     }
 }
@@ -146,17 +167,26 @@ fn prompt_backend() -> Option<(usize, bool)> {
 /// `tools/build-wasm-example.sh` into `target/wasm-preview/<example>/
 /// <variant>/`, then serves that directory from a throwaway local server and
 /// opens it in the default browser. Blocks until the user presses Enter.
+///
+/// # Panics
+///
+/// Panics if `backend` has no WASM variant (`backend.wasm_variant` is `None`): the `w` toggle in
+/// [`prompt_backend`] refuses to combine with such a backend before this is ever called, so
+/// reaching it with one is a bug in that guard, not a user-reachable state.
 fn run_wasm_preview(example: &str, backend: &Backend) -> ExitCode {
+    let variant = backend
+        .wasm_variant
+        .expect("prompt_backend excludes WASM-less backends from a WASM run");
     let dest = workspace_root()
         .join("target/wasm-preview")
         .join(example)
-        .join(backend.wasm_variant);
+        .join(variant);
 
     println!("Building {example} ({}, WASM)...", backend.label);
     let status = std::process::Command::new("bash")
         .arg(workspace_root().join("tools/build-wasm-example.sh"))
         .arg(example)
-        .arg(backend.wasm_variant)
+        .arg(variant)
         .arg(&dest)
         .status()
         .expect("failed to run tools/build-wasm-example.sh");
