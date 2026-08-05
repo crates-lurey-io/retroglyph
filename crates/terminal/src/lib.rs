@@ -357,6 +357,18 @@ impl<W: Write> TerminalRenderer<W> {
         self.cursor_y = None;
     }
 
+    /// Resets only tracked cursor position, leaving tracked color/attribute state alone.
+    ///
+    /// Call this after a write that moves the real cursor without touching color (e.g.
+    /// [`move_cursor_to`](Self::move_cursor_to)): the next [`draw`](Self::draw) must still emit a
+    /// `MoveTo` for a changed cell that happens to match the now-stale tracked coordinates, but
+    /// its color/attribute escapes stay conditional on an actual style change, since the pen
+    /// itself never moved.
+    const fn reset_cursor_tracking(&mut self) {
+        self.cursor_x = None;
+        self.cursor_y = None;
+    }
+
     /// Begins a synchronized update (`\x1b[?2026h`).
     ///
     /// Terminals that support this hold rendering until the matching
@@ -654,9 +666,10 @@ impl<W: Write> TerminalRenderer<W> {
     /// Moves the cursor to `position` (CUP, `CSI row;col H`, 1-indexed), without flushing.
     ///
     /// The real cursor is now wherever `position` says, not wherever the last drawn glyph left
-    /// it, so this also calls [`reset_state`](Self::reset_state): otherwise the next
-    /// [`draw`](Self::draw) could skip a move for a changed cell that happens to match the now-
-    /// stale tracked coordinates. See retroglyph#713.
+    /// it, so this also resets tracked cursor position: otherwise the next [`draw`](Self::draw)
+    /// could skip a move for a changed cell that happens to match the now-stale tracked
+    /// coordinates. Color/attribute tracking is untouched: a bare cursor move doesn't change
+    /// what's in the pen, so an unchanged style still skips its escape on the next draw.
     ///
     /// # Errors
     ///
@@ -668,7 +681,7 @@ impl<W: Write> TerminalRenderer<W> {
             position.y.saturating_add(1),
             position.x.saturating_add(1)
         )?;
-        self.reset_state();
+        self.reset_cursor_tracking();
         Ok(())
     }
 

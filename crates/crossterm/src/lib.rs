@@ -2442,7 +2442,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "retroglyph#713: set_cursor_position doesn't resync the renderer's tracked cursor"]
     fn satisfies_the_cursor_contract() {
         let _lock = TEST_GUARD_LOCK
             .lock()
