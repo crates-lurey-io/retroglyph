@@ -169,6 +169,9 @@ impl<const N: usize> Widget for PerfOverlay<'_, N> {
             .fill_style(self.fill_style)
             .render(surface);
 
+        // Must match the 1-cell border inset the `Panel` above draws (the same rect
+        // `Panel::inner` computes for a zero-padding panel). Kept inline rather than routed
+        // through `Panel::inner` because the panel is built and dropped in the same statement.
         let inner = Rect::new(
             area.left() + 1,
             area.top() + 1,
