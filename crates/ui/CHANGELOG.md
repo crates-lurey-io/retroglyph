@@ -7,6 +7,15 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
+## [0.4.1+retroglyph-ui](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-ui-v0.0.0-reserved...retroglyph-ui-v0.4.1) - 2026-08-05
+
+### Refactor
+
+- [de4e13b](
+https://github.com/crates-lurey-io/retroglyph/commit/de4e13bf0355ca7601e33be707aa04d0b61c5394) *(ui)* Rename retroglyph-widgets to retroglyph-ui by `@matanlurey` in [#1180](
+https://github.com/crates-lurey-io/retroglyph/pull/1180)
+
+
 ## [0.4.1+retroglyph-widgets](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-widgets-v0.4.0...retroglyph-widgets-v0.4.1) - 2026-07-31
 
 ### Features

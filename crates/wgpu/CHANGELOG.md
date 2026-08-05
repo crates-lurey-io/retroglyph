@@ -7,6 +7,15 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
+## [0.1.0+retroglyph-wgpu](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-wgpu-v0.0.0-reserved...retroglyph-wgpu-v0.1.0) - 2026-08-05
+
+### Features
+
+- [a07318f](
+https://github.com/crates-lurey-io/retroglyph/commit/a07318f2cd43689151924daed8b3e26c759fff7a) *(wgpu)* Add a wgpu rendering backend by `@matanlurey` in [#1177](
+https://github.com/crates-lurey-io/retroglyph/pull/1177)
+
+
 ## [0.1.0+retroglyph-wgpu] - unreleased
 
 ### Features

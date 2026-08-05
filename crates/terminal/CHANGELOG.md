@@ -7,6 +7,59 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
+## [0.1.7+retroglyph-terminal](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-v0.1.6...retroglyph-terminal-v0.1.7) - 2026-08-05
+
+### Features
+
+- [99a96e1](
+https://github.com/crates-lurey-io/retroglyph/commit/99a96e14cf1714f8c98d5d436cfc85c8e8efb70a) *(workspace)* Sync Cargo feature docs from Cargo.toml via gen-features by `@matanlurey` in [#881](
+https://github.com/crates-lurey-io/retroglyph/pull/881)
+
+### Bug Fixes
+
+- [7a45888](
+https://github.com/crates-lurey-io/retroglyph/commit/7a458882366cde3cd51c7c8a6816a78485497ba2) *(core)* Make `Grid::put_tile` wide-char aware to match `write_grapheme` by `@crates-lurey-io-agent[bot]` in [#873](
+https://github.com/crates-lurey-io/retroglyph/pull/873)
+
+- [22e06fd](
+https://github.com/crates-lurey-io/retroglyph/commit/22e06fd136aa3682d9b99ea195614f6ef204e603) *(core,widgets,window,software,gl,terminal)* Close 13 reachable panic/overflow sites by `@crates-lurey-io-agent[bot]` in [#776](
+https://github.com/crates-lurey-io/retroglyph/pull/776)
+
+### Refactor
+
+- [740ddec](
+https://github.com/crates-lurey-io/retroglyph/commit/740ddec3085e6d9ac9ea320adeb6dc432f18b68c) *(core)* Remove all root re-exports from retroglyph-core by `@crates-lurey-io-agent[bot]` in [#1106](
+https://github.com/crates-lurey-io/retroglyph/pull/1106)
+
+- [bdda080](
+https://github.com/crates-lurey-io/retroglyph/commit/bdda0804db5c1a26fadd7e779cb769454463e76c) *(core)* Fold style.rs into color.rs, split color.rs into private submodules by `@crates-lurey-io-agent[bot]` in [#910](
+https://github.com/crates-lurey-io/retroglyph/pull/910)
+
+- [27df867](
+https://github.com/crates-lurey-io/retroglyph/commit/27df867123f3a8adfc5c770377824c9d59caee01) *(terminal, crossterm, terminal-wasm)* Sink draw_frame/end_frame/clear_screen/move_cursor_to/set_cursor_visible/s by `@crates-lurey-io-agent[bot]` in [#818](
+https://github.com/crates-lurey-io/retroglyph/pull/818)
+
+### Documentation
+
+- [c1e04d8](
+https://github.com/crates-lurey-io/retroglyph/commit/c1e04d8eba676c7b7e79d8afcffe81e78ff77fdf) *(core,terminal,crossterm,window,gl,widgets)* Remove ' -- ' and em-dash prose tics, drop filler 'deliberately' by `@crates-lurey-io-agent[bot]` in [#744](
+https://github.com/crates-lurey-io/retroglyph/pull/744)
+
+- [35571e0](
+https://github.com/crates-lurey-io/retroglyph/commit/35571e0c422b0f81cdaa43b6c583bd2f582d23b4) *(terminal, crossterm, terminal-wasm)* Dedupe doc-comment boilerplate across sibling methods by `@crates-lurey-io-agent[bot]` in [#740](
+https://github.com/crates-lurey-io/retroglyph/pull/740)
+
+- [49d801e](
+https://github.com/crates-lurey-io/retroglyph/commit/49d801eb4b2b1cba2166d99a379a77af5295f739) *(workspace)* Add Vale prose-style lint by `@matanlurey` in [#875](
+https://github.com/crates-lurey-io/retroglyph/pull/875)
+
+- [d8cb194](
+https://github.com/crates-lurey-io/retroglyph/commit/d8cb1949b0a7066002f5f39fdf22be5fe8052c8d) *(uncategorized)* Document Cargo features per crate (README + lib.rs) by `@matanlurey` in [#630](
+https://github.com/crates-lurey-io/retroglyph/pull/630)
+
+**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-v0.1.6...retroglyph-terminal-v0.1.7
+
+
 ## [0.1.6+retroglyph-terminal](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-v0.1.5...retroglyph-terminal-v0.1.6) - 2026-07-31
 
 **Full Changelog**:
