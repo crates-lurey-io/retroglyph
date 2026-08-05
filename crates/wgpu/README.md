@@ -164,6 +164,13 @@ Colors land byte-exact: the surface is always viewed through a non-sRGB format, 
 `u8 / 255.0` output is written verbatim rather than re-encoded to sRGB and silently brightened
 relative to the CPU rasterizer.
 
+One known deviation from physically correct rendering: sprite compositing blends sRGB-encoded values
+rather than linear light, so a partially transparent sprite edge comes out slightly darker than it
+should. Text is unaffected, because the glyph atlas is 1-bit coverage sampled `Nearest`, so the
+alpha reaching the blend unit is only ever exactly 0 or 1 and the two color spaces agree bit for
+bit. Fixing the sprite case means moving `retroglyph-software`'s CPU blit at the same time, since
+the two are checked against each other pixel for pixel; tracked in retroglyph#1178.
+
 ## Testing
 
 Beyond the CPU-side units (instance byte layout, uniform block size, shader composition),

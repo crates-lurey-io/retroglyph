@@ -21,6 +21,18 @@
 //! and blends the cell's foreground over its background by that coverage, so glyphs stay crisp at
 //! any integer scale and take the cell's colours like any other glyph.
 //!
+//! Those two values are the only ones that ever appear, and that is load-bearing rather than
+//! incidental. Coverage used as an alpha is the usual place text rendering goes wrong on colour
+//! space: a rasterizer's partial coverage is a linear quantity, so interpolating between an
+//! sRGB-encoded foreground and background by it produces text that is too thin or too fat, and
+//! correcting for that is fiddly. The question does not arise for a bitmap font, because a
+//! blend factor of exactly 0 or exactly 1 selects one endpoint outright and every colour space
+//! agrees on the result.
+//!
+//! Anything that introduces partial coverage (an antialiased or grayscale-AA font source,
+//! multisampling, a non-integer render scale) reopens it.
+//! This module's `coverage_is_strictly_binary` test fails if the first of those lands here.
+//!
 //! # Examples
 //!
 //! ```
@@ -351,6 +363,45 @@ mod tests {
         assert_eq!(atlas.resolve('▝'), Some(257));
         // Still no coverage anywhere in the chain: the substituted solid block, not a quadrant.
         assert_eq!(atlas.resolve('あ'), Some(0xDB));
+    }
+
+    /// Every coverage byte is exactly `0x00` or `0xFF`, never anything between.
+    ///
+    /// This is what lets every backend treat coverage as a blend factor without worrying about
+    /// colour space: an alpha of exactly 0 or 1 selects one endpoint outright, so sRGB-encoded and
+    /// linear-light compositing agree bit for bit. Partial coverage would make that false and make
+    /// gamma-correct text a real problem to solve, in three backends at once. A change that
+    /// introduces it should fail here first and be a deliberate decision, not a silent regression.
+    #[test]
+    fn coverage_is_strictly_binary() {
+        // A font with a half-set row, to prove the check reacts to bit patterns rather than
+        // trivially passing on an all-zero atlas.
+        static DATA: [u8; 4] = [0b1010_1010, 0x00, 0xFF, 0b0000_1111];
+        const FONT: BitmapFont = BitmapFont::new(&DATA, 8, 4, 1);
+        let atlas = AtlasData::build(&FontChain::from(FONT), (8, 4));
+        assert!(
+            atlas.coverage.contains(&0xFF),
+            "the fixture should cover some texels, or this proves nothing"
+        );
+        for (index, &byte) in atlas.coverage.iter().enumerate() {
+            assert!(
+                byte == 0x00 || byte == 0xFF,
+                "texel {index} has partial coverage ({byte:#04x}); see this module's docs on why \
+                 that reopens the colour-space question for every backend"
+            );
+        }
+    }
+
+    #[cfg(feature = "default-font")]
+    #[test]
+    fn coverage_is_strictly_binary_for_the_bundled_font() {
+        use crate::font::unscii16;
+        let atlas = AtlasData::build(&FontChain::from(unscii16::FONT), (8, 16));
+        assert!(
+            atlas.coverage.iter().all(|&c| c == 0x00 || c == 0xFF),
+            "the bundled font produced partial coverage"
+        );
+        assert!(atlas.coverage.contains(&0xFF));
     }
 
     #[cfg(feature = "default-font")]

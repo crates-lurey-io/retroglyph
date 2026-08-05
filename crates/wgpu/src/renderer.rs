@@ -16,6 +16,23 @@
 //! `write_buffer` is ordered against submits, not against encoded passes, so a second write before
 //! the single submit would land under the first layer's draw as well.
 //!
+//! # Why backgrounds and glyphs stay two draws
+//!
+//! Merging them into one quad per cell, compositing `fg` over `bg` in the fragment shader, is the
+//! obvious simplification and it does not work here. A tile's `dx`/`dy` shift its glyph within and
+//! *past* its cell, and [`Presenter`](retroglyph_window::Presenter)'s spill contract requires that
+//! spill to land on neighbours uniformly in all four directions while the background stays pinned
+//! to the unshifted cell. One quad couples the two: shift it and the background shifts with the
+//! glyph; leave it unshifted and the glyph clips at the cell edge instead of spilling. Laying down
+//! every background before any glyph is what decouples them, and `retroglyph-software` has the same
+//! two-phase structure for the same reason.
+//!
+//! Emitting two quads per cell into one buffer, backgrounds first and glyphs second, would preserve
+//! the ordering and collapse this to one draw per layer. It also needs both halves to share one
+//! blend state, which they currently do not (the glyph pass preserves destination alpha and the
+//! background pass drives it to 1). Worth revisiting if draw-call count ever shows up in a profile;
+//! it does not today.
+//!
 //! # Two pipelines, not one pipeline with a mode uniform
 //!
 //! Backgrounds and glyphs differ in two ways: whether the sub-cell offset applies, and whether
@@ -164,6 +181,32 @@ const GLYPH_BLEND: wgpu::BlendState = wgpu::BlendState {
 /// is defined on unpremultiplied `u8` channels; premultiplying before the recolor would change the
 /// values it operates on and break the bit-exact parity with the CPU rasterizer that
 /// `crate::headless` asserts.
+///
+/// # Color space
+///
+/// This blend runs on sRGB-encoded values, which is not the physically correct way to composite:
+/// source-over should interpolate in linear light, and interpolating encoded values instead makes a
+/// partially transparent sprite edge come out darker than it should.
+///
+/// The text passes are unaffected, and not by luck. Coverage used as an alpha is the usual place
+/// text rendering goes wrong on color space: a rasterizer's partial coverage is a linear quantity,
+/// so interpolating between an sRGB-encoded foreground and background by it yields text that is too
+/// thin or too fat unless it is corrected. That cannot happen here, because there is no partial
+/// coverage to correct: the glyph atlas holds only `0x00` and `0xFF`, sampled `Nearest` with
+/// multisampling off onto integer-aligned quads (the sub-cell offset is in unscaled font pixels
+/// times an integer scale, so it stays aligned too). The alpha reaching [`GLYPH_BLEND`] and
+/// [`BACKGROUND_BLEND`] is therefore only ever exactly 0 or 1, which selects one endpoint outright
+/// and makes every color space agree bit for bit.
+///
+/// `retroglyph_window::atlas`'s `coverage_is_strictly_binary` pins that invariant, so an
+/// antialiased glyph source would fail there rather than quietly producing slightly wrong text.
+/// Only a sprite carries intermediate alpha.
+///
+/// It stays this way because the correct version is not this crate's to make alone.
+/// `retroglyph-software` composites sprites through `alpha_blend`'s `source_over`, which is `u8`
+/// arithmetic on the same encoded values, and this backend is checked pixel for pixel against it
+/// (see `crate::headless`). Moving one to linear light without the other replaces a small,
+/// consistent error with a visible disagreement between backends. See retroglyph#1178.
 #[cfg(feature = "tilesets")]
 const SPRITE_BLEND: wgpu::BlendState = wgpu::BlendState {
     color: wgpu::BlendComponent {
