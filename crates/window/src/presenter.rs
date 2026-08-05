@@ -66,9 +66,9 @@ use crate::geometry::CellGeometry;
 /// fn assert_is_window_handle<T: WindowHandle>(_handle: &T) {}
 /// assert_is_window_handle(&NoWindow);
 /// ```
-pub trait WindowHandle: HasWindowHandle + HasDisplayHandle {}
+pub trait WindowHandle: HasWindowHandle + HasDisplayHandle + Send + Sync {}
 
-impl<T: HasWindowHandle + HasDisplayHandle + ?Sized> WindowHandle for T {}
+impl<T: HasWindowHandle + HasDisplayHandle + Send + Sync + ?Sized> WindowHandle for T {}
 
 /// A surface-lifecycle error that can optionally signal whether it's worth retrying.
 ///
