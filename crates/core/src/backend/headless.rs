@@ -4,6 +4,12 @@
 //! and [`Headless::push_event`](crate::backend::Headless::push_event) queues synthetic input; see ["Driving `Headless` with synthetic
 //! events"](https://github.com/crates-lurey-io/retroglyph/blob/main/docs/testing.md#driving-headless-with-synthetic-events)
 //! for the full workflow.
+//!
+//! The styled-snapshot encoders ([`Headless::format_styled`], `sgr_color`) emit Select Graphic
+//! Rendition (SGR) parameters per ECMA-48 5th ed. section 8.3.117: 30-37/40-47 for the standard
+//! foreground/background colors, 90-97/100-107 for the bright variants, `38;5;n`/`48;5;n` for
+//! 256-color indices, and `38;2;r;g;b`/`48;2;r;g;b` for 24-bit truecolor.
+//! (<https://www.ecma-international.org/publications-and-standards/standards/ecma-48/>)
 
 use crate::backend::{Cursor, CursorStyle, DrawCell, Input, Output};
 use crate::color::Color;
@@ -48,10 +54,10 @@ impl Headless {
     /// documented on [`crate::grid`].
     ///
     /// For the usual case, a backend left at the default
-    /// [`composites_layers`](Output::composites_layers) of `false`, [`crate::terminal::Terminal::present`]
-    /// has already flattened the frame and only layer 0 is ever written, so this is simply the
-    /// received content. Use [`layer_grid`](Self::layer_grid) to inspect the raw per-layer state
-    /// instead.
+    /// [`composites_layers`](Output::composites_layers) of `false`,
+    /// [`crate::terminal::Terminal::present`] has already flattened the frame and only layer 0 is
+    /// ever written, so this is simply the received content. Use
+    /// [`layer_grid`](Self::layer_grid) to inspect the raw per-layer state instead.
     #[must_use]
     pub fn grid(&self) -> &Grid {
         self.composited.as_ref().unwrap_or(&self.layers)
@@ -220,6 +226,9 @@ impl Headless {
 
     /// The SGR parameter string for `color` in the foreground (`bg: false`) or background
     /// (`bg: true`) slot, or `None` for `Color::Default` (nothing to emit).
+    ///
+    /// Codes follow ECMA-48 SGR (see this module's file-level docs): 30/40 base for standard
+    /// colors, 90/100 for bright, offset by the color index within its group of 8.
     fn sgr_color(color: Color, bg: bool) -> Option<String> {
         match color {
             Color::Default => None,

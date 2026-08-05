@@ -136,6 +136,12 @@ impl PerfRenderer for DefaultPerfRenderer {
         if stats.frame_count() == 0 || area.height() == 0 {
             return;
         }
+        // 96 bytes: ~34 for the fixed ` NNNfps NN.Nms minNN.N maxNN.N ` scaffold (numeric fields
+        // widened by the padding specs) plus ~60 for the `{backend}` label. FixedBuf rejects an
+        // overflowing write and keeps only what fit (see its docs), so a backend label long
+        // enough to exceed this budget truncates the readout rather than allocating or panicking;
+        // that is acceptable for a debug HUD but is why the label is documented as "short"
+        // wherever it is passed in.
         let mut text = FixedBuf::<96>::new();
         let _ = write!(
             text,

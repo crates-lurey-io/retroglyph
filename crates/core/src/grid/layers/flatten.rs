@@ -74,6 +74,11 @@ impl Grid {
     /// buffer (the same style [`layers`](Self::layers) and [`diff`](Self::diff) already use)
     /// avoids entirely.
     pub(crate) fn flatten_into(&self, dst: &mut Self) {
+        debug_assert_eq!(
+            (self.width, self.height),
+            (dst.width, dst.height),
+            "flatten_into requires dst to have the same dimensions as self"
+        );
         dst.has_spans |= self.has_spans;
         let layer0 = self.layer0();
         let cell_count = layer0.buf.as_ref().len();
@@ -158,6 +163,14 @@ mod tests {
             crate::grid::grapheme_at(&flattened, 0, 0, 0),
             Some("e\u{0301}")
         );
+    }
+
+    #[test]
+    #[should_panic(expected = "same dimensions")]
+    fn flatten_into_mismatched_dimensions_panics() {
+        let g = Grid::new(2, 2);
+        let mut flattened = Grid::new(2, 3);
+        g.flatten_into(&mut flattened);
     }
 
     #[test]

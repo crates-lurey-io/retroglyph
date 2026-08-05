@@ -22,6 +22,11 @@ use retroglyph_core::text::{char_width, width_usize};
 ///
 /// Handles typed characters (`Event::Key(KeyCode::Char(c))`) and pasted text (`Event::Paste`)
 /// only, not IME/text composition or multi-line editing.
+///
+/// Cursor movement and deletion step by Unicode `char` (codepoint), not by grapheme cluster: a
+/// base character plus a combining mark is two `char`s, so `backspace` there removes only the
+/// mark and `move_left` stops between the two. A field over text with combining marks or
+/// emoji-ZWJ sequences will show per-codepoint, not per-glyph, editing.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct TextInputState {
     value: String,
@@ -49,6 +54,9 @@ impl TextInputState {
     /// Replace the entire content and move the cursor to its end. Resets the scroll offset to
     /// zero. Call [`ensure_visible`](Self::ensure_visible) afterward if the new value should
     /// scroll to keep the cursor (still at the end) in view.
+    ///
+    /// Sets the cursor to `value.len()`, a trivially-valid char boundary, so this skips the
+    /// debug-only boundary guard the other mutators carry.
     pub fn set_value(&mut self, s: impl Into<String>) {
         self.value = s.into();
         self.cursor = self.value.len();
@@ -72,6 +80,7 @@ impl TextInputState {
     pub fn insert(&mut self, c: char) {
         self.value.insert(self.cursor, c);
         self.cursor += c.len_utf8();
+        self.debug_assert_cursor_valid();
     }
 
     /// Insert `s` at the cursor and move the cursor past it, e.g. from an
@@ -79,6 +88,7 @@ impl TextInputState {
     pub fn insert_str(&mut self, s: &str) {
         self.value.insert_str(self.cursor, s);
         self.cursor += s.len();
+        self.debug_assert_cursor_valid();
     }
 
     /// Delete the character before the cursor, if any, and move the cursor onto its place.
@@ -88,6 +98,7 @@ impl TextInputState {
         };
         self.value.drain(prev..self.cursor);
         self.cursor = prev;
+        self.debug_assert_cursor_valid();
     }
 
     /// Delete the character at the cursor, if any. The cursor itself does not move.
@@ -96,6 +107,7 @@ impl TextInputState {
             return;
         };
         self.value.drain(self.cursor..next);
+        self.debug_assert_cursor_valid();
     }
 
     /// Move the cursor one character left, if not already at the start.
@@ -103,6 +115,7 @@ impl TextInputState {
         if let Some(prev) = self.prev_boundary() {
             self.cursor = prev;
         }
+        self.debug_assert_cursor_valid();
     }
 
     /// Move the cursor one character right, if not already at the end.
@@ -110,14 +123,21 @@ impl TextInputState {
         if let Some(next) = self.next_boundary() {
             self.cursor = next;
         }
+        self.debug_assert_cursor_valid();
     }
 
     /// Move the cursor to the start of the value.
+    ///
+    /// Sets the cursor to `0`, a trivially-valid char boundary, so this skips the debug-only
+    /// boundary guard the other mutators carry.
     pub const fn move_home(&mut self) {
         self.cursor = 0;
     }
 
     /// Move the cursor to the end of the value.
+    ///
+    /// Sets the cursor to `value.len()`, a trivially-valid char boundary, so this skips the
+    /// debug-only boundary guard the other mutators carry.
     pub const fn move_end(&mut self) {
         self.cursor = self.value.len();
     }
@@ -243,6 +263,19 @@ impl TextInputState {
                 .next()
                 .map_or(self.value.len(), |(i, _)| self.cursor + i),
         )
+    }
+
+    /// Debug-only guard for the char-boundary invariant documented on the type. Not compiled into
+    /// release builds; it exists so a future edit that lets `cursor` land mid-character fails here
+    /// with a clear message instead of far away in a byte-slice panic.
+    #[inline]
+    fn debug_assert_cursor_valid(&self) {
+        debug_assert!(
+            self.value.is_char_boundary(self.cursor),
+            "cursor {} is not a char boundary in {:?}",
+            self.cursor,
+            self.value
+        );
     }
 }
 

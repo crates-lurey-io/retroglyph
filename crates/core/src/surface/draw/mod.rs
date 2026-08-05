@@ -39,6 +39,19 @@ impl Surface<'_> {
         self.clip.contains(gx, gy).then_some((gx, gy))
     }
 
+    /// The exclusive right column, in this surface's own (possibly translated) coordinate space,
+    /// past which `print`/`print_line` stop a row: they wrap onto the next row, or skip the
+    /// remaining spans, once the cursor reaches it.
+    ///
+    /// `shift` subtracts `origin_offset` from every incoming coordinate before bounds-checking it,
+    /// so the cursor the text writers advance lives in that shifted space. The threshold has to
+    /// live there too, or a translated surface (any `Camera::surface`, or a plain `translate`)
+    /// wraps or skips early by exactly the offset. The result is `i64` because folding the offset
+    /// back into a `u16` clip edge can land outside the `u16` range in either direction.
+    pub(super) fn wrap_right(&self) -> i64 {
+        i64::from(self.clip.right()) - i64::from(self.area.left()) + i64::from(self.origin_offset.0)
+    }
+
     /// Applies this surface's tint to the cell just written at `(x, y)`.
     ///
     /// Called after a write rather than as part of one, because a glyph write drops whatever

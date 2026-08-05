@@ -6,6 +6,24 @@
 //! rendering opinion, so it works with any drawing style and is testable
 //! without a backend.
 //!
+//! ```text
+//!  world space (Size)                      screen space (terminal cells)
+//!  +--------------------------------+
+//!  |                                |       viewport (a Rect on screen)
+//!  |        origin                  |       +------------------+
+//!  |          x----------------+    |       | (vp.left, vp.top)|
+//!  |          | visible_bounds |    |  ==>  |   +----------+   |
+//!  |          |   (clamped to  |    |       |   | drawn    |   |
+//!  |          |    the world)  |    |       |   |  cells   |   |
+//!  |          +----------------+    |       |   +----------+   |
+//!  |                                |       +------------------+
+//!  +--------------------------------+
+//!
+//!  origin = world cell shown at the viewport's top-left, clamped to [0, world - viewport].
+//!  world_to_screen(w) = viewport.top_left + (w - origin), culled to visible_bounds.
+//!  screen_to_world(s) = origin + (s - viewport.top_left), culled to the world.
+//! ```
+//!
 //! Centering clamps to the world edges (the "scrolling map" convention): the
 //! viewport never scrolls past `[0, world)`, so the target stays centered
 //! except near the edges, where it drifts toward the corner. A world smaller

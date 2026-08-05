@@ -29,10 +29,22 @@ impl Density {
     /// or above it, [`Density::Mouse`]. An app that wants a different breakpoint states it
     /// relative to this default (e.g. `if width < Density::DEFAULT_BREAKPOINT_WIDTH - 4 { .. }`)
     /// rather than inventing an unrelated constant from scratch.
+    ///
+    /// `64` sits between a phone-width terminal (roughly 40 to 50 columns, where fingertip sizing
+    /// wins) and the classic 80-column desktop width (where a mouse and dense rows win). Lower
+    /// keeps touch sizing only on very narrow terminals; higher applies it to wider ones that a
+    /// mouse user would rather see packed densely. Picked by feel for that split, not measured.
     pub const DEFAULT_BREAKPOINT_WIDTH: u16 = 64;
 
-    /// The minimum size, in cells, an interactive target should claim at
-    /// this density.
+    /// The minimum size, in cells, an interactive target should claim at this density.
+    ///
+    /// Both densities are `6` cells wide: enough for a short bracketed label like `[ OK ]` plus a
+    /// cell of breathing room, the narrowest a tappable/clickable control stays legible. Height
+    /// is where they differ. [`Density::Mouse`] is a single row, since a mouse can land on one
+    /// line precisely. [`Density::Touch`] is `3` rows so a fingertip has vertical slack to hit
+    /// (and so a bordered one-line control fits: top border, content, bottom border), at the
+    /// cost of showing fewer rows on screen. The exact `6`/`3`/`1` were picked by feel for
+    /// readable terminal controls, not measured against touch-target studies.
     #[must_use]
     pub const fn min_target_size(self) -> Size {
         match self {

@@ -382,8 +382,18 @@ impl Tile {
     }
 }
 
-/// Returns `grapheme` truncated to at most 8 codepoints (combining-mark bomb
-/// defence). If the input is already within the limit it is returned as-is.
+/// Returns `grapheme` truncated to at most 8 codepoints (combining-mark bomb defence). If the
+/// input is already within the limit it is returned as-is.
+///
+/// The cap bounds how much text one cell can pull into its layer's EGC side-table, so a string
+/// of thousands of combining marks on a single base character can't blow up per-cell storage.
+/// 8 is chosen to clear the longest clusters a caller can reasonably intend (a base plus a couple
+/// of combining marks, or an emoji ZWJ sequence of a few joined code points) while still cutting
+/// off an adversarial run early. A cluster longer than 8 is truncated on a code-point boundary,
+/// so the stored text stays valid UTF-8 but may render differently than the untruncated input.
+///
+/// The exact value was picked by headroom, not measured against a corpus of real clusters; raise
+/// it if a legitimate sequence turns out to exceed it.
 ///
 /// Only present when the `egc` feature is enabled.
 #[cfg(feature = "egc")]
@@ -402,8 +412,8 @@ mod tests {
     use crate::color::Color;
 
     /// Regression guard for the size win the EGC side-table exists for: a
-    /// `Tile` must stay small and feature-stable (same layout with or
-    /// without `egc`) now that it no longer inlines grapheme text.
+    /// `Tile` stays 20 bytes and keeps the same layout with or without
+    /// `egc`, because grapheme text lives in the side table.
     #[test]
     fn test_tile_size_is_stable_and_small() {
         assert_eq!(size_of::<Tile>(), 20);

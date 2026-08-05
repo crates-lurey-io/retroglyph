@@ -188,7 +188,8 @@ impl Easing {
     }
 }
 
-/// `t * (10 * t - 10.75) * (2 pi / 3)`'s sine, decayed by `2^(-10t)`: see
+/// `2^(-10t)` scaling the sine of `(10*t - 0.75) * (2*pi/3)`, plus 1: an exponentially
+/// decaying oscillation that overshoots 1 and rings back down to settle exactly on it. See
 /// <https://easings.net/#easeOutElastic>.
 fn ease_out_elastic(t: f32) -> f32 {
     const C4: f32 = 2.0 * core::f32::consts::PI / 3.0;
@@ -209,6 +210,9 @@ fn ease_out_elastic(t: f32) -> f32 {
 /// Four piecewise quadratic segments, each bouncing to a smaller peak: see
 /// <https://easings.net/#easeOutBounce>.
 fn ease_out_bounce(t: f32) -> f32 {
+    // Standard easings.net bounce coefficients: D1 partitions t into four arcs (boundaries at
+    // 1/D1, 2/D1, 2.5/D1) and N1 = 121/16 fixes their shared steepness so each arc lands exactly
+    // on the next segment's floor. They are a matched set; changing one alone breaks continuity.
     const N1: f32 = 7.5625;
     const D1: f32 = 2.75;
     if t < 1.0 / D1 {

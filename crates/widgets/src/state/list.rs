@@ -18,9 +18,11 @@ pub enum SelectionWrap {
 
 /// Selection index and scroll offset for a selectable, scrollable list.
 ///
-/// Holds no reference to the list's actual items: `len` is passed in to each
-/// mutating method, so the same `ListState` can be reused across lists that
-/// change size (menus, reward pools, deck views, ...) without going stale.
+/// Holds no reference to the list's actual items: `len` is passed in to each selection-movement
+/// method, so `select_next`/`select_previous`/`select_first`/`select_last` and the scroll offset
+/// stay valid across lists that change size (menus, reward pools, deck views, ...). A selection
+/// set directly with [`select`](Self::select) is the exception: it is stored unchecked and can
+/// outlive a shrunk list. See that method.
 ///
 /// Selection movement clamps at `len`'s ends by default; see [`SelectionWrap`] (set via
 /// [`ListState::set_wrap`]) to switch to wraparound instead. Scrolling is a separate,
@@ -74,7 +76,14 @@ impl ListState {
         self.wrap = wrap;
     }
 
-    /// Select an explicit index (or clear the selection with `None`).
+    /// Select an explicit index, or clear the selection with `None`.
+    ///
+    /// The index is stored verbatim and is not bounds-checked against any list length: unlike
+    /// `select_next`/`select_previous`, this does not clamp. If the list later shrinks below a
+    /// stored index, `selected()` keeps returning that now-out-of-range index (`ensure_visible`
+    /// will not fix it, since it never sees `len`). Callers indexing their items by
+    /// `selected()` must bound-check it against the current length first, or re-anchor with
+    /// `select_first`/`select_last` after the list changes size.
     pub const fn select(&mut self, index: Option<usize>) {
         self.selected = index;
     }

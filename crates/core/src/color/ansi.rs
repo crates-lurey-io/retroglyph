@@ -1,6 +1,13 @@
 //! The 16-color ANSI palette, and the shared indexed/ANSI quantization machinery `Color`'s
 //! `to_indexed`/`to_ansi`/`resolve_rgb` build on, including the [`Quantize`] metric that picks
 //! between them.
+//!
+//! The palette values here are the de-facto-standard xterm 256-color palette (the 16 ANSI
+//! defaults plus the 6x6x6 cube and 24-step gray ramp), the same numbers every other terminal
+//! matches. See the 8-bit color table at
+//! <https://en.wikipedia.org/wiki/ANSI_escape_code#8-bit>. They are a fixed external palette, not
+//! values this crate is free to retune: changing one changes what every RGB input quantizes to and
+//! desyncs retroglyph's output from every other terminal's rendering of the same index.
 
 use gem::space::Srgb;
 
@@ -106,9 +113,10 @@ impl AnsiColor {
 
     /// Returns the standard xterm RGB values for this ANSI color.
     ///
-    /// These are the same 16 reference colors used by [`Color::to_indexed`](super::Color::to_indexed) and
-    /// [`Color::to_ansi`](super::Color::to_ansi) when quantizing RGB input; a terminal's actual theme may
-    /// render these colors differently.
+    /// These are the classic xterm defaults, the same 16 reference colors used by
+    /// [`Color::to_indexed`](super::Color::to_indexed) and [`Color::to_ansi`](super::Color::to_ansi)
+    /// when quantizing RGB input. xterm's own defaults have shifted across versions, and a
+    /// terminal's actual theme may render these colors differently still.
     #[must_use]
     pub const fn to_rgb(self) -> (u8, u8, u8) {
         match self {
@@ -152,11 +160,18 @@ pub(super) const ANSI_COLORS: [AnsiColor; 16] = [
     AnsiColor::BrightWhite,
 ];
 
-/// The 6 steps used for each channel of the 256-color palette's 6×6×6 RGB cube
-/// (indices 16–231).
+/// The 6 steps used for each channel of the 256-color palette's 6x6x6 RGB cube
+/// (indices 16-231).
+///
+/// The five non-zero steps follow xterm's `55 + 40 * n` for `n` in `1..=5`; step 0 is a true 0,
+/// not `55 - 40`. Do not "regularize" these to evenly spaced values: they must match the xterm
+/// palette other terminals use.
 const CUBE_STEPS: [u8; 6] = [0, 95, 135, 175, 215, 255];
 
-/// The 24 grayscale ramp values used by the 256-color palette (indices 232–255).
+/// The 24 grayscale ramp values used by the 256-color palette (indices 232-255).
+///
+/// xterm's ramp: `8 + 10 * n` for `n` in `0..=23`, so it runs 8..=238 and never reaches pure
+/// black or pure white (those live in the cube and the ANSI set).
 const GRAYSCALE_RAMP: [u8; 24] = [
     8, 18, 28, 38, 48, 58, 68, 78, 88, 98, 108, 118, 128, 138, 148, 158, 168, 178, 188, 198, 208,
     218, 228, 238,
