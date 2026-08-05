@@ -445,7 +445,11 @@ impl SoftwareRenderer {
         self.sprite_cache.get(glyph).is_some()
     }
 
+    // Signature has to match the `tilesets` arm above (both are called uniformly as
+    // `self.has_sprite(glyph)`), so `_glyph` and `self` stay unused here rather than becoming a
+    // `const fn` associated function: see retroglyph#954.
     #[cfg(not(feature = "tilesets"))]
+    #[allow(clippy::unused_self, clippy::missing_const_for_fn)]
     fn has_sprite(&self, _glyph: char) -> bool {
         false
     }

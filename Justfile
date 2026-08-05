@@ -39,6 +39,10 @@ clippy:
     # as the backend -- plain `--no-default-features` doesn't compile on its own.
     cargo clippy -p retroglyph-core --no-default-features --features libm -- -D warnings
     cargo clippy -p retroglyph-ui --no-default-features --features libm -- -D warnings
+    # retroglyph#954: the two lines above and --all-features never build retroglyph-software
+    # without `tilesets`, so a lint that only fires on that stub (e.g. the has_sprite one fixed
+    # alongside this) can land on main undetected.
+    cargo clippy -p retroglyph-software --features default-font -- -D warnings
 
 # Typecheck the modules the host build skips (retroglyph#552).
 #
