@@ -57,12 +57,12 @@ macro_rules! example_main {
 /// example built with no wasm-capable feature just doesn't get any FFI
 /// surface, which is correct since nothing would call it).
 ///
-/// - `software` or `gl` (either wins if enabled): a `#[wasm_bindgen(start)]`
-///   shim that calls the example's own `main()`. Both `run_software::<E>()`
-///   and `run_gl::<E>()` are already portable to `wasm32` via winit (canvas +
-///   WebGL2 for `gl`); they just need something to invoke them when the
-///   module loads.
-/// - `wasm-headless` (if `software`/`gl` are off): drives a
+/// - `software`, `gl`, or `wgpu` (the first enabled wins): a `#[wasm_bindgen(start)]`
+///   shim that calls the example's own `main()`. `run_software::<E>()`,
+///   `run_gl::<E>()` and `run_wgpu::<E>()` are all portable to `wasm32` via
+///   winit (a canvas, plus WebGL2 for `gl` and WebGPU for `wgpu`); they just
+///   need something to invoke them when the module loads.
+/// - `wasm-headless` (if all three are off): drives a
 ///   `Terminal<Headless>` from a browser `requestAnimationFrame` loop. See
 ///   [`wasm_headless`](crate::util::wasm_headless) for the FFI key decoder.
 /// - `wasm-terminal` (if none of the above is on): drives a
@@ -71,9 +71,12 @@ macro_rules! example_main {
 #[macro_export]
 macro_rules! wasm_entry {
     ($E:ty) => {
-        // Both windowed backends (software canvas, gl WebGL2) run their winit event loop from
-        // `main()`; this shim is the module-load hook that invokes it.
-        #[cfg(all(any(feature = "software", feature = "gl"), target_arch = "wasm32"))]
+        // Every windowed backend (software canvas, gl WebGL2, wgpu WebGPU) runs its winit event
+        // loop from `main()`; this shim is the module-load hook that invokes it.
+        #[cfg(all(
+            any(feature = "software", feature = "gl", feature = "wgpu"),
+            target_arch = "wasm32"
+        ))]
         #[allow(missing_docs)]
         #[::wasm_bindgen::prelude::wasm_bindgen(start)]
         pub fn __rg_wasm_start() -> ::std::result::Result<(), ::wasm_bindgen::JsValue> {
@@ -98,7 +101,7 @@ macro_rules! __wasm_headless_entry {
     ($E:ty) => {
         #[cfg(all(
             feature = "wasm-headless",
-            not(any(feature = "software", feature = "gl")),
+            not(any(feature = "software", feature = "gl", feature = "wgpu")),
             target_arch = "wasm32"
         ))]
         const _: () = {
@@ -210,7 +213,12 @@ macro_rules! __wasm_terminal_entry {
     ($E:ty) => {
         #[cfg(all(
             feature = "wasm-terminal",
-            not(any(feature = "software", feature = "gl", feature = "wasm-headless")),
+            not(any(
+                feature = "software",
+                feature = "gl",
+                feature = "wgpu",
+                feature = "wasm-headless"
+            )),
             target_arch = "wasm32"
         ))]
         const _: () = {

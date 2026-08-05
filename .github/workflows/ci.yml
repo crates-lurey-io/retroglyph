@@ -263,6 +263,27 @@ jobs:
           cargo check -p retroglyph-gl --target wasm32-unknown-unknown --features
           default-font,tilesets
 
+  # wasm32 compile gate for the WebGPU backend, the sibling of compile-wasm-gl. There is no browser
+  # run for this one yet: headless Chrome can reach WebGPU through SwiftShader
+  # (`--use-webgpu-adapter=swiftshader`), but that combination isn't validated here, so this job is
+  # a compile signal only and the wasm render path stays runtime-unverified. See retroglyph#1181.
+  compile-wasm-wgpu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - run:
+          cargo check -p retroglyph-wgpu --target wasm32-unknown-unknown --features
+          default-font,tilesets
+      # The gallery variant is a separate build path (the examples crate's `wgpu` feature plus its
+      # `wasm_entry!` shim), so compiling the crate alone would not catch a break in it.
+      - run:
+          cargo check -p retroglyph-examples --target wasm32-unknown-unknown --no-default-features
+          --features wgpu
+
   # Live headless-Chrome WebGL2 render smoke test (issue #370): the browser sibling of the native
   # gl-headless job. It runs crates/gl/src/webgl_smoke.rs (a `wasm-bindgen-test`) through
   # `wasm-pack test --headless --chrome`, which builds the crate for wasm32, drives a real WebGL2
@@ -416,6 +437,7 @@ jobs:
       - test
       - test-wasm
       - compile-wasm-gl
+      - compile-wasm-wgpu
       - test-wasm-gl
       - gl-headless
       - wgpu-headless

@@ -20,8 +20,8 @@ out_dir="${1:-$repo_root/target/doc/examples}"
 templates_dir="$repo_root/docs/templates/examples"
 
 # Column order here must match the `<th>` order in index-template.html.
-variants_label=(Headless Terminal Software WebGL)
-variants_dir=(headless terminal software gl)
+variants_label=(Headless Terminal Software WebGL WebGPU)
+variants_dir=(headless terminal software gl wgpu)
 
 mkdir -p "$out_dir"
 rows=""
