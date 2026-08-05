@@ -27,9 +27,7 @@ struct Uniforms {
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
 
-// The active atlas: R8 coverage for the glyph pipelines, RGBA8 for the sprite pipeline. Both are
-// bound through one bind-group layout (see `renderer::GpuResources::atlas_layout`), so the two
-// atlases differ only in which bind group is set.
+// The glyph atlas: R8 coverage, grid-packed. Group 1 for every pipeline.
 @group(1) @binding(0) var atlas: texture_2d_array<f32>;
 @group(1) @binding(1) var atlas_sampler: sampler;
 

@@ -83,28 +83,35 @@ fn vs_glyph(
     return place(vertex_index, instance_index, cell, 1.0);
 }
 
-// Background pass: the cell's opaque background, written with blending off. A cell with no
-// background (a transparent cell in a higher grid layer) is discarded, so the layer beneath shows
-// through.
+// Neither fragment stage uses `discard`. A cell that draws nothing writes transparent black
+// instead, which source-over blending resolves to "leave the destination alone", so the result is
+// identical while the shader stays free of a fragment-killing branch.
+//
+// That distinction is not a micro-optimization. `discard` makes a fragment's visibility unknowable
+// until the fragment stage has run, so a tile-based deferred renderer (every mobile GPU, and Apple
+// silicon) has to disable early depth/stencil rejection and hidden-surface removal for the whole
+// draw. Encoding "draws nothing" as alpha 0 keeps every fragment's contribution decidable up front.
+
+// Both stages emit *premultiplied* alpha, which is why their blend states use a `One` source
+// factor rather than `SrcAlpha`: the multiply has already happened here. Keeping the two in step
+// matters even though the alpha is only ever 0 or 1 today, where the two conventions happen to
+// agree; a premultiplied color composited with a `SrcAlpha` factor would multiply twice the moment
+// any fractional alpha appeared.
+
+// Background pass: the cell's opaque background. A cell with no background (a transparent cell in a
+// higher grid layer) contributes alpha 0, so the layer beneath survives untouched.
 @fragment
 fn fs_background(in: CellVarying) -> @location(0) vec4<f32> {
-    if (in.flags & FLAG_HAS_BG) == 0u {
-        discard;
-    }
-    return vec4<f32>(in.bg.rgb, 1.0);
+    let opaque = f32(in.flags & FLAG_HAS_BG);
+    return vec4<f32>(in.bg.rgb * opaque, opaque);
 }
 
 // Glyph pass: the foreground with atlas coverage as alpha, blended over the backgrounds laid down
-// by the pass above. An empty cell (no glyph) is discarded so it can't erase the layer beneath.
+// by the pass above. An empty cell contributes coverage 0 everywhere, so it can't erase the layer
+// beneath.
 @fragment
 fn fs_glyph(in: CellVarying) -> @location(0) vec4<f32> {
-    // `textureSample` requires uniform control flow, so the sample happens before the flag test
-    // that may `discard`. The cost is one sample for a fragment that is about to be thrown away;
-    // the alternative (`textureSampleLevel` after the discard) would trade that for an explicit
-    // LOD on a texture that has exactly one mip level.
-    let coverage = sample_atlas(in.slot, in.uv);
-    if (in.flags & FLAG_HAS_GLYPH) == 0u {
-        discard;
-    }
-    return vec4<f32>(in.fg.rgb, coverage);
+    let drawn = f32((in.flags & FLAG_HAS_GLYPH) >> 1u);
+    let coverage = sample_atlas(in.slot, in.uv) * drawn;
+    return vec4<f32>(in.fg.rgb * coverage, coverage);
 }

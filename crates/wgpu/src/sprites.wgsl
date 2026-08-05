@@ -5,6 +5,11 @@
 // and a sprite pixel size, so the quad scales to the sprite. A sprite larger than a cell spills
 // into its neighbours, exactly like `retroglyph-software`'s sprite blit.
 
+// The sprite atlas: RGBA8, one sprite per layer. Group 2, distinct from the glyph atlas's group 1,
+// so both stay bound for a whole frame and the per-layer draw loop rebinds nothing.
+@group(2) @binding(0) var sprites: texture_2d_array<f32>;
+@group(2) @binding(1) var sprite_sampler: sampler;
+
 // Per-sprite instance, matching `sprite_set::SpriteInstance`'s `#[repr(C)]` layout and the
 // `VertexBufferLayout` in `renderer::sprite_layout`.
 struct SpriteInput {
@@ -91,7 +96,7 @@ fn mix_u8(a: i32, b: i32, t: i32) -> i32 {
 // test renders the same sprite through both to keep them honest.
 @fragment
 fn fs_sprite(in: SpriteVarying) -> @location(0) vec4<f32> {
-    let src = textureSample(atlas, atlas_sampler, in.uv, in.layer);
+    let src = textureSample(sprites, sprite_sampler, in.uv, in.layer);
     // Reconstruct the exact 0..255 source channel. Exact for a nearest-filtered, non-mipmapped,
     // non-sRGB UNORM8 texture (which is what the sprite atlas is), since every representable u8
     // value round-trips through `/255.0` and back via `round()` with no rounding error.

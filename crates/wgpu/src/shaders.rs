@@ -116,11 +116,26 @@ mod tests {
     }
 
     #[test]
-    fn compositing_flags_discard_transparent_and_empty_cells() {
+    fn compositing_flags_gate_a_cell_through_alpha_not_discard() {
         let src = source(Shader::Cells);
-        assert!(src.contains("(in.flags & FLAG_HAS_BG) == 0u"));
-        assert!(src.contains("(in.flags & FLAG_HAS_GLYPH) == 0u"));
-        assert_eq!(src.matches("discard;").count(), 2);
+        // Both flags must still reach the fragment stage, or a higher grid layer's transparent
+        // cells would paint over the layer beneath.
+        assert!(src.contains("in.flags & FLAG_HAS_BG"));
+        assert!(src.contains("in.flags & FLAG_HAS_GLYPH"));
+        // `discard` makes a fragment's visibility undecidable before the fragment stage runs, which
+        // costs a tile-based deferred renderer its early-Z and hidden-surface removal for the whole
+        // draw. Every "draws nothing" case here is an alpha-0 write that source-over blending
+        // resolves to a no-op instead.
+        assert!(
+            !src.contains("discard;"),
+            "cells.wgsl reintroduced discard; gate the cell through alpha instead"
+        );
+    }
+
+    #[cfg(feature = "tilesets")]
+    #[test]
+    fn the_sprite_stage_avoids_discard_too() {
+        assert!(!source(Shader::Sprites).contains("discard;"));
     }
 
     #[cfg(feature = "tilesets")]

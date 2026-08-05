@@ -107,7 +107,36 @@ const fn sprite_layout() -> wgpu::VertexBufferLayout<'static> {
     }
 }
 
+/// The blend state for the background pass.
+///
+/// Blending is enabled even though a background is opaque, because that is what lets a cell with no
+/// background write transparent black instead of calling `discard` (see `cells.wgsl`). Source-over
+/// resolves alpha 1 to exactly the background color and alpha 0 to exactly the destination, so the
+/// visible result matches an unblended write with a discard, without the fragment-kill.
+///
+/// The color source factor is `One`, not `SrcAlpha`, because `fs_background` emits premultiplied
+/// alpha: the multiply has already happened in the shader, and applying it again here would square
+/// it the moment any fractional alpha appeared.
+///
+/// The alpha factors are `One`/`OneMinusSrcAlpha`, so a painted cell drives the surface alpha to 1
+/// and a transparent one leaves whatever was already there.
+const BACKGROUND_BLEND: wgpu::BlendState = wgpu::BlendState {
+    color: wgpu::BlendComponent {
+        src_factor: wgpu::BlendFactor::One,
+        dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+        operation: wgpu::BlendOperation::Add,
+    },
+    alpha: wgpu::BlendComponent {
+        src_factor: wgpu::BlendFactor::One,
+        dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+        operation: wgpu::BlendOperation::Add,
+    },
+};
+
 /// The blend state for the glyph pass.
+///
+/// The color source factor is `One` for the same reason as [`BACKGROUND_BLEND`]: `fs_glyph` emits
+/// premultiplied alpha.
 ///
 /// The alpha factors are `Zero`/`One`, so `A = src.a * 0 + dst.a * 1` leaves the destination alpha
 /// untouched. Coverage must drive the color channels only: it is a glyph mask, not a surface
@@ -115,7 +144,7 @@ const fn sprite_layout() -> wgpu::VertexBufferLayout<'static> {
 /// alpha 0, which a compositing window manager would then show through.
 const GLYPH_BLEND: wgpu::BlendState = wgpu::BlendState {
     color: wgpu::BlendComponent {
-        src_factor: wgpu::BlendFactor::SrcAlpha,
+        src_factor: wgpu::BlendFactor::One,
         dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
         operation: wgpu::BlendOperation::Add,
     },
@@ -128,6 +157,13 @@ const GLYPH_BLEND: wgpu::BlendState = wgpu::BlendState {
 
 /// The blend state for the sprite pass: source-over, so a sprite's transparent pixels reveal what
 /// is beneath, with the framebuffer alpha kept at 1 so the surface stays opaque.
+///
+/// Unlike the two cell passes, this one is *straight* (non-premultiplied) alpha, hence the
+/// `SrcAlpha` source factor. `fs_sprite` reproduces
+/// [`Tint::apply`](retroglyph_core::color::Tint::apply)'s arithmetic exactly, and that arithmetic
+/// is defined on unpremultiplied `u8` channels; premultiplying before the recolor would change the
+/// values it operates on and break the bit-exact parity with the CPU rasterizer that
+/// `crate::headless` asserts.
 #[cfg(feature = "tilesets")]
 const SPRITE_BLEND: wgpu::BlendState = wgpu::BlendState {
     color: wgpu::BlendComponent {
@@ -214,7 +250,7 @@ impl GpuResources {
             target_format,
             "vs_background",
             "fs_background",
-            None,
+            Some(BACKGROUND_BLEND),
         );
         let glyph = cell_pipeline(
             device,
@@ -292,7 +328,11 @@ impl GpuResources {
         let atlas_layout = atlas_bind_group_layout(device);
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("retroglyph sprites"),
-            bind_group_layouts: &[Some(&uniform_layout), Some(&atlas_layout)],
+            bind_group_layouts: &[
+                Some(&uniform_layout),
+                Some(&atlas_layout),
+                Some(&atlas_layout),
+            ],
             immediate_size: 0,
         });
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -457,13 +497,20 @@ impl GpuResources {
             multiview_mask: None,
         });
 
+        // Every bind group is set once for the whole frame. The glyph atlas and the sprite atlas
+        // sit at different groups precisely so the per-layer loop below never rebinds either one;
+        // the only state it changes is the pipeline and the vertex-buffer slice.
         pass.set_bind_group(0, &self.uniform_group, &[]);
+        pass.set_bind_group(1, &self.glyph_atlas_group, &[]);
+        #[cfg(feature = "tilesets")]
+        if let Some(gpu) = &self.sprites {
+            pass.set_bind_group(2, &gpu.atlas_group, &[]);
+        }
 
         for (index, layer) in layers.iter().enumerate() {
             if layer.count > 0 {
                 // Binding this layer's own slice restarts the instance index at 0, so the vertex
                 // shader's `instance_index % cols` addressing needs no per-layer base.
-                pass.set_bind_group(1, &self.glyph_atlas_group, &[]);
                 pass.set_vertex_buffer(0, self.cells.slice(layer.bytes(CELL_STRIDE)));
                 pass.set_pipeline(&self.background);
                 pass.draw(0..4, 0..layer.count);
@@ -515,7 +562,6 @@ impl SpriteGpu {
             return;
         }
         pass.set_pipeline(&self.pipeline);
-        pass.set_bind_group(1, &self.atlas_group, &[]);
         pass.set_vertex_buffer(0, self.instances.slice(range.bytes(SPRITE_STRIDE)));
         pass.draw(0..4, 0..range.count);
     }
