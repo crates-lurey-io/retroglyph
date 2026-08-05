@@ -141,7 +141,7 @@ mod tests {
 
     #[cfg(feature = "egc")]
     #[test]
-    fn test_grid_clone_preserves_extra() {
+    fn clone_preserves_extra() {
         let mut g = Grid::new(2, 2);
         g.write_grapheme(0, 0, 0, "e\u{0301}", Style::default());
         let cloned = g.clone();
@@ -153,7 +153,7 @@ mod tests {
 
     #[cfg(feature = "egc")]
     #[test]
-    fn test_grid_flatten_into_carries_extra_from_higher_layer() {
+    fn flatten_into_carries_extra_from_higher_layer() {
         let mut g = Grid::new(2, 2);
         g.write_grapheme(1, 0, 0, "e\u{0301}", Style::default());
         let mut flattened = Grid::new(2, 2);
@@ -167,14 +167,14 @@ mod tests {
 
     #[test]
     #[should_panic(expected = "same dimensions")]
-    fn test_grid_flatten_into_mismatched_dimensions_panics() {
+    fn flatten_into_mismatched_dimensions_panics() {
         let g = Grid::new(2, 2);
         let mut flattened = Grid::new(2, 3);
         g.flatten_into(&mut flattened);
     }
 
     #[test]
-    fn test_grid_flatten_into_single_layer_is_a_plain_copy() {
+    fn flatten_into_single_layer_is_a_plain_copy() {
         let mut g = Grid::new(2, 2);
         g.put_tile(0, (0, 0), Tile::new('a', Style::default()));
         g.put_tile(0, (1, 1), Tile::new('b', Style::default()));
@@ -186,7 +186,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_flatten_into_higher_layer_overwrites_glyph_and_fg_but_not_default_bg() {
+    fn flatten_into_higher_layer_overwrites_glyph_and_fg_but_not_default_bg() {
         let mut g = Grid::new(1, 1);
         g.put_tile(
             0,
@@ -205,7 +205,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_flatten_into_empty_higher_layer_cell_is_transparent() {
+    fn flatten_into_empty_higher_layer_cell_is_transparent() {
         let mut g = Grid::new(2, 1);
         g.put_tile(0, (0, 0), Tile::new('a', Style::default()));
         g.put_tile(0, (1, 0), Tile::new('b', Style::default()));
@@ -220,7 +220,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_flatten_into_multi_layer_stale_dst_extra_is_cleared() {
+    fn flatten_into_multi_layer_stale_dst_extra_is_cleared() {
         // `dst` may be a reused scratch buffer with stale content from a previous frame (see
         // `Terminal::present`): `flatten_into` must fully overwrite it, not merge with it.
         let mut flattened = Grid::new(1, 1);
