@@ -43,6 +43,13 @@ drive the `Output` trait. On any other host they are invisible to the gate, so a
 backend draw contract can be locally green and fail CI. Run `just check-targets` as well when
 touching `Output`, `DrawCell`, or a backend implementation (retroglyph#552).
 
+**`retroglyph-wgpu`'s offscreen render tests need a GPU adapter, not a particular target.** They are
+not `cfg`-gated, so `just check` runs them wherever `wgpu` finds an adapter (any developer machine)
+and skips them with a message where it doesn't. That skip is silent enough to hide a real break, so
+CI's `wgpu-headless` job sets `RETROGLYPH_REQUIRE_WGPU=1` to turn a missing adapter into a failure.
+If you touch the wgpu draw path on a machine without an adapter, check the CI job rather than
+assuming a green local run covered it.
+
 ## Key rules
 
 - **Comment/doc-comment line width: use the full ~100 cols, not ~80.** There's no `rustfmt.toml` in
@@ -77,9 +84,9 @@ harness) and `examples/AGENTS.md` for the per-example validation checklist.
 
 Conventional Commits, scoped to the crate directory under `crates/*` a change touches:
 `feat(widgets): ...`, `fix(software): ...`, `docs(core): ...`. Valid scopes: `core`, `terminal`,
-`crossterm`, `terminal-wasm`, `software`, `gl`, `window`, `widgets`, `examples`. For changes that
-don't belong to a single crate, use a workspace-level scope: `workspace` (tooling, CI, root docs,
-release config) or `deps` (dependency bumps). A scopeless title is still accepted, but prefer
+`crossterm`, `terminal-wasm`, `software`, `gl`, `wgpu`, `window`, `widgets`, `examples`. For changes
+that don't belong to a single crate, use a workspace-level scope: `workspace` (tooling, CI, root
+docs, release config) or `deps` (dependency bumps). A scopeless title is still accepted, but prefer
 `workspace` over omitting the scope.
 
 The convention is enforced on **PR titles**, not individual commits. The repo is squash-merge only,

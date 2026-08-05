@@ -212,6 +212,15 @@ jobs:
           report_type: test_results
           disable_search: true
           token: ${{ secrets.CODECOV_TOKEN }}
+      - name: Upload test results to Codecov (wgpu)
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v7
+        with:
+          files: target/nextest/ci/flags/wgpu.xml
+          flags: wgpu
+          report_type: test_results
+          disable_search: true
+          token: ${{ secrets.CODECOV_TOKEN }}
       - name: Upload test results to Codecov (window)
         if: ${{ !cancelled() }}
         uses: codecov/codecov-action@v7
@@ -319,6 +328,32 @@ jobs:
             libegl1 libegl-mesa0 libgl1-mesa-dri libglvnd0
       - run: cargo test -p retroglyph-gl --features default-font,tilesets -- headless
 
+  # Offscreen render tests for retroglyph-wgpu, the sibling of gl-headless above. The windowed path
+  # needs a real window, so the crate's `src/headless.rs` instead requests a device with no
+  # compatible surface, runs the real pipeline into a texture, and reads the pixels back (property
+  # checks + pixel-for-pixel parity with the retroglyph-software CPU rasterizer). Unlike the GL
+  # equivalent this needs no platform-specific context setup, since "no surface" is first-class on
+  # every wgpu backend; what it does need is a driver, and CI has no GPU, so this installs Mesa's
+  # lavapipe (the Vulkan software rasterizer) and pins WGPU_BACKEND to it. RETROGLYPH_REQUIRE_WGPU
+  # turns a missing adapter into a hard failure here (elsewhere those tests skip), so the job can't
+  # silently pass without actually rendering.
+  wgpu-headless:
+    runs-on: ubuntu-latest
+    env:
+      WGPU_BACKEND: vulkan
+      RETROGLYPH_REQUIRE_WGPU: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install Mesa (lavapipe) + the Vulkan loader
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            mesa-vulkan-drivers libvulkan1 vulkan-tools
+          vulkaninfo --summary || true
+      - run: cargo test -p retroglyph-wgpu --features default-font,tilesets -- headless
+
   test-wasm:
     needs: changes
     if: needs.changes.outputs.wasm == 'true'
@@ -366,7 +401,7 @@ jobs:
           # One combined workspace lcov.info, attributed per crate: each flag below is
           # scoped by its own `paths:` in codecov.yml, so a single upload still yields
           # per-crate coverage numbers instead of one blended workspace figure.
-          flags: core,terminal,crossterm,terminal-wasm,software,gl,window,widgets
+          flags: core,terminal,crossterm,terminal-wasm,software,gl,wgpu,window,widgets
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: true
 
@@ -383,6 +418,7 @@ jobs:
       - compile-wasm-gl
       - test-wasm-gl
       - gl-headless
+      - wgpu-headless
       - coverage
     if: ${{ always() }}
     steps:
