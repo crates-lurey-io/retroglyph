@@ -9,7 +9,7 @@
 //! |---|---|---|
 //! | `SoftwareRenderer` (retroglyph-software) | Copies pixel buffer to softbuffer surface | Creates `softbuffer::Context` + `Surface` |
 //! | `GlRenderer` (retroglyph-gl) | Instanced draw + swaps buffers | Creates a GL context (glutin native / WebGL2 wasm) from the window |
-//! | `WgpuRenderer` (future) | Submits render pass + presents swap chain | Creates `wgpu::Surface` + `Device` |
+//! | `WgpuRenderer` (retroglyph-wgpu) | Submits a render pass + presents the swap chain | Creates a `wgpu::Surface`, `Device`, and `Queue` |
 //!
 //! See the crate-level docs (`crate` root, "DPI, scale, and the resize contract" and
 //! "Threading model" sections) for the physical-pixel/no-auto-scaling contract on
@@ -36,6 +36,13 @@ use crate::geometry::CellGeometry;
 /// (softbuffer stores it for the surface's lifetime), so presenters receive `Arc<dyn
 /// WindowHandle>`: rwh implements the handle traits for `Arc<H: ?Sized>`, so the trait object
 /// passes straight into `softbuffer::Surface::new` / `wgpu::Instance::create_surface`.
+///
+/// `Send + Sync` is part of the trait rather than left to each implementation because a trait
+/// object erases auto traits its trait doesn't name, and `wgpu::Instance::create_surface` requires
+/// them: its safe entry point takes ownership of a `Send + Sync` handle, and the alternative that
+/// doesn't is `unsafe`. Declaring them here is what makes `Arc<dyn WindowHandle>` usable with it.
+/// Every windowing library that produces `raw-window-handle` types satisfies this already
+/// (`winit::window::Window` does on every platform).
 ///
 /// # Examples
 ///
@@ -191,9 +198,9 @@ impl RecoverableError for GenericSurfaceError {
 ///
 /// A [`Tile`]'s `dx`/`dy` shift its glyph within, and past, its cell.
 /// This is a cross-backend rendering contract: the CPU rasterizer (`retroglyph-software`) and the
-/// GPU one (`retroglyph-gl`) must produce the same pixels, so it is specified here once instead of
-/// in mirrored per-backend comments that reference each other (and drift when only one is
-/// touched). A `Presenter` that honors sub-cell offsets must obey all four points:
+/// GPU ones (`retroglyph-gl`, `retroglyph-wgpu`) must produce the same pixels, so it is specified
+/// here once instead of in mirrored per-backend comments that reference each other (and drift when
+/// only one is touched). A `Presenter` that honors sub-cell offsets must obey all four points:
 ///
 /// - `dx`/`dy` are in **unscaled font pixels** (a presenter multiplies by its own integer scale);
 ///   negative `dx` shifts the glyph left, negative `dy` up.
@@ -207,8 +214,8 @@ impl RecoverableError for GenericSurfaceError {
 ///   two per cell would let a later cell's background overwrite an earlier neighbor's spilled
 ///   glyph, breaking spill in the right/down directions only.
 ///
-/// The offset *application* is not shared code: `retroglyph-gl` shifts a quad's vertex
-/// position in its vertex shader, `retroglyph-software` shifts `origin_x`/`origin_y` in a CPU blit:
+/// The offset *application* is not shared code: the GPU backends shift a quad's vertex position in
+/// their vertex shader, `retroglyph-software` shifts `origin_x`/`origin_y` in a CPU blit:
 /// irreducibly different mechanics that must nonetheless agree on the four points above.
 ///
 /// # Examples

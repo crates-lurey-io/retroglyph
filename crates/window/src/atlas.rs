@@ -67,6 +67,7 @@ pub fn addressable_glyphs(font: &BitmapFont) -> u32 {
 /// The packing of glyph cells into an array texture: a fixed [`ATLAS_COLS`]x[`ATLAS_ROWS`] grid of
 /// `cell_w`x`cell_h` glyph cells per layer, across `layers` layers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct AtlasGeometry {
     /// Glyph cell width in texels (one unscaled font pixel per texel).
     pub cell_w: u32,
@@ -111,6 +112,7 @@ impl AtlasGeometry {
 
 /// The CPU-side coverage buffer for a whole atlas, grid-packed per [`AtlasGeometry`].
 #[derive(Clone, Debug)]
+#[non_exhaustive]
 pub struct AtlasData {
     /// The glyph packing.
     pub geometry: AtlasGeometry,
