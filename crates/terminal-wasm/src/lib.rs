@@ -1472,7 +1472,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "retroglyph#713: set_cursor_position doesn't resync the renderer's tracked cursor"]
     fn satisfies_the_cursor_contract() {
         retroglyph_core::testing::conformance::assert_cursor_contract(|size| {
             TerminalWasm::new(size.width(), size.height())
