@@ -8,21 +8,16 @@
 //! example list is just "every `.rs` file in that directory," discovered at
 //! runtime rather than hardcoded or read from `cargo metadata`.
 //!
-//! Each backend has a WASM counterpart, except wgpu: press `w` at the backend prompt to
+//! Each backend has a WASM counterpart: press `w` at the backend prompt to
 //! toggle between native and WASM before picking a backend. A WASM choice is
 //! built and packaged with the same real HTML/JS template the docs site uses
 //! (via `tools/build-wasm-example.sh`), then served from a throwaway local
 //! static server and opened in your default browser -- *not* run through
 //! `wasm-server-runner`, which only auto-invokes a `#[wasm_bindgen(start)]`
 //! function and so only ever showed anything for the windowed variants
-//! (Software and GL, which start a winit event loop from `main`); Headless
-//! and Terminal are driven by JS calling specific exported functions in a
-//! loop, which only the real templates do. wgpu has no WASM variant in this
-//! gallery, so its `Backend` entry below has no `w`-toggle counterpart and
-//! toggling WASM while it's selected has nothing to switch to. That's a gap in
-//! the gallery's build plumbing, not in the backend: `retroglyph-wgpu` renders
-//! in a browser through WebGPU. Wiring a variant means a `wasm_entry!` branch
-//! plus an entry in `tools/build-wasm-example.sh`.
+//! (Software, GL and wgpu, which start a winit event loop from `main`);
+//! Headless and Terminal are driven by JS calling specific exported functions
+//! in a loop, which only the real templates do.
 //!
 //! Run with `cargo run --bin runner` (or `--release` to also run the picked
 //! native example in release mode; ignored for WASM choices, which always
@@ -38,8 +33,9 @@ use std::process::ExitCode;
 /// value for the native variant (`None` means "run with no backend feature
 /// enabled," i.e. the headless stdout fallback -- only ever true for the
 /// native Headless entry), and the WASM variant name `tools/build-wasm-
-/// example.sh` understands (`headless`/`terminal`/`software`/`gl`), or
-/// `None` for a backend this gallery has no WASM variant for (wgpu).
+/// example.sh` understands (`headless`/`terminal`/`software`/`gl`/`wgpu`), or
+/// `None` for a backend with no WASM variant. Every backend has one today; the
+/// `None` case stays for the next one that can't build for the browser.
 struct Backend {
     label: &'static str,
     native_features: Option<&'static str>,
@@ -68,9 +64,9 @@ const BACKENDS: &[Backend] = &[
         wasm_variant: Some("gl"),
     },
     Backend {
-        label: "wgpu (a window, Vulkan/Metal/D3D12; no WASM variant in this gallery yet)",
+        label: "wgpu (a window, Vulkan/Metal/D3D12) / WebGPU (browser, canvas)",
         native_features: Some("wgpu"),
-        wasm_variant: None,
+        wasm_variant: Some("wgpu"),
     },
 ];
 
@@ -120,8 +116,9 @@ fn prompt_choice(prompt: &str, options: &[String]) -> Option<usize> {
 /// a numeric choice is entered. Returns the chosen backend index and whether
 /// WASM was toggled on when the choice was made.
 ///
-/// Picking a backend with no WASM variant (wgpu: `wasm_variant` is `None`) while `w` is toggled on
-/// re-prompts instead of returning, so [`run_wasm_preview`] never sees a backend it can't build.
+/// Picking a backend whose `wasm_variant` is `None` while `w` is toggled on re-prompts instead of
+/// returning, so [`run_wasm_preview`] never sees a backend it can't build. No backend is in that
+/// state today.
 fn prompt_backend() -> Option<(usize, bool)> {
     let mut wasm = false;
     loop {

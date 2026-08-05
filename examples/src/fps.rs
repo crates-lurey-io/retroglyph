@@ -188,7 +188,10 @@ impl<B: Cursor> Cursor for ToggleFilter<B> {
 /// toggle like the native one does (it isn't an [`Event`](retroglyph_core::event::Event) and
 /// never enters the backend's queue), so it records a request that `WasmToggleApp` picks up on
 /// the next frame instead.
-#[cfg(all(target_arch = "wasm32", any(feature = "software", feature = "gl")))]
+#[cfg(all(
+    target_arch = "wasm32",
+    any(feature = "software", feature = "gl", feature = "wgpu")
+))]
 pub(crate) mod wasm_toggle {
     use std::cell::Cell;
     use wasm_bindgen::JsCast as _;

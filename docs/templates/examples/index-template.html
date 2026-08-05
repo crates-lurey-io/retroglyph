@@ -136,6 +136,7 @@
             <th>Terminal</th>
             <th>Software</th>
             <th>WebGL</th>
+            <th>WebGPU</th>
           </tr>
         </thead>
         <tbody>
@@ -154,7 +155,12 @@ __ROWS__
         <code>&lt;canvas&gt;</code>.
         <strong>WebGL</strong> is the GPU backend (<code>retroglyph-gl</code>) running on WebGL2 —
         the same instanced-quad renderer the native OpenGL 3.3 backend uses, rendered to a
-        <code>&lt;canvas&gt;</code>. Every example gets all four variants (see
+        <code>&lt;canvas&gt;</code>.
+        <strong>WebGPU</strong> is the newer GPU backend (<code>retroglyph-wgpu</code>), the same
+        one that runs on Vulkan, Metal and D3D12 natively. It needs a browser with WebGPU
+        (Chrome/Edge 113+, Safari 26+, or Firefox with <code>dom.webgpu.enabled</code>) and says so
+        rather than showing a blank page if that's missing; it also starts blank for a moment while
+        it acquires a device asynchronously. Every example gets all five variants (see
         <code>tools/build-wasm-examples.sh</code>) — there's no per-example backend list to keep
         in sync.
       </p>

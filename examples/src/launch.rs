@@ -137,9 +137,7 @@ pub trait Example: Default + Sized + 'static {
     /// (returning `true`) for an app-like example meant to be the whole page, e.g. one with a
     /// pannable world that benefits from every cell the viewport can offer, especially on a small
     /// mobile screen -- see `15_outpost_dashboard.rs`. Read by [`run_software`], [`run_gl`], and
-    /// [`run_wgpu`], so it applies to every windowed backend alike; only the first two have a
-    /// `wasm32` build to fill a viewport on, so it has no effect on native or on `retroglyph-wgpu`,
-    /// which this gallery has no browser variant for.
+    /// [`run_wgpu`], so it applies to every windowed backend alike, on `wasm32` for all three.
     #[cfg(any(feature = "software", feature = "gl", feature = "wgpu"))]
     fn fill_viewport() -> bool {
         false
@@ -491,17 +489,22 @@ pub fn run_gl<E: Example>() {
 /// rather than [`Example::configure_software`]/[`Example::configure_gl`], since all three backends
 /// have different builder types.
 ///
-/// Unlike `run_software`/`run_gl`, this has no `wasm32` branch yet. `retroglyph-wgpu` itself does
-/// render in a browser through WebGPU; what's missing is this gallery's plumbing for it (a
-/// `wasm_entry!` branch and an entry in `tools/build-wasm-example.sh`). [`Example::fill_viewport`]
-/// is therefore honored here purely for symmetry with the other two windowed backends and has no
-/// observable effect, since native ignores it too.
+/// Runs in a browser as well as natively, through WebGPU. [`Example::fill_viewport`] is honored on
+/// `wasm32` exactly as it is for the other two windowed backends.
+///
+/// One browser-only difference: `retroglyph-wgpu` acquires its device asynchronously, because a
+/// browser main thread cannot block on a future, so the canvas stays blank for the first few frames
+/// after load and then starts rendering. That is expected rather than a failure. A browser without
+/// WebGPU can't run this variant at all; the gallery's page detects that and says so.
 ///
 /// # Panics
 ///
 /// Panics if the wgpu backend fails to initialize, or if the event loop fails to start.
 #[cfg(feature = "wgpu")]
 pub fn run_wgpu<E: Example>() {
+    #[cfg(target_arch = "wasm32")]
+    console_error_panic_hook::set_once();
+
     let renderer = E::configure_wgpu(
         retroglyph_wgpu::WgpuBackendBuilder::new()
             .grid_size(50, 25)
