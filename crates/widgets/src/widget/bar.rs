@@ -89,6 +89,11 @@ pub(super) fn render(
     fill_color: fn(f32) -> Color,
 ) {
     let width = surface.width();
+    // Below 4 columns there is no room for a bar worth drawing once the label, its trailing
+    // space, and the readout gap are subtracted (`bar_w` below). A conservative floor picked by
+    // eye, not a hard bound: verified widths 1..=3 render without panicking, both with and
+    // without a label/readout (`bar_w`'s `saturating_sub` below just saturates to a zero-width,
+    // invisible bar instead of underflowing).
     if width < 4 {
         return;
     }
