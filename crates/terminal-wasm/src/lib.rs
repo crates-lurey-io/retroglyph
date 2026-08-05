@@ -184,12 +184,12 @@ use std::time::Duration;
 /// ASCII escape sequences from `write!`/`write_str` calls and glyphs sourced from `char`/`&str`
 /// (see [`TerminalWasm::take_output`]'s doc comment for the full argument). Writing straight into
 /// a `String`-backed sink instead of a `Vec<u8>` means [`take_output`](TerminalWasm::take_output)
-/// never has to re-validate those bytes as UTF-8 on drain (each frame, previously, via
-/// `String::from_utf8`): see retroglyph#288. `Write::write` still validates its input as UTF-8
-/// (returning [`io::ErrorKind::InvalidData`] on failure) rather than trusting the caller, since the
-/// `std::io::Write` contract itself makes no UTF-8 guarantee about the bytes it's handed; only this
-/// crate's own, always-valid-UTF-8 call sites are relied upon to make that error path dead code in
-/// practice.
+/// never has to re-validate those bytes as UTF-8 on drain, which a `Vec<u8>`-backed sink would
+/// require via `String::from_utf8` every frame: see retroglyph#288. `Write::write` still validates
+/// its input as UTF-8 (returning [`io::ErrorKind::InvalidData`] on failure) rather than trusting
+/// the caller, since the `std::io::Write` contract itself makes no UTF-8 guarantee about the
+/// bytes it's handed; only this crate's own, always-valid-UTF-8 call sites are relied upon to
+/// make that error path dead code in practice.
 #[derive(Debug, Default)]
 struct Utf8Sink(String);
 

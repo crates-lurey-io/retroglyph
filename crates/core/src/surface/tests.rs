@@ -400,8 +400,8 @@ fn with_tint_applies_to_every_cell_fill_rect_touches() {
 }
 
 /// `fill_rect`'s batch fast path only applies to a single-column glyph: a wide glyph must
-/// fall back to the same per-cell `put` loop used before this method had a fast path, not the
-/// batch `Tile::new` write (which carries no wide-char bookkeeping at all).
+/// fall back to the per-cell `put` loop, not the batch `Tile::new` write (which carries no
+/// wide-char bookkeeping at all).
 #[test]
 fn fill_rect_with_a_wide_glyph_falls_back_to_the_put_loop() {
     let rect = Rect::new(0, 0, 6, 1);

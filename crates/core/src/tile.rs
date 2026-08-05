@@ -412,8 +412,8 @@ mod tests {
     use crate::color::Color;
 
     /// Regression guard for the size win the EGC side-table exists for: a
-    /// `Tile` must stay small and feature-stable (same layout with or
-    /// without `egc`) now that it no longer inlines grapheme text.
+    /// `Tile` stays 20 bytes and keeps the same layout with or without
+    /// `egc`, because grapheme text lives in the side table.
     #[test]
     fn test_tile_size_is_stable_and_small() {
         assert_eq!(size_of::<Tile>(), 20);
