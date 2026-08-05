@@ -710,6 +710,10 @@ impl SpriteGpu {
 
             // Source-over blend so a sprite's transparent pixels reveal what's beneath; keep the
             // framebuffer alpha at 1 (`ONE`/`ONE_MINUS_SRC_ALPHA`) so the surface stays opaque.
+            //
+            // This composites sRGB-encoded values, not linear light, matching the CPU rasterizer
+            // this backend is checked against and the editors tilesets are drawn in. Deliberate;
+            // see `docs/references/core/color-space.md`.
             gl.enable(glow::BLEND);
             gl.blend_func_separate(
                 glow::SRC_ALPHA,

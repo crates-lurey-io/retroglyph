@@ -184,29 +184,26 @@ const GLYPH_BLEND: wgpu::BlendState = wgpu::BlendState {
 ///
 /// # Color space
 ///
-/// This blend runs on sRGB-encoded values, which is not the physically correct way to composite:
-/// source-over should interpolate in linear light, and interpolating encoded values instead makes a
-/// partially transparent sprite edge come out darker than it should.
+/// This blend runs on sRGB-encoded values rather than in linear light, which is not physically
+/// correct: source-over should interpolate intensity, so a partially transparent sprite edge comes
+/// out darker here than it strictly should. That is a deliberate choice, not an oversight.
 ///
-/// The text passes are unaffected, and not by luck. Coverage used as an alpha is the usual place
-/// text rendering goes wrong on color space: a rasterizer's partial coverage is a linear quantity,
-/// so interpolating between an sRGB-encoded foreground and background by it yields text that is too
-/// thin or too fat unless it is corrected. That cannot happen here, because there is no partial
-/// coverage to correct: the glyph atlas holds only `0x00` and `0xFF`, sampled `Nearest` with
-/// multisampling off onto integer-aligned quads (the sub-cell offset is in unscaled font pixels
-/// times an integer scale, so it stays aligned too). The alpha reaching [`GLYPH_BLEND`] and
-/// [`BACKGROUND_BLEND`] is therefore only ever exactly 0 or 1, which selects one endpoint outright
-/// and makes every color space agree bit for bit.
+/// Sprites are pixel art, authored in editors that composite in gamma space themselves. An alpha
+/// value in a tileset was picked by a person looking at such a preview, and blending the same way
+/// reproduces what they saw. The wider 2D ecosystem agrees: canvas, CSS, and SVG all specify
+/// sRGB-space compositing. Linear light is the convention in 3D and film, not here.
 ///
-/// `retroglyph_window::atlas`'s `coverage_is_strictly_binary` pins that invariant, so an
-/// antialiased glyph source would fail there rather than quietly producing slightly wrong text.
-/// Only a sprite carries intermediate alpha.
+/// Matching the CPU rasterizer bit for bit also depends on it. A transfer function cannot be
+/// evaluated identically on a CPU and an arbitrary GPU, so compositing in linear light would turn
+/// `crate::headless`'s exact comparisons into tolerance-based ones and stop 1-LSB backend bugs from
+/// being detectable.
 ///
-/// It stays this way because the correct version is not this crate's to make alone.
-/// `retroglyph-software` composites sprites through `alpha_blend`'s `source_over`, which is `u8`
-/// arithmetic on the same encoded values, and this backend is checked pixel for pixel against it
-/// (see `crate::headless`). Moving one to linear light without the other replaces a small,
-/// consistent error with a visible disagreement between backends. See retroglyph#1178.
+/// Text never reaches this question. Glyph coverage is strictly 0 or 1, so its blend resolves to
+/// exactly one endpoint and every color space agrees; `retroglyph_window`'s
+/// `coverage_is_strictly_binary` pins that. Only a sprite carries intermediate alpha.
+///
+/// `docs/references/core/color-space.md` records the measurements and the survey behind this. See
+/// retroglyph#1178.
 #[cfg(feature = "tilesets")]
 const SPRITE_BLEND: wgpu::BlendState = wgpu::BlendState {
     color: wgpu::BlendComponent {
