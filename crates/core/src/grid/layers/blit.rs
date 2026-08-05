@@ -391,7 +391,7 @@ mod tests {
 
     #[cfg(feature = "egc")]
     #[test]
-    fn test_grid_blit_preserves_extra() {
+    fn blit_preserves_extra() {
         let mut src = Grid::new(2, 2);
         src.write_grapheme(0, 0, 0, "e\u{0301}", Style::default());
 
@@ -402,7 +402,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_blit_empty_rect_is_a_no_op() {
+    fn blit_empty_rect_is_a_no_op() {
         // A zero-area `src_rect` has no cells at all: `sx0 >= sx1` should short-circuit before
         // touching the destination.
         let src = Grid::new(2, 2);
@@ -414,7 +414,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_blit_fully_transparent_source_does_not_allocate_dst_layer() {
+    fn blit_fully_transparent_source_does_not_allocate_dst_layer() {
         // Perf refactor (#263): the destination layer is allocated up front, but only after
         // confirming the (clamped) source region has at least one non-empty tile, matching
         // `put_tile`'s original allocate-on-first-write behavior for an all-transparent blit.
@@ -425,7 +425,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_blit_skips_out_of_bounds_source_and_dest_regions() {
+    fn blit_skips_out_of_bounds_source_and_dest_regions() {
         let mut src = Grid::new(4, 4);
         for y in 0..4 {
             for x in 0..4 {
@@ -444,7 +444,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_blit_sub_cell_offset_and_transparency() {
+    fn blit_sub_cell_offset_and_transparency() {
         let mut src = Grid::new(2, 2);
         src.put_tile(0, (0, 0), Tile::new('A', Style::default()));
         // (1, 0) and (1, 1) stay at their default (empty) tile: transparent, should not
@@ -463,7 +463,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_blit_multi_layer_independent() {
+    fn blit_multi_layer_independent() {
         let mut src = Grid::new(2, 2);
         src.put_tile(0, (0, 0), Tile::new('a', Style::default()));
         src.put_tile(2, (0, 0), Tile::new('b', Style::default()));
@@ -479,7 +479,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_blit_dest_origin_near_u16_max_does_not_wrap() {
+    fn blit_dest_origin_near_u16_max_does_not_wrap() {
         // retroglyph#268: with a plain (non-saturating) `dst_x + (sx - src_rect.left())`, an
         // origin this close to `u16::MAX` overflows and wraps back into a small, in-bounds
         // value: silently corrupting an unrelated cell instead of being clamped out. Picked so
@@ -505,7 +505,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_blit_normal_offset_unaffected_by_overflow_fix() {
+    fn blit_normal_offset_unaffected_by_overflow_fix() {
         // A typical, non-overflowing blit must still work exactly as before.
         let mut src = Grid::new(2, 2);
         src.put_tile(0, (0, 0), Tile::new('A', Style::default()));
@@ -520,7 +520,7 @@ mod tests {
 
     // --- `BlendMode` / `blit_alpha` ---
     #[test]
-    fn test_blend_separable_channel_screen() {
+    fn blend_separable_channel_screen_lightens_toward_the_combined_color() {
         // cb = 102 (0.4), cs = 204 (0.8): screen = cb + cs - cb*cs = 0.88.
         assert_eq!(
             blend_separable_channel(SeparableBlendMode::Screen, 204, 102, 1.0),
@@ -534,7 +534,7 @@ mod tests {
     }
 
     #[test]
-    fn test_blend_separable_channel_dodge() {
+    fn blend_separable_channel_dodge_brightens_toward_white() {
         // cb = 51 (0.2), cs = 204 (0.8): min(1, 0.2 / 0.2) saturates to 1.0.
         assert_eq!(
             blend_separable_channel(SeparableBlendMode::ColorDodge, 204, 51, 1.0),
@@ -547,7 +547,7 @@ mod tests {
     }
 
     #[test]
-    fn test_blend_separable_channel_burn() {
+    fn blend_separable_channel_burn_darkens_toward_black() {
         // cb = 204 (0.8), cs = 51 (0.2): 1 - min(1, 0.2 / 0.2) bottoms out at 0.0.
         assert_eq!(
             blend_separable_channel(SeparableBlendMode::ColorBurn, 51, 204, 1.0),
@@ -560,7 +560,7 @@ mod tests {
     }
 
     #[test]
-    fn test_blend_separable_channel_overlay() {
+    fn blend_separable_channel_overlay_switches_between_multiply_and_screen() {
         // cb = 51 (0.2, the <= 0.5 branch): 2 * cb * cs.
         assert_eq!(
             blend_separable_channel(SeparableBlendMode::Overlay, 204, 51, 1.0),
@@ -578,7 +578,7 @@ mod tests {
     }
 
     #[test]
-    fn test_blend_separable_channel_multiply() {
+    fn blend_separable_channel_multiply_darkens_toward_the_product() {
         // cb = 204 (0.8), cs = 51 (0.2): multiply = cb * cs = 0.16.
         assert_eq!(
             blend_separable_channel(SeparableBlendMode::Multiply, 204, 51, 1.0),
@@ -594,7 +594,7 @@ mod tests {
     /// End-to-end through `blit_alpha`, not just the per-channel helper: proves `BlendMode`
     /// actually reaches `blend_color` and lands on the destination tile's style.
     #[test]
-    fn test_grid_blit_alpha_screen_blends_fg() {
+    fn blit_alpha_screen_blends_fg() {
         let mut src = Grid::new(1, 1);
         src.put_tile(
             0,
@@ -641,11 +641,11 @@ mod tests {
         );
     }
 
-    /// Same as `test_grid_blit_alpha_screen_blends_fg`, but for `style.bg` and `bg_alpha`: both
+    /// Same as `blit_alpha_screen_blends_fg`, but for `style.bg` and `bg_alpha`: both
     /// alpha factors are independent, so `fg_alpha == 1.0` (fully mixed) and `bg_alpha == 0.5`
     /// (half-lerped toward the mix) must land different results on the two channels.
     #[test]
-    fn test_grid_blit_alpha_screen_blends_bg() {
+    fn blit_alpha_screen_blends_bg() {
         let mut src = Grid::new(1, 1);
         src.put_tile(
             0,
@@ -694,7 +694,7 @@ mod tests {
             1.0,
             0.5,
         );
-        // `fg_alpha == 1.0`: fully mixed, same as `test_grid_blit_alpha_screen_blends_fg`.
+        // `fg_alpha == 1.0`: fully mixed, same as `blit_alpha_screen_blends_fg`.
         assert_eq!(
             dst[Pos::new(0, 0)].style.fg,
             Color::Rgb {
@@ -715,10 +715,10 @@ mod tests {
     }
 
     /// retroglyph#268: same wraparound guard as `blit`'s
-    /// `test_grid_blit_dest_origin_near_u16_max_does_not_wrap`, but through `blit_alpha`'s
+    /// `blit_dest_origin_near_u16_max_does_not_wrap`, but through `blit_alpha`'s
     /// separate `dst_x`/`dst_y` computation.
     #[test]
-    fn test_grid_blit_alpha_dest_origin_near_u16_max_does_not_wrap() {
+    fn blit_alpha_dest_origin_near_u16_max_does_not_wrap() {
         let mut src = Grid::new(4, 1);
         src.put_tile(0, (3, 0), Tile::new('Q', Style::default()));
 
@@ -749,7 +749,7 @@ mod tests {
     /// to return `src` and `t == 1.0` returned `dst`. No prior tests covered `blit_alpha`, so
     /// this had shipped unnoticed).
     #[test]
-    fn test_grid_blit_alpha_linear_direction() {
+    fn blit_alpha_linear_direction() {
         let mut src = Grid::new(1, 1);
         src.put_tile(
             0,
@@ -806,7 +806,7 @@ mod tests {
     /// Every `BlendMode` preserves `Color::Default` and passes non-RGB colors through unblended,
     /// same as the pre-existing `Linear` behavior.
     #[test]
-    fn test_blend_color_non_rgb_passthrough_all_modes() {
+    fn blend_color_non_rgb_passthrough_all_modes() {
         for mode in [
             BlendMode::Linear,
             BlendMode::Screen,

@@ -559,7 +559,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_rect_contains() {
+    fn contains_pos_is_true_for_edges_and_false_for_the_exclusive_far_edge() {
         let r = Rect::new(2, 3, 4, 5);
         assert!(r.contains_pos(Pos::new(2, 3)));
         assert!(r.contains_pos(Pos::new(5, 7)));
@@ -569,20 +569,20 @@ mod tests {
     }
 
     #[test]
-    fn test_rect_area() {
+    fn area_is_width_times_height_and_zero_for_default() {
         assert_eq!(Rect::new(0, 0, 5, 3).area(), 15);
         assert_eq!(Rect::default().area(), 0);
     }
 
     #[test]
-    fn test_rect_top_left_bottom_right() {
+    fn top_left_and_bottom_right_reflect_position_and_size() {
         let r = Rect::new(1, 2, 3, 4);
         assert_eq!(r.top_left(), Pos::new(1, 2));
         assert_eq!(r.bottom_right(), Pos::new(4, 6));
     }
 
     #[test]
-    fn test_rect_intersects() {
+    fn intersect_is_non_empty_only_when_rects_overlap() {
         let a = Rect::new(0, 0, 4, 4);
         let b = Rect::new(2, 2, 4, 4);
         let c = Rect::new(4, 0, 4, 4); // touches edge, no overlap
@@ -591,7 +591,7 @@ mod tests {
     }
 
     #[test]
-    fn test_rect_positions() {
+    fn pos_iter_yields_every_position_row_major() {
         use alloc::vec;
         use alloc::vec::Vec;
 
@@ -609,7 +609,7 @@ mod tests {
     }
 
     #[test]
-    fn test_position_from_tuple() {
+    fn pos_converts_to_and_from_a_tuple() {
         let p: Pos = (3u16, 7u16).into();
         assert_eq!(p, Pos::new(3, 7));
         let t: (u16, u16) = p.into();
@@ -617,7 +617,7 @@ mod tests {
     }
 
     #[test]
-    fn test_size_from_tuple() {
+    fn size_converts_to_and_from_a_tuple() {
         let s: Size = (80u16, 25u16).into();
         assert_eq!(s, Size::new(80, 25));
         let t: (u16, u16) = s.into();
@@ -625,7 +625,7 @@ mod tests {
     }
 
     #[test]
-    fn test_offset_from_tuple() {
+    fn offset_converts_to_and_from_a_tuple() {
         let o: Offset = (-3i16, 7i16).into();
         assert_eq!(o, Offset::new(-3, 7));
         let t: (i16, i16) = o.into();
@@ -633,12 +633,12 @@ mod tests {
     }
 
     #[test]
-    fn test_offset_default_is_zero() {
+    fn offset_default_is_zero() {
         assert_eq!(Offset::default(), Offset::new(0, 0));
     }
 
     #[test]
-    fn test_position_ord_row_major() {
+    fn pos_ord_sorts_row_major() {
         use alloc::vec;
 
         let mut positions = vec![Pos::new(5, 0), Pos::new(0, 1), Pos::new(3, 0)];
@@ -650,13 +650,13 @@ mod tests {
     }
 
     #[test]
-    fn test_size_ord() {
+    fn size_orders_by_width_then_height() {
         assert!(Size::new(1, 2) < Size::new(2, 1));
     }
 
     #[cfg(feature = "serde")]
     #[test]
-    fn test_size_serializes_and_deserializes() {
+    fn size_serializes_and_deserializes() {
         let size = Size::new(80, 25);
         let json = serde_json::to_string(&size).expect("serialize");
         assert_eq!(
@@ -667,7 +667,7 @@ mod tests {
 
     #[cfg(feature = "serde")]
     #[test]
-    fn test_pos_and_rect_serialize_via_ixy() {
+    fn pos_and_rect_serialize_via_ixy() {
         let pos = Pos::new(2, 1);
         let json = serde_json::to_string(&pos).expect("serialize");
         assert_eq!(
@@ -685,7 +685,7 @@ mod tests {
 
     #[cfg(feature = "serde")]
     #[test]
-    fn test_offset_serializes_and_deserializes() {
+    fn offset_serializes_and_deserializes() {
         let offset = Offset::new(3, -2);
         let json = serde_json::to_string(&offset).expect("serialize");
         assert_eq!(
