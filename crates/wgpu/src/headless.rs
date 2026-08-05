@@ -512,6 +512,86 @@ fn sub_cell_offsets_spill_the_same_way_as_the_cpu_rasterizer() {
     assert_frames_match(&frame, cpu.pixels());
 }
 
+/// retroglyph#726: a `Color::Default`-background span on a higher layer resolves each covered
+/// cell's inherited background at *that cell's own column*, not the anchor's. Layer 0 alternates
+/// red/green per column, so the two backends would visibly disagree if either smeared the anchor's
+/// column across the span's footprint; a uniform layer 0 could not catch that, since every column
+/// would already agree.
+#[test]
+fn matches_software_backend_for_a_span_covered_cells_default_background() {
+    use retroglyph_core::grid::Grid;
+
+    let Some(device) = device_or_skip("matches_software_backend_for_a_span_covered_cell") else {
+        return;
+    };
+
+    let (cols, rows, scale) = (4u16, 1u16, 4u16);
+    let mut grid = Grid::new(cols, rows);
+    for x in 0..cols {
+        let bg = if x % 2 == 0 { RED } else { GREEN };
+        grid.put_tile(0, (x, 0), Tile::new('.', Style::new().bg(rgb(bg))));
+    }
+    // A 2-wide span with a `Default` background over columns 0 (red) and 1 (green).
+    grid.write_span(1, 0, 0, &["C="], Style::new())
+        .expect("2x1 span fits");
+    let scene: Vec<(u8, Pos, Tile)> = grid
+        .layers()
+        .map(|cell| (cell.layer, cell.pos, *cell.tile))
+        .collect();
+
+    let mut gpu = renderer(cols, rows, scale);
+    paint_layers(&mut gpu, &scene);
+    let frame = render_to_frame(&mut gpu, device);
+
+    let mut cpu = software(cols, rows, scale);
+    paint_layers(&mut cpu, &scene);
+
+    assert_frames_match(&frame, cpu.pixels());
+}
+
+/// A multi-cell span draws one piece of artwork across its whole footprint: the anchor's glyph is
+/// drawn once and the covered cells draw none of their own, on one uniform backdrop
+/// (retroglyph#412). Checked against the CPU rasterizer, so a covered cell that wrongly drew its
+/// text-fallback glyph shows up as a pixel difference rather than passing silently.
+#[test]
+fn matches_software_backend_for_multicell_spans() {
+    use retroglyph_core::grid::Grid;
+
+    let Some(device) = device_or_skip("matches_software_backend_for_multicell_spans") else {
+        return;
+    };
+
+    let (cols, rows, scale) = (4u16, 2u16, 3u16);
+    let mut grid = Grid::new(cols, rows);
+    for y in 0..rows {
+        for x in 0..cols {
+            grid.put_tile(0, (x, y), Tile::new('.', Style::new().fg(rgb(BLUE))));
+        }
+    }
+    // A 2x2 span with its own background, so both the footprint and the backdrop are exercised.
+    grid.write_span(
+        0,
+        0,
+        0,
+        &["AB", "CD"],
+        Style::new().fg(rgb(GREEN)).bg(rgb(RED)),
+    )
+    .expect("2x2 span fits");
+    let scene: Vec<(u8, Pos, Tile)> = grid
+        .layers()
+        .map(|cell| (cell.layer, cell.pos, *cell.tile))
+        .collect();
+
+    let mut gpu = renderer(cols, rows, scale);
+    paint_layers(&mut gpu, &scene);
+    let frame = render_to_frame(&mut gpu, device);
+
+    let mut cpu = software(cols, rows, scale);
+    paint_layers(&mut cpu, &scene);
+
+    assert_frames_match(&frame, cpu.pixels());
+}
+
 #[cfg(feature = "tilesets")]
 mod sprites {
     use super::{

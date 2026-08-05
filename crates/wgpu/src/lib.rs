@@ -543,9 +543,6 @@ impl Output for WgpuRenderer {
             }
             self.sprite_layers[0].clear();
         }
-        #[cfg(not(feature = "tilesets"))]
-        let _ = &sprite_bg;
-
         let cols = usize::from(self.cols);
         let rows = usize::from(self.rows);
         for draw_cell in content {
@@ -1038,6 +1035,204 @@ mod compositing_tests {
             .build()
             .expect("default-font builds");
         assert!(r.present().is_ok(), "no device is not an error");
+    }
+
+    /// retroglyph#726: a `Color::Default`-background span on a higher layer must not smear the
+    /// anchor's column across the whole footprint. Layer 0 has a different background under each
+    /// half of the span (red under the anchor, blue under the covered cell); the covered cell's
+    /// `Default` background must inherit from *its own* column (blue), matching
+    /// `retroglyph-software`'s `resolve_cell_bg`, not the anchor's (red).
+    #[test]
+    fn draw_layers_resolves_a_span_covered_cells_default_background_at_its_own_column() {
+        use retroglyph_core::grid::Grid;
+
+        const BLUE: Color = Color::Rgb { r: 0, g: 0, b: 255 };
+
+        let mut r = WgpuBackendBuilder::new()
+            .grid_size(2, 1)
+            .build()
+            .expect("default-font builds");
+
+        let mut grid = Grid::new(2, 1);
+        grid.put_tile(0, (0, 0), Tile::new(' ', Style::new().bg(RED)));
+        grid.put_tile(0, (1, 0), Tile::new(' ', Style::new().bg(BLUE)));
+        grid.write_span(1, 0, 0, &["C="], Style::new())
+            .expect("2x1 span fits");
+
+        let mut tiles: Vec<(u8, Pos, Tile)> = (0..2)
+            .map(|x| (0u8, Pos::new(x, 0), *grid.tile(0, (x, 0)).unwrap()))
+            .collect();
+        tiles.extend((0..2).map(|x| (1u8, Pos::new(x, 0), *grid.tile(1, (x, 0)).unwrap())));
+        r.draw_layers(
+            tiles
+                .iter()
+                .map(|(l, pos, t)| DrawCell::on_layer(*l, *pos, t)),
+        )
+        .expect("draw_layers is infallible");
+
+        let covered = r.layers[1][1];
+        assert_eq!(covered.flags, FLAG_HAS_BG, "covered cell draws no glyph");
+        assert_eq!(
+            covered.bg,
+            [0, 0, 255, 0],
+            "covered cell inherits its own column's background, not the anchor's"
+        );
+    }
+
+    /// Covered-cell suppression is grid state, not a tileset feature, so it holds with the
+    /// `tilesets` feature off too: a span with no sprite behind it renders as its anchor glyph
+    /// alone, the same on every pixel backend.
+    #[test]
+    fn draw_layers_suppresses_covered_glyphs_without_a_sprite() {
+        use retroglyph_core::grid::Grid;
+
+        let mut r = WgpuBackendBuilder::new()
+            .grid_size(2, 1)
+            .build()
+            .expect("default-font builds");
+        let mut grid = Grid::new(2, 1);
+        grid.write_span(0, 0, 0, &["AB"], Style::new()).unwrap();
+        let tiles: Vec<(u8, Pos, Tile)> = (0..2)
+            .map(|x| (0u8, Pos::new(x, 0), *grid.tile(0, (x, 0)).unwrap()))
+            .collect();
+        r.draw_layers(
+            tiles
+                .iter()
+                .map(|(l, pos, t)| DrawCell::on_layer(*l, *pos, t)),
+        )
+        .expect("draw_layers is infallible");
+
+        assert_eq!(r.layers[0][0].flags & FLAG_HAS_GLYPH, FLAG_HAS_GLYPH);
+        assert_eq!(r.layers[0][1].flags & FLAG_HAS_GLYPH, 0);
+    }
+}
+
+/// Sprite bookkeeping that has to stay in lockstep with the glyph layers (retroglyph#727) and the
+/// diagnostic for a tint that had no sprite to land on (retroglyph#564).
+#[cfg(all(test, feature = "default-font", feature = "tilesets"))]
+mod sprite_layer_tests {
+    use crate::{WgpuBackendBuilder, WgpuRenderer};
+    use retroglyph_core::backend::{DrawCell, Output};
+    use retroglyph_core::color::{Style, Tint};
+    use retroglyph_core::grid::{Pos, Size};
+    use retroglyph_core::tile::Tile;
+    use retroglyph_window::tileset::{Codepage, TilesetOptions};
+
+    /// A one-tile 8x16 opaque PNG mapped to `'S'`, encoded once at test time.
+    fn renderer_with_sprite(cols: u16, rows: u16) -> WgpuRenderer {
+        let mut img = image::RgbaImage::new(8, 16);
+        for px in img.pixels_mut() {
+            *px = image::Rgba([0xFF, 0xFF, 0xFF, 0xFF]);
+        }
+        let mut png = Vec::new();
+        image::DynamicImage::ImageRgba8(img)
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+            .expect("encode png");
+        let opts = TilesetOptions::builder(png)
+            .tile_size(8, 16)
+            .columns(1)
+            .codepage(Codepage::Custom(vec!['S']))
+            .build()
+            .expect("valid one-tile tileset");
+        WgpuBackendBuilder::new()
+            .grid_size(cols, rows)
+            .tileset(opts)
+            .build()
+            .expect("tileset builds")
+    }
+
+    /// Draws a sprite on two layers, so `sprite_layers` has more than the (always present) base
+    /// layer entry to be reset.
+    fn renderer_with_a_sprite_on_two_layers() -> WgpuRenderer {
+        let mut r = renderer_with_sprite(1, 1);
+        let sprite = Tile::new('S', Style::new());
+        r.draw_layers(
+            [
+                DrawCell::on_layer(0, Pos::new(0, 0), &sprite),
+                DrawCell::on_layer(1, Pos::new(0, 0), &sprite),
+            ]
+            .into_iter(),
+        )
+        .expect("draw_layers is infallible");
+        r
+    }
+
+    #[test]
+    fn clear_resets_sprite_layers_to_a_single_empty_layer() {
+        let mut r = renderer_with_a_sprite_on_two_layers();
+        assert_eq!(r.sprite_layers.len(), 2);
+        assert!(!r.sprite_layers[0].is_empty());
+
+        r.clear().expect("clear is infallible");
+
+        assert_eq!(r.sprite_layers.len(), 1);
+        assert!(r.sprite_layers[0].is_empty());
+    }
+
+    #[test]
+    fn resize_resets_sprite_layers_to_a_single_empty_layer() {
+        let mut r = renderer_with_a_sprite_on_two_layers();
+        assert_eq!(r.sprite_layers.len(), 2);
+        assert!(!r.sprite_layers[0].is_empty());
+
+        r.resize(Size::new(2, 2));
+
+        assert_eq!(r.sprite_layers.len(), 1);
+        assert!(r.sprite_layers[0].is_empty());
+    }
+
+    #[test]
+    fn flatten_packs_sprite_layers_in_lockstep_with_the_glyph_layers() {
+        let mut r = renderer_with_a_sprite_on_two_layers();
+        r.flatten_layers();
+        assert_eq!(r.sprite_ranges.len(), r.ranges.len());
+        assert_eq!(r.sprite_upload.len(), 2, "one sprite per layer");
+        assert_eq!((r.sprite_ranges[0].start, r.sprite_ranges[0].count), (0, 1));
+        assert_eq!((r.sprite_ranges[1].start, r.sprite_ranges[1].count), (1, 1));
+    }
+
+    /// retroglyph#564: a tint on a cell whose glyph resolved to a bitmap font rather than a sprite
+    /// is silently dropped, so it is reported once per glyph.
+    #[test]
+    fn a_tint_on_a_font_glyph_is_reported_once() {
+        let mut r = renderer_with_sprite(1, 1);
+        let tile = Tile::new('X', Style::new());
+        for _ in 0..3 {
+            r.draw_layers(core::iter::once(
+                DrawCell::on_layer(0, Pos::new(0, 0), &tile).with_tint(Tint::multiply(1, 2, 3)),
+            ))
+            .expect("draw_layers is infallible");
+        }
+        assert!(r.warned_dropped_tint.contains(&'X'));
+        assert_eq!(
+            r.warned_dropped_tint.len(),
+            1,
+            "reported once, not per frame"
+        );
+    }
+
+    #[test]
+    fn a_tint_on_a_sprite_cell_is_not_reported() {
+        let mut r = renderer_with_sprite(1, 1);
+        let tile = Tile::new('S', Style::new());
+        r.draw_layers(core::iter::once(
+            DrawCell::on_layer(0, Pos::new(0, 0), &tile).with_tint(Tint::multiply(1, 2, 3)),
+        ))
+        .expect("draw_layers is infallible");
+        assert!(r.warned_dropped_tint.is_empty(), "the tint was applied");
+    }
+
+    #[test]
+    fn tint_none_is_never_reported() {
+        let mut r = renderer_with_sprite(1, 1);
+        let tile = Tile::new('X', Style::new());
+        r.draw_layers(core::iter::once(DrawCell::on_layer(
+            0,
+            Pos::new(0, 0),
+            &tile,
+        )))
+        .expect("draw_layers is infallible");
+        assert!(r.warned_dropped_tint.is_empty());
     }
 }
 
