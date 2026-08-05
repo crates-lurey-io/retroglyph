@@ -54,7 +54,7 @@ impl<B: Backend> Terminal<B> {
     /// call yields them again before the backend is polled for anything new.
     ///
     /// This is the supported way for a wrapper that drains events to intercept some of them
-    /// (e.g. `retroglyph-widgets`' `PerfOverlayApp` filtering out its own toggle key) to give
+    /// (e.g. `retroglyph-ui`' `PerfOverlayApp` filtering out its own toggle key) to give
     /// the rest back: it goes through `Terminal`'s own queue, never a backend-specific input
     /// path, so it works identically on every [`Backend`] regardless of how (or whether) that
     /// backend implements [`Input::push_event`](crate::backend::Input::push_event).

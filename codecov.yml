@@ -43,9 +43,9 @@ flags:
     paths:
       - crates/window/src/
     carryforward: true
-  widgets:
+  ui:
     paths:
-      - crates/widgets/src/
+      - crates/ui/src/
     carryforward: true
 
 component_management:
@@ -88,10 +88,10 @@ component_management:
       name: window
       flag_regexes:
         - ^window$
-    - component_id: widgets
-      name: widgets
+    - component_id: ui
+      name: ui
       flag_regexes:
-        - ^widgets$
+        - ^ui$
 
 github_checks:
   annotations: false

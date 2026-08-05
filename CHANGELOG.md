@@ -11,5 +11,5 @@ Retroglyph uses per-crate changelogs, maintained by
 - [`retroglyph-software`](crates/software/CHANGELOG.md)
 - [`retroglyph-terminal`](crates/terminal/CHANGELOG.md)
 - [`retroglyph-terminal-wasm`](crates/terminal-wasm/CHANGELOG.md)
-- [`retroglyph-widgets`](crates/widgets/CHANGELOG.md)
+- [`retroglyph-ui`](crates/ui/CHANGELOG.md)
 - [`retroglyph-window`](crates/window/CHANGELOG.md)

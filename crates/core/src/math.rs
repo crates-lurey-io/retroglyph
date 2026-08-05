@@ -6,7 +6,7 @@
 //! function here can assume a backend is present -- there is no third "no float backend" case for
 //! these to handle.
 //!
-//! [`exp`] has no caller in this crate: it's here for `retroglyph-widgets`, which shares this
+//! [`exp`] has no caller in this crate: it's here for `retroglyph-ui`, which shares this
 //! module (`#[doc(hidden)] pub`, see its declaration in `lib.rs`) instead of vendoring its own
 //! copy. Don't remove it as unused.
 //!

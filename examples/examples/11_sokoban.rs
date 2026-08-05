@@ -8,7 +8,7 @@
 //! arrow-key handling drives movement; `05_layout_grid`'s manual `Rect` math lays out the play
 //! field next to a status pane; `08_animation`'s `Tween`-driven [`Surface::put_offset`] slides
 //! the player (and any box it pushes) one cell at a time instead of snapping, generalized here
-//! from one axis to two; and `09_widgets_dashboard`'s `retroglyph-widgets` usage (`Panel`,
+//! from one axis to two; and `09_widgets_dashboard`'s `retroglyph-ui` usage (`Panel`,
 //! `split_h`/`split_v`) frames the status pane.
 //!
 //! Sliding is a visual-only nicety, the same graceful degradation `08_animation` documents for
@@ -37,7 +37,7 @@ use retroglyph_core::grid::{Grid, Rect};
 use retroglyph_core::terminal::Terminal;
 use retroglyph_core::tile::Tile;
 use retroglyph_examples::Example;
-use retroglyph_widgets::{Constraint, Easing, Panel, Tween, Widget, split_h, split_v};
+use retroglyph_ui::{Constraint, Easing, Panel, Tween, Widget, split_h, split_v};
 
 /// The level, hand-designed to be solvable with the two boxes pushed one at a time: `#` wall,
 /// `.` floor, `o` goal, `$` a box (on plain floor), `@` the player's start. Both `o` cells are

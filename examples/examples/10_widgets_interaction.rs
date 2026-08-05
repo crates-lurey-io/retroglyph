@@ -25,7 +25,7 @@ use retroglyph_core::event::{Event, KeyCode, KeyModifiers};
 use retroglyph_core::grid::{HasSize, Rect};
 use retroglyph_core::terminal::Terminal;
 use retroglyph_examples::Example;
-use retroglyph_widgets::{Button, Density, Interaction, Shortcuts, Theme, Ui};
+use retroglyph_ui::{Button, Density, Interaction, Shortcuts, Theme, Ui};
 
 /// Identifies each button for [`Interaction`]'s hit-testing and focus ring.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

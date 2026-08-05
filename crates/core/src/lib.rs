@@ -5,7 +5,7 @@
 //! facets (bundled together as [`Backend`](crate::backend::Backend)) and the dependency-free
 //! [`Headless`](crate::backend::Headless) test backend, and the `App`/`Flow`/`Frame` game loop contract.
 //! Platform backends (`retroglyph-crossterm`, `retroglyph-software`) and drawing helpers
-//! (`retroglyph-widgets`) are separate crates that depend on this one.
+//! (`retroglyph-ui`) are separate crates that depend on this one.
 //!
 //! # Features
 //!
@@ -166,7 +166,7 @@ pub mod event;
 pub mod frames;
 pub mod grid;
 pub mod layout;
-// `pub` so `retroglyph-widgets` can share this crate's one std-or-libm dispatch point instead of
+// `pub` so `retroglyph-ui` can share this crate's one std-or-libm dispatch point instead of
 // vendoring its own copy, `#[doc(hidden)]` so that sharing costs no public API surface:
 // `cargo-semver-checks` ignores hidden items (see the module's own doc comment for the traps that
 // come with that). Never add a `pub use` that re-exports its contents through a non-hidden path,

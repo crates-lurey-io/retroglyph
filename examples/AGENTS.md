@@ -49,9 +49,9 @@ Every example must pass all of the following before merge:
   `Headless::push_event` rather than snapshotting an idle/legend frame -- this is what actually
   proves decode-and-echo correctness, and what exercises the WASM `decode_key`/`decode_mouse` FFI
   paths through a real example rather than only through their unit tests.
-- **Widgets dependency:** `retroglyph-widgets` is a plain unconditional dependency of this crate
-  (like `retroglyph-core`), not behind a Cargo feature. Widgets is backend-generic, so there is no
-  backend axis to gate it on.
+- **Widgets dependency:** `retroglyph-ui` is a plain unconditional dependency of this crate (like
+  `retroglyph-core`), not behind a Cargo feature. Widgets is backend-generic, so there is no backend
+  axis to gate it on.
 
 ## No perf/benchmark examples here
 
