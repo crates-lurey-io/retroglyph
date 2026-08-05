@@ -1144,6 +1144,11 @@ fn blit_glyph(
 ///
 /// Blending uses pure integer `U8x4Rgba::source_over`. Fully opaque pixels
 /// (alpha == 255) skip blending entirely and write directly to the buffer.
+///
+/// That arithmetic runs on sRGB-encoded bytes rather than in linear light, which is deliberate:
+/// pixel art is authored in editors that composite the same way, and this blit is the reference
+/// the GPU backends are checked against pixel for pixel, so it defines the result for all three.
+/// See `docs/references/core/color-space.md`.
 #[cfg(feature = "tilesets")]
 #[allow(
     clippy::cast_possible_truncation,

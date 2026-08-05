@@ -29,9 +29,14 @@
 //! blend factor of exactly 0 or exactly 1 selects one endpoint outright and every colour space
 //! agrees on the result.
 //!
+//! Those two values being the only ones is an **invariant of this module**, not an accident of the
+//! current font sources, and every backend is entitled to rely on it. `coverage_is_strictly_binary`
+//! enforces it.
+//!
 //! Anything that introduces partial coverage (an antialiased or grayscale-AA font source,
-//! multisampling, a non-integer render scale) reopens it.
-//! This module's `coverage_is_strictly_binary` test fails if the first of those lands here.
+//! multisampling, a non-integer render scale) reopens the colour-space question for all three
+//! backends simultaneously, and has to be a deliberate decision rather than a side effect. See
+//! `docs/references/core/color-space.md`.
 //!
 //! # Examples
 //!
