@@ -57,7 +57,7 @@ driver stack they reach and what they cost to depend on:
 |                                   | `retroglyph-wgpu`    | `retroglyph-gl`             |
 | --------------------------------- | -------------------- | --------------------------- |
 | APIs                              | Vulkan, Metal, D3D12 | OpenGL 3.3, WebGL2          |
-| Browser                           | not yet (see below)  | yes, WebGL2                 |
+| Browser                           | yes, WebGPU          | yes, WebGL2                 |
 | `unsafe` in the backend           | none                 | unavoidable (every GL call) |
 | Direct dependencies, transitively | 85 crates            | 54 crates                   |
 | Clean debug build of the crate    | 15s                  | 7s                          |
@@ -70,26 +70,43 @@ not the three backend APIs: only one hardware abstraction layer compiles per pla
 `wgpu-hal`'s backends are target-gated. A macOS build pulls the Metal stack and no Vulkan; a Linux
 build pulls `ash` and no Metal.
 
-Pick `retroglyph-gl` for a browser target today, or when a smaller dependency tree matters more than
-the rest. Pick this one for validation-layer diagnostics, a modern driver path, and a backend with
-no `unsafe` in it.
+Both cover the browser today (WebGPU here, WebGL2 there); pick `retroglyph-gl` when a smaller
+dependency tree matters more than the rest, or this one for validation-layer diagnostics, a modern
+driver path, and a backend with no `unsafe` in it. On wasm32 this backend's device is ready
+asynchronously (see [Platform support](#platform-support) below), where `retroglyph-gl`'s WebGL2
+context is ready synchronously; that is the one real difference the browser adds to the choice.
+
+## Performance
+
+A 200x60 grid with three layers (36000 cells, 562 KiB of instance data) costs 266us per frame end to
+end: flattening the layers, uploading, encoding six draws, submitting, and waiting for the GPU to
+finish. That is roughly 4% of a 60 Hz frame budget, on an M-series laptop at `--release`, and it is
+larger than any grid the examples use.
+
+The number is here to set expectations, not to invite tuning: a character grid is a trivial workload
+for a modern GPU, and the design choices above (deriving position from the instance index, packing
+every layer into one upload) are about keeping the per-frame _bandwidth_ small rather than about
+winning a benchmark. Emitting four real vertices per cell instead, with explicit positions and UVs,
+is the other common shape for this renderer and would cost roughly six times the per-frame bytes.
 
 ## Platform support
 
-Native today. The browser is not supported yet, and the obstacle is this crate's, not `wgpu`'s:
-WebGPU is a browser API and `wgpu` targets it directly.
+Native (Vulkan, Metal, D3D12) and the browser (WebGPU) both work.
 
-What blocks it is that `Presenter::init_surface` is synchronous while `request_adapter` and
-`request_device` are not, and a browser's main thread has no way to block on a future. The way
-around that is to defer rather than block: `Instance::create_surface` _is_ synchronous, so
-`init_surface` can create the surface from the canvas, spawn the adapter and device request, and
-return; `present` already no-ops until a device exists, so the first few frames would simply be
-blank until it lands. That is a real design with real costs (a shared-state cell, blank startup
-frames, and a wasm-only dependency set), and it is not implemented here.
+`Presenter::init_surface` is synchronous, but `request_adapter` and `request_device` are not, and a
+browser's main thread has no way to block on a future the way native does. So the two targets take
+different paths through the same call: `Instance::create_surface` _is_ synchronous everywhere, so on
+wasm32 `init_surface` creates the surface from the window's canvas, spawns the adapter and device
+request with `wasm_bindgen_futures::spawn_local`, and returns immediately; `present` polls the
+result each frame and draws nothing until it lands. Native, by contrast, blocks on the same requests
+with `pollster::block_on` inside `init_surface` itself, so the device is always ready by the time it
+returns.
 
-`retroglyph-gl` covers the browser through WebGL2, whose context creation is synchronous, so there
-is a working browser backend either way. The `webgpu` and `gles` wgpu features are off; see this
-crate's `Cargo.toml`.
+The one user-visible consequence is on wasm32 only: the first frames after startup are blank until
+the adapter and device resolve, typically well under a second. Native has no such gap.
+
+`retroglyph-gl` also covers the browser, through WebGL2, whose context creation is synchronous and
+so needs no equivalent deferral.
 
 ## Features
 

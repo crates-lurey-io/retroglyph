@@ -47,7 +47,7 @@
 //! | | `retroglyph-wgpu` | `retroglyph-gl` |
 //! | --- | --- | --- |
 //! | APIs | Vulkan, Metal, D3D12 | OpenGL 3.3, WebGL2 |
-//! | Browser | not yet (see [Platform support](#platform-support)) | yes, WebGL2 |
+//! | Browser | yes, WebGPU (see [Platform support](#platform-support)) | yes, WebGL2 |
 //! | `unsafe` in the backend | none | unavoidable (every GL call) |
 //! | Direct dependencies, transitively | 85 crates | 54 crates |
 //! | Clean debug build of the crate | 15s | 7s |
@@ -60,27 +60,47 @@
 //! per platform, since `wgpu-hal`'s backends are target-gated. A macOS build pulls the Metal
 //! stack and no Vulkan; a Linux build pulls `ash` and no Metal.
 //!
-//! Pick `retroglyph-gl` for a browser target today, or when a smaller dependency tree matters more
-//! than the rest. Pick this one for validation-layer diagnostics, a modern driver path, and a
-//! backend with no `unsafe` in it.
+//! Both cover the browser today (WebGPU here, WebGL2 there); pick `retroglyph-gl` when a smaller
+//! dependency tree matters more than the rest, or this one for validation-layer diagnostics, a
+//! modern driver path, and a backend with no `unsafe` in it. On wasm32 this backend's device is
+//! ready asynchronously (see [Platform support](#platform-support)), where `retroglyph-gl`'s WebGL2
+//! context is ready synchronously; that is the one real difference the browser adds to the choice.
+//!
+//! # Performance
+//!
+//! A 200x60 grid with three layers (36000 cells, 562 KiB of instance data) costs 266us per frame
+//! end to end: flattening the layers, uploading, encoding six draws, submitting, and waiting for
+//! the GPU to finish. That is roughly 4% of a 60 Hz frame budget, on an M-series laptop at
+//! `--release`, and it is larger than any grid the examples use.
+//!
+//! The number is here to set expectations, not to invite tuning: a character grid is a trivial
+//! workload for a modern GPU, and the design choices above (deriving position from the instance
+//! index, packing every layer into one upload) are about keeping the per-frame *bandwidth* small
+//! rather than about winning a benchmark. Emitting four real vertices per cell instead, with
+//! explicit positions and UVs, is the other common shape for this renderer and would cost roughly
+//! six times the per-frame bytes.
 //!
 //! # Platform support
 //!
-//! Native today. The browser is not supported yet, and the obstacle is this crate's, not `wgpu`'s:
-//! WebGPU is a browser API and `wgpu` targets it directly.
+//! Native (Vulkan, Metal, D3D12) and the browser (WebGPU) both work.
 //!
-//! What blocks it is that [`Presenter::init_surface`] is synchronous while `request_adapter` and
-//! `request_device` are not, and a browser's main thread has no way to block on a future. The way
-//! around that is to defer rather than block: `Instance::create_surface` *is* synchronous, so
-//! `init_surface` can create the surface from the canvas, spawn the adapter and device request,
-//! and return; [`present`](Presenter::present) already no-ops until a device exists, so the first
-//! few frames would simply be blank until it lands. That is a real design with real costs (a
-//! shared-state cell, blank startup frames, and a wasm-only dependency set), and it is not
-//! implemented here.
+//! [`Presenter::init_surface`] is synchronous, but `request_adapter` and `request_device` are not,
+//! and a browser's main thread has no way to block on a future the way native does. So the two
+//! targets take different paths through the same call: `Instance::create_surface` *is* synchronous
+//! everywhere, so on wasm32 `init_surface` creates the surface from the window's canvas, spawns the
+//! adapter and device request with `wasm_bindgen_futures::spawn_local`, and returns immediately;
+//! [`present`](Presenter::present) polls the result each frame and draws nothing until it lands.
+//! Native, by contrast, blocks on the same requests with `pollster::block_on` inside
+//! `init_surface` itself, so the device is always ready by the time it returns. See
+//! `crate::gpu::PendingGpu` for the shared-state cell this deferral is built on.
 //!
-//! `retroglyph-gl` covers the browser through WebGL2, whose context creation is synchronous, so
-//! there is a working browser backend either way. The `webgpu` and `gles` wgpu features are off
-//! (see this crate's `Cargo.toml`).
+//! The one user-visible consequence is on wasm32 only: the first frames after startup are blank
+//! (whatever was drawn before the device exists is not shown) until the adapter and device resolve,
+//! typically well under a second. Native has no such gap.
+//!
+//! `retroglyph-gl` also covers the browser, through WebGL2, whose context creation is synchronous
+//! and so needs no equivalent deferral. Pick between the two using the table above and the
+//! dependency/build-time comparison it links to.
 //!
 //! # Environment variables
 //!
@@ -146,7 +166,7 @@ pub use error::SurfaceError;
 // Re-export the font types so a consumer can build a custom atlas without a separate dependency.
 pub use retroglyph_window::font::{self as font, BitmapFont, FontChain};
 
-use gpu::{GpuContext, WindowSurface};
+use gpu::{GpuContext, PendingGpu, WindowSurface, WindowedResult};
 use instance::{Cell, FLAG_HAS_BG, FLAG_HAS_GLYPH};
 use renderer::{GpuResources, LayerRange};
 use retroglyph_core::backend::{DrawCell, Output};
@@ -227,8 +247,16 @@ pub struct WgpuRenderer {
     /// The current surface size in physical pixels (set by
     /// [`resize_surface`](Presenter::resize_surface)).
     surface_size: (u32, u32),
-    /// Device, surface, and GPU resources. `None` until [`init_surface`](Presenter::init_surface).
+    /// Device, surface, and GPU resources. `None` until the device is ready: before
+    /// [`init_surface`](Presenter::init_surface) is ever called, and on wasm32 for every frame
+    /// while [`pending`](Self::pending) is still resolving.
     gpu: Option<Gpu>,
+    /// wasm32 only in practice: the deferred adapter/device request started by
+    /// [`init_surface`](Presenter::init_surface), polled by [`present`](Presenter::present) each
+    /// frame until it resolves. Always `None` on native, where `init_surface` never returns
+    /// without the device already installed in `Self::gpu`; `PendingGpu` is uninhabited there, so
+    /// this field costs nothing to poll.
+    pending: Option<PendingGpu>,
 }
 
 /// The live device, surface, and resources, present only after
@@ -276,6 +304,7 @@ impl WgpuRenderer {
             warned_dropped_tint: std::collections::BTreeSet::new(),
             surface_size: geometry.surface_size(cols, rows),
             gpu: None,
+            pending: None,
         }
     }
 
@@ -408,6 +437,30 @@ impl WgpuRenderer {
     #[cfg(all(test, feature = "default-font"))]
     fn offscreen_context(&self) -> Option<&GpuContext> {
         self.gpu.as_ref().map(|gpu| &gpu.context)
+    }
+
+    /// Builds resources for a newly ready device and surface, and installs both as [`Self::gpu`].
+    ///
+    /// Shared by [`Presenter::init_surface`] (native: the device is always ready by the time it
+    /// returns) and [`Presenter::present`] (wasm32: called once the deferred adapter/device
+    /// request resolves).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SurfaceError::Init`] if either atlas exceeds the device's texture limits.
+    fn install_device(
+        &mut self,
+        context: GpuContext,
+        surface: WindowSurface,
+    ) -> Result<(), SurfaceError> {
+        log::info!("retroglyph-wgpu: {}", context.describe());
+        let resources = self.build_resources(&context, surface.view_format)?;
+        self.gpu = Some(Gpu {
+            context,
+            surface: Some(surface),
+            resources,
+        });
+        Ok(())
     }
 
     /// The sprite atlas layer size in texels, or `(0, 0)` without a tileset.
@@ -811,18 +864,20 @@ impl Presenter for WgpuRenderer {
         // Re-entry (surface-loss recovery, retroglyph#728): a previous device may still be
         // installed, e.g. from the winit driver re-calling this after repeated present failures.
         // Drop it before building the replacement, so the old surface releases the window it owns
-        // before a new surface asks for it.
+        // before a new surface asks for it. A previous deferred request (wasm32) is dropped too:
+        // its result, once it lands, would otherwise install a device for a window that is no
+        // longer current.
         self.gpu = None;
+        self.pending = None;
 
         let (w, h) = self.surface_size;
-        let (context, surface) = GpuContext::windowed(window, w, h)?;
-        log::info!("retroglyph-wgpu: {}", context.describe());
-        let resources = self.build_resources(&context, surface.view_format)?;
-        self.gpu = Some(Gpu {
-            context,
-            surface: Some(surface),
-            resources,
-        });
+        match GpuContext::windowed(window, w, h)? {
+            WindowedResult::Ready(context, surface) => self.install_device(context, surface)?,
+            // wasm32 only in practice (see `Self::pending`'s docs): the device isn't ready yet.
+            // `present` polls `self.pending` each frame until it resolves, drawing nothing in the
+            // meantime; drawing itself still updates the CPU-side arrays normally.
+            WindowedResult::Pending(pending) => self.pending = Some(pending),
+        }
         Ok(())
     }
 
@@ -836,8 +891,30 @@ impl Presenter for WgpuRenderer {
     }
 
     fn present(&mut self) -> Result<(), SurfaceError> {
+        // wasm32 only in practice: poll the deferred adapter/device request. While it is still in
+        // flight, drop through to the no-device branch below and draw nothing this frame; once it
+        // resolves, install the device (reconciling any resize that landed while it was pending)
+        // and fall through to render the very same frame.
+        if let Some(pending) = self.pending.as_ref() {
+            match pending.poll() {
+                None => {}
+                Some(Ok((context, mut surface))) => {
+                    self.pending = None;
+                    let (w, h) = self.surface_size;
+                    surface.resize(&context, w, h);
+                    self.install_device(context, surface)?;
+                }
+                Some(Err(err)) => {
+                    self.pending = None;
+                    return Err(err);
+                }
+            }
+        }
+
         // No device yet: nothing to present. Drawing has still updated the CPU-side arrays, so the
-        // first frame after `init_surface` shows the current grid rather than a blank one.
+        // first frame after the device becomes ready shows the current grid rather than a blank
+        // one. On wasm32 this is also the ordinary state for every frame before the deferred
+        // request above resolves.
         let Some(gpu) = self.gpu.as_mut() else {
             return Ok(());
         };

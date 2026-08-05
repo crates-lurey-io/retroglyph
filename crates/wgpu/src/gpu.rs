@@ -26,6 +26,8 @@
 use crate::error::SurfaceError;
 use retroglyph_window::WindowHandle;
 use std::sync::Arc;
+#[cfg(target_arch = "wasm32")]
+use std::{cell::RefCell, rc::Rc};
 
 /// The wgpu instance, adapter, device, and queue.
 ///
@@ -70,27 +72,32 @@ impl GpuContext {
     }
 
     /// Requests an adapter and device that can present to `window`, and returns both alongside the
-    /// configured swap chain.
+    /// configured swap chain, on a native target.
+    ///
+    /// `request_adapter`/`request_device` are `async` on every target, but a native executor
+    /// resolves them without ever actually yielding, so [`pollster::block_on`] is the smallest
+    /// possible way to drive them to completion here. See [`Self::windowed`]'s wasm32 sibling below
+    /// for why a browser can't do the same thing.
     ///
     /// # Errors
     ///
     /// Returns [`SurfaceError::Init`] if the window's handles don't name a surface any enabled
     /// backend supports, if no adapter can present to it, or if the device request fails.
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn windowed(
         window: Arc<dyn WindowHandle>,
         width: u32,
         height: u32,
-    ) -> Result<(Self, WindowSurface), SurfaceError> {
+    ) -> Result<WindowedResult, SurfaceError> {
         let instance = create_instance();
-        // `SurfaceTarget::DisplayAndWindow` hands wgpu both raw handles and takes ownership of the
-        // `Arc`, so the surface keeps the window alive for its own lifetime and comes back with a
-        // `'static` lifetime. That is what lets this be safe code: the borrowing alternative
-        // (`create_surface_unsafe`) puts the outlives requirement on the caller instead.
-        let surface = instance
-            .create_surface(wgpu::SurfaceTarget::DisplayAndWindow(Box::new(window)))
-            .map_err(|e| SurfaceError::Init(format!("create surface: {e}")))?;
-        let adapter = request_adapter(&instance, Some(&surface))?;
-        let (device, queue) = request_device(&adapter)?;
+        let surface = create_window_surface(&instance, window)?;
+        let adapter =
+            pollster::block_on(instance.request_adapter(&adapter_options(Some(&surface))))
+                .map_err(|e| SurfaceError::Init(format!("no suitable adapter: {e}")))?;
+        let (device, queue) =
+            pollster::block_on(adapter.request_device(&device_descriptor(&adapter)))
+                .map_err(|e| SurfaceError::Init(format!("request device: {e}")))?;
+        install_error_handler(&device);
 
         let gpu = Self {
             _instance: instance,
@@ -99,7 +106,41 @@ impl GpuContext {
             queue,
         };
         let surface = WindowSurface::new(surface, &gpu, width, height)?;
-        Ok((gpu, surface))
+        Ok(WindowedResult::Ready(gpu, surface))
+    }
+
+    /// Creates the surface for `window` synchronously, spawns the adapter and device request, and
+    /// returns immediately with a [`PendingGpu`] the caller polls, on a wasm32 target.
+    ///
+    /// `Instance::create_surface` is synchronous on every target, but `request_adapter` and
+    /// `request_device` are not, and a browser's main thread has no way to block on a future the
+    /// way [`pollster::block_on`] does on native. So this defers instead of blocking:
+    /// [`wasm_bindgen_futures::spawn_local`] drives the adapter/device request to completion on the
+    /// browser's own microtask queue, writing its result into the shared slot [`PendingGpu`] wraps.
+    /// The caller ([`Presenter::present`](retroglyph_window::Presenter::present)) polls that slot
+    /// each frame and draws nothing until it resolves, so the first frames after startup are blank.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SurfaceError::Init`] if the window's handles don't name a surface any enabled
+    /// backend supports. A failure in the deferred adapter/device request surfaces later, from
+    /// [`PendingGpu::poll`].
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) fn windowed(
+        window: Arc<dyn WindowHandle>,
+        width: u32,
+        height: u32,
+    ) -> Result<WindowedResult, SurfaceError> {
+        let instance = create_instance();
+        let surface = create_window_surface(&instance, window)?;
+
+        let slot = Rc::new(RefCell::new(None));
+        let slot_task = Rc::clone(&slot);
+        wasm_bindgen_futures::spawn_local(async move {
+            let result = build_windowed_async(instance, surface, width, height).await;
+            *slot_task.borrow_mut() = Some(result);
+        });
+        Ok(WindowedResult::Pending(PendingGpu { slot }))
     }
 
     /// A one-line description of the adapter this device came from, for the init log line.
@@ -271,46 +312,185 @@ fn create_instance() -> wgpu::Instance {
     wgpu::Instance::new(desc)
 }
 
-/// Requests an adapter, preferring low power: a character grid is a handful of draw calls, so a
-/// discrete GPU would spin up for nothing on a laptop.
-fn request_adapter(
-    instance: &wgpu::Instance,
-    compatible_surface: Option<&wgpu::Surface<'static>>,
-) -> Result<wgpu::Adapter, SurfaceError> {
-    let options = wgpu::RequestAdapterOptions {
+/// Adapter request options, preferring low power: a character grid is a handful of draw calls, so
+/// a discrete GPU would spin up for nothing on a laptop. Shared by every path that requests an
+/// adapter, whether blocking (native) or awaited (wasm32, [`build_windowed_async`]).
+fn adapter_options<'a>(
+    compatible_surface: Option<&'a wgpu::Surface<'static>>,
+) -> wgpu::RequestAdapterOptions<'a, 'static> {
+    wgpu::RequestAdapterOptions {
         power_preference: wgpu::PowerPreference::from_env()
             .unwrap_or(wgpu::PowerPreference::LowPower),
         force_fallback_adapter: false,
         compatible_surface,
         apply_limit_buckets: false,
-    };
-    pollster::block_on(instance.request_adapter(&options))
-        .map_err(|e| SurfaceError::Init(format!("no suitable adapter: {e}")))
+    }
 }
 
-/// Requests a device at downlevel limits, so the backend runs on the weakest hardware wgpu
-/// supports rather than only on whatever the developer's machine happens to be.
-fn request_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Queue), SurfaceError> {
+/// Device descriptor at downlevel limits, so the backend runs on the weakest hardware wgpu
+/// supports rather than only on whatever the developer's machine happens to be. Shared by every
+/// path that requests a device, whether blocking (native) or awaited (wasm32,
+/// [`build_windowed_async`]).
+fn device_descriptor(adapter: &wgpu::Adapter) -> wgpu::DeviceDescriptor<'static> {
     // `downlevel_defaults` is the conservative floor (256 array layers, 4 bind groups, 2048px
     // textures). `using_resolution` raises just the texture/buffer *size* limits back to what this
     // adapter actually offers, so a large grid on a large display isn't capped by a floor that
     // exists for feature portability, not for capacity.
     let limits = wgpu::Limits::downlevel_defaults().using_resolution(adapter.limits());
-    let descriptor = wgpu::DeviceDescriptor {
+    wgpu::DeviceDescriptor {
         label: Some("retroglyph-wgpu"),
         required_features: wgpu::Features::empty(),
         required_limits: limits,
         memory_hints: wgpu::MemoryHints::MemoryUsage,
         experimental_features: wgpu::ExperimentalFeatures::default(),
         trace: wgpu::Trace::Off,
-    };
-    let (device, queue) = pollster::block_on(adapter.request_device(&descriptor))
-        .map_err(|e| SurfaceError::Init(format!("request device: {e}")))?;
-    // Validation and out-of-memory errors are asynchronous. Without a handler wgpu panics on the
-    // first one, taking the whole app down; logging instead keeps a shipped game running (and
-    // usually still drawing) while making the failure findable.
+    }
+}
+
+/// Registers the uncaptured-error handler every device needs. Validation and out-of-memory errors
+/// are asynchronous; without a handler wgpu panics on the first one, taking the whole app down.
+/// Logging instead keeps a shipped game running (and usually still drawing) while making the
+/// failure findable.
+fn install_error_handler(device: &wgpu::Device) {
     device.on_uncaptured_error(Arc::new(|error| {
         log::error!("wgpu: {error}");
     }));
+}
+
+/// Requests an adapter and device with no surface to be compatible with, blocking on native.
+/// Shared implementation for [`GpuContext::offscreen`].
+#[cfg(all(test, feature = "default-font"))]
+fn request_adapter(
+    instance: &wgpu::Instance,
+    compatible_surface: Option<&wgpu::Surface<'static>>,
+) -> Result<wgpu::Adapter, SurfaceError> {
+    pollster::block_on(instance.request_adapter(&adapter_options(compatible_surface)))
+        .map_err(|e| SurfaceError::Init(format!("no suitable adapter: {e}")))
+}
+
+/// Requests a device at downlevel limits, blocking on native. Shared implementation for
+/// [`GpuContext::offscreen`].
+#[cfg(all(test, feature = "default-font"))]
+fn request_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Queue), SurfaceError> {
+    let (device, queue) = pollster::block_on(adapter.request_device(&device_descriptor(adapter)))
+        .map_err(|e| SurfaceError::Init(format!("request device: {e}")))?;
+    install_error_handler(&device);
     Ok((device, queue))
+}
+
+/// Creates the surface for `window` from `instance`. Synchronous on every target, including
+/// wasm32/WebGPU: only the adapter and device request that follows is asynchronous.
+fn create_window_surface(
+    instance: &wgpu::Instance,
+    window: Arc<dyn WindowHandle>,
+) -> Result<wgpu::Surface<'static>, SurfaceError> {
+    // `SurfaceTarget::DisplayAndWindow` hands wgpu both raw handles and takes ownership of the
+    // `Arc`, so the surface keeps the window alive for its own lifetime and comes back with a
+    // `'static` lifetime. That is what lets this be safe code: the borrowing alternative
+    // (`create_surface_unsafe`) puts the outlives requirement on the caller instead. On wasm32 the
+    // window reports `RawWindowHandle::WebCanvas`, which wgpu resolves to the DOM canvas itself.
+    instance
+        .create_surface(wgpu::SurfaceTarget::DisplayAndWindow(Box::new(window)))
+        .map_err(|e| SurfaceError::Init(format!("create surface: {e}")))
+}
+
+/// The outcome of [`GpuContext::windowed`]: either the device is ready immediately (native), or
+/// the caller must poll a [`PendingGpu`] until it resolves (wasm32).
+// `Ready` is the hot path on every target that actually reaches this variant (native always,
+// wasm32 once resolved); boxing it to shrink the rare `Pending` variant would add an allocation to
+// every ordinary `init_surface` call to save a few bytes on an enum this crate stores exactly one
+// of.
+#[allow(clippy::large_enum_variant)]
+pub(crate) enum WindowedResult {
+    /// The device and configured surface are ready to use.
+    ///
+    /// Never constructed by [`GpuContext::windowed`] on wasm32, which always defers (see
+    /// [`present`](retroglyph_window::Presenter::present) matching this variant once
+    /// [`PendingGpu::poll`] resolves instead); `allow(dead_code)`-exempted for the same reason
+    /// [`Pending`](Self::Pending) is on native, so the enum keeps one shape on every target.
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    Ready(GpuContext, WindowSurface),
+    /// The surface was created, but the adapter/device request is still in flight. Poll
+    /// [`PendingGpu::poll`] until it resolves.
+    ///
+    /// Never constructed on native, since `PendingGpu` is uninhabited there (see its docs); the
+    /// variant is `allow(dead_code)`-exempted below rather than `cfg`-gated out, so `WindowedResult`
+    /// has the same shape on every target and callers need no `cfg` in their own match arms.
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    Pending(PendingGpu),
+}
+
+/// A slot the deferred wasm32 adapter/device request writes its result into, and the caller polls
+/// each frame ([`Presenter::present`](retroglyph_window::Presenter::present)) until it resolves.
+///
+/// `Rc<RefCell<_>>`, not `Arc<Mutex<_>>`: wasm32 in a browser main thread is single-threaded, and
+/// `wasm_bindgen_futures::spawn_local` requires `'static` futures but never moves them across a
+/// thread, so the atomic/lock machinery `Send + Sync` would require buys nothing here.
+#[cfg(target_arch = "wasm32")]
+type PendingSlot = Rc<RefCell<Option<Result<(GpuContext, WindowSurface), SurfaceError>>>>;
+
+#[cfg(target_arch = "wasm32")]
+pub(crate) struct PendingGpu {
+    slot: PendingSlot,
+}
+
+#[cfg(target_arch = "wasm32")]
+impl PendingGpu {
+    /// Takes the result out of the slot if the deferred request has resolved, leaving it empty.
+    /// Returns `None` while the request is still in flight.
+    pub(crate) fn poll(&self) -> Option<Result<(GpuContext, WindowSurface), SurfaceError>> {
+        self.slot.borrow_mut().take()
+    }
+}
+
+/// Never constructed on native: [`GpuContext::windowed`] always returns
+/// [`WindowedResult::Ready`] there, since `request_adapter`/`request_device` resolve without ever
+/// yielding. Kept as an uninhabited type (rather than omitting the `Pending` variant per target)
+/// so [`WindowedResult`] and its match arms have the same shape on every target.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) enum PendingGpu {}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl PendingGpu {
+    /// Unreachable: `Self` is uninhabited on this target, so no value of it can ever exist to call
+    /// this on. `&self` is unused, but the signature must match the wasm32 `poll` so
+    /// `WgpuRenderer::present` calls it without a `cfg`.
+    #[allow(clippy::unused_self)]
+    pub(crate) fn poll(&self) -> Option<Result<(GpuContext, WindowSurface), SurfaceError>> {
+        unreachable!("PendingGpu is uninhabited on native; no instance can exist to call this")
+    }
+}
+
+/// Awaits the adapter and device request, then builds the configured swap chain. The async body
+/// behind [`GpuContext::windowed`]'s wasm32 deferred path, spawned onto the browser's microtask
+/// queue by [`wasm_bindgen_futures::spawn_local`].
+// This future is not `Send` (it holds a `wgpu::Surface`, which on wasm32 wraps a `JsValue`), but
+// `spawn_local` doesn't require `Send`: wasm32 in a browser is single-threaded, so the future never
+// needs to cross one.
+#[cfg(target_arch = "wasm32")]
+#[allow(clippy::future_not_send)]
+async fn build_windowed_async(
+    instance: wgpu::Instance,
+    surface: wgpu::Surface<'static>,
+    width: u32,
+    height: u32,
+) -> Result<(GpuContext, WindowSurface), SurfaceError> {
+    let adapter = instance
+        .request_adapter(&adapter_options(Some(&surface)))
+        .await
+        .map_err(|e| SurfaceError::Init(format!("no suitable adapter: {e}")))?;
+    let (device, queue) = adapter
+        .request_device(&device_descriptor(&adapter))
+        .await
+        .map_err(|e| SurfaceError::Init(format!("request device: {e}")))?;
+    install_error_handler(&device);
+
+    let gpu = GpuContext {
+        _instance: instance,
+        adapter,
+        device,
+        queue,
+    };
+    let surface = WindowSurface::new(surface, &gpu, width, height)?;
+    Ok((gpu, surface))
 }

@@ -41,20 +41,14 @@ retroglyph-core = { path = "../core", version = "0.5.0", default-features = fals
 # The glyph source (BitmapFont + unscii16) lives in retroglyph-window's winit-free `font` module,
 # which this crate already depends on for `Presenter`. `default-font` forwards to window's feature.
 retroglyph-window = { path = "../window", version = "0.4.1", default-features = false }
-# `default-features = false` drops two things this crate has no code for today:
-#
-# - `webgpu` (and the `web` stack it pulls in: wasm-bindgen, js-sys, web-sys). Turning it on would
-#   compile, but nothing here drives the async device request a browser needs; the crate docs'
-#   "Platform support" section describes the deferred-init design that would.
-# - `gles`. OpenGL ES/WebGL2 is what `retroglyph-gl` already covers, from a codebase that targets
-#   the GL feature floor directly; routing it through wgpu's translation layer would add a second
-#   way to reach the same drivers without adding a platform.
-#
-# What is left is the modern explicit-API set: Vulkan (Linux/Android/Windows), Metal (Apple), and
-# D3D12 (Windows). Naming all three costs nothing on any one target: `wgpu-hal` gates each backend
-# to the platforms it runs on, so a macOS build compiles the Metal stack and no Vulkan, and a Linux
-# build compiles `ash` and no Metal. `wgsl` is naga's WGSL front end, required to compile
-# `src/*.wgsl` at all.
+# `default-features = false` drops `gles`: OpenGL ES/WebGL2 is what `retroglyph-gl` already covers,
+# from a codebase that targets the GL feature floor directly; routing it through wgpu's translation
+# layer would add a second way to reach the same drivers without adding a platform. What is left is
+# the modern explicit-API set: Vulkan (Linux/Android/Windows), Metal (Apple), D3D12 (Windows), and
+# (wasm32 only, see the target section below) WebGPU. Naming all four costs nothing on any one
+# target: `wgpu-hal` gates each backend to the platforms it runs on, so a macOS build compiles the
+# Metal stack and no Vulkan, and a Linux build compiles `ash` and no Metal. `wgsl` is naga's WGSL
+# front end, required to compile `src/*.wgsl` at all.
 wgpu = { version = "30", default-features = false, features = [
   "std",
   "wgsl",
@@ -67,11 +61,39 @@ wgpu = { version = "30", default-features = false, features = [
 # checked at compile time, which is what lets this crate keep `unsafe_code = "forbid"`.
 bytemuck = { version = "1", features = ["derive"] }
 log = "0.4"
+raw-window-handle = "0.6"
+
 # `request_adapter`/`request_device` are `async` on every target. On a native target their futures
 # resolve without an executor, so the smallest possible block-on is all that is needed; pulling in
 # tokio or async-std for two calls at startup would be a much larger dependency for no gain.
+# `pollster::block_on` panics if a future actually yields, which is exactly what a browser main
+# thread's futures do (see the `wasm32` target section below), so this is native-only.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 pollster = "0.4"
-raw-window-handle = "0.6"
+
+# `Presenter::init_surface` is synchronous, but `request_adapter`/`request_device` are `async` on
+# every target, and a browser main thread has no way to block on a future the way `pollster` does
+# natively. `crate::gpu` defers instead: it creates the surface synchronously (that part *is*
+# synchronous everywhere) and spawns the adapter/device request with `wasm_bindgen_futures::
+# spawn_local`, writing the result into a slot `Presenter::present` polls each frame. See
+# `crate::gpu::PendingGpu` and the crate docs' "Platform support" section.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# `webgpu` is the only addition needed on top of the shared feature list above: wgpu resolves
+# `RawWindowHandle::WebCanvas` (what winit reports on wasm32) to the DOM canvas internally, so this
+# crate needs no `web-sys` canvas lookup of its own (contrast `retroglyph-gl`'s `context_wasm.rs`,
+# which creates its WebGL2 context by hand and so does look the canvas up itself).
+wgpu = { version = "30", default-features = false, features = ["webgpu"] }
+# Drives the deferred adapter/device request (see the module comment above) on the browser's
+# microtask queue without blocking the main thread.
+wasm-bindgen-futures = "0.4"
+# Not called directly (there is no `wasm_bindgen::` reference in this crate's own code, unlike
+# `retroglyph-gl`'s `JsCast`/`Closure` use), but `wgpu`'s `webgpu` feature and `wasm-bindgen-futures`
+# both depend on it, and Cargo unifies target-specific dependencies into one workspace lockfile.
+# Pinned to match every other `wasm32` crate in the workspace (`crates/gl`, `crates/window`,
+# `crates/software`, `crates/terminal-wasm`, `examples`), so this crate's own manifest states the
+# same requirement rather than relying on a sibling crate's pin to hold the lockfile at one version
+# for it.
+wasm-bindgen = "=0.2.126"
 
 [dev-dependencies]
 # Cross-backend Output conformance harness (retroglyph#763): dev-only, so the `testing` feature's
