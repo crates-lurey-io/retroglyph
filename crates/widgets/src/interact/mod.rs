@@ -80,15 +80,32 @@ use crate::animate::Tween;
 
 /// Default [`Interaction::with_drag_threshold`].
 ///
-/// The pointer must move more than one cell from its press-down position
-/// before a [`Sense::DRAG`] widget reports [`Response::dragging`] instead of
-/// a click-in-progress.
+/// The pointer must move strictly farther than this many cells from its press-down position
+/// (see `past_drag_threshold`'s `>` comparison) before a [`Sense::DRAG`] widget reports
+/// [`Response::dragging`] instead of a click-in-progress, so at the default of `1` the pointer
+/// has to reach a cell at least two away from the origin.
+///
+/// Terminal pointer positions are already cell-quantized, so there is no sub-cell jitter to
+/// absorb the way a pixel-based UI needs to: `1` exists only to let a click that wanders to an
+/// immediately adjacent cell still count as a click, while a move to the next cell out is a
+/// deliberate drag. Lower (`0`) turns any single-cell move into a drag and makes shaky clicks
+/// hard to land; higher delays drag recognition by that many extra cells. Picked by feel, not
+/// measured.
 pub const DEFAULT_DRAG_THRESHOLD: u16 = 1;
 
 /// Default [`Interaction::with_double_click_window`].
 ///
 /// A second [`Response::clicked`] within this many [`begin_frame`](Interaction::begin_frame)
 /// calls of the first counts as [`Response::double_clicked`].
+///
+/// Measured in frames rather than a `Duration` because this module has no wall clock (see the
+/// field comment on `double_click_window`). `30` frames is about half a second at a 60 fps redraw
+/// rate, matching the double-click timing desktop environments use; because it is counted in
+/// frames, the effective window scales inversely with frame rate (a 30 fps app gets ~1 s, a
+/// 120 fps app ~250 ms), so an app that runs far from 60 fps should override it via
+/// [`Interaction::with_double_click_window`]. Too small drops deliberate but slow double-clicks;
+/// too large pairs clicks a user meant as separate. Chosen to land near half a second at 60 fps,
+/// not otherwise measured.
 pub const DEFAULT_DOUBLE_CLICK_WINDOW: u16 = 30;
 
 /// Ties [`Pointer`], [`HitTester`], and [`FocusRing`] together into the one
