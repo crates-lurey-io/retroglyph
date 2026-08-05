@@ -139,6 +139,7 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
+pub mod atlas;
 // clippy::too_long_first_doc_paragraph is a known-noisy nursery lint (rust-lang/rust-clippy#13441):
 // it mis-attributes its span across this outer doc comment plus `backend`'s own inner module doc,
 // which grew past the threshold once its intra-doc links became fully qualified (retroglyph#1035).

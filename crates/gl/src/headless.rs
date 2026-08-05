@@ -452,7 +452,7 @@ fn glyph_matches_font_coverage_fg_vs_bg() {
 
     let frame = render_to_frame(&ctx, &r).expect("render");
 
-    let glyph = r.glyphs.font_chain().resolve('A').expect("'A' is in CP437");
+    let glyph = r.glyphs.fonts().resolve('A').expect("'A' is in CP437");
     let gw = u32::from(glyph.font().glyph_width());
     let gh = u32::from(glyph.font().glyph_height());
     let rows = glyph.rows();
