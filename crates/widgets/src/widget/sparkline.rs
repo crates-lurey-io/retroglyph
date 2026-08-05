@@ -66,6 +66,9 @@ impl Widget for Sparkline<'_> {
         if width == 0 {
             return;
         }
+        // Floor the max away from zero so an all-zero (or empty) sample window scales to a flat
+        // row of blanks instead of dividing by zero (`sample / 0.0` is NaN, which would break the
+        // clamp and the level cast below). 1e-6 is small enough to never perturb a real max.
         let max = self
             .samples
             .iter()
@@ -88,7 +91,9 @@ impl Widget for Sparkline<'_> {
                 continue;
             }
             let ratio = (recent[i - pad] / max).clamp(0.0, 1.0);
-            // `ratio` is clamped to `0.0..=1.0`, so the rounded level always lands in `0..=8`.
+            // `NINE_LEVELS` is `▁..█` indexed 0..=8 (9 glyphs), so a clamped ratio maps to a level
+            // by scaling to the top index 8 and rounding. `.min(8)` is belt-and-suspenders against
+            // a rounding result of exactly 8 (it never exceeds it, given the clamp above).
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             let level = retroglyph_core::math::round(ratio * 8.0) as usize;
             let style = self
