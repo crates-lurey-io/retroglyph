@@ -66,6 +66,9 @@ fn parse_hex(s: &str) -> Option<(u8, u8, u8)> {
             let r = u8::try_from(chars.next()?.to_digit(16)?).ok()?;
             let g = u8::try_from(chars.next()?.to_digit(16)?).ok()?;
             let b = u8::try_from(chars.next()?.to_digit(16)?).ok()?;
+            // CSS short-hex expansion: each nibble is replicated into both nibbles of the byte,
+            // so `#f80` -> `#ff8800`. `0x11 == 17`, and `0xN * 0x11 == 0xNN` for any nibble, which
+            // also guarantees `0xf` maps to `0xff` (full 255), not `0xf0`.
             Some((r * 17, g * 17, b * 17))
         }
         6 => {
