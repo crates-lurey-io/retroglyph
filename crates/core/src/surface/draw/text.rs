@@ -164,7 +164,7 @@ impl Surface<'_> {
     ///
     /// Not gated behind the `egc` feature: unlike `TextLayout`, this needs nothing from it, so
     /// it's reachable from any crate that only measures with `unicode-width`, including
-    /// `retroglyph-widgets` without opting into `egc`.
+    /// `retroglyph-ui` without opting into `egc`.
     ///
     /// # Examples
     ///

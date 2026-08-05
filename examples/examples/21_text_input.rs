@@ -26,7 +26,7 @@ use retroglyph_core::grid::{Pos, Rect};
 use retroglyph_core::terminal::Terminal;
 use retroglyph_core::text::width_usize;
 use retroglyph_examples::Example;
-use retroglyph_widgets::{Panel, StatefulWidget, Surface, TextInput, TextInputState, Widget as _};
+use retroglyph_ui::{Panel, StatefulWidget, Surface, TextInput, TextInputState, Widget as _};
 
 /// Every [`CursorStyle`] variant, in the order Tab cycles them (and DECSCUSR numbers them; see
 /// [`Terminal::set_cursor_style`]'s own docs).
@@ -107,7 +107,7 @@ impl TextInputDemo {
         );
 
         // Mirrors `TextInput::render`'s own caret-column math
-        // (crates/widgets/src/widget/text_input.rs): `ensure_visible` above already keeps this
+        // (crates/ui/src/widget/text_input.rs): `ensure_visible` above already keeps this
         // inside `[0, inner.width())`, so the real cursor always lands on the field's own
         // cell-drawn caret rather than drifting off it.
         let caret_col = width_usize(&self.field.value()[..self.field.cursor()])

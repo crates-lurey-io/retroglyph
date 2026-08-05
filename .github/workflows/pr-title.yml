@@ -48,7 +48,7 @@ jobs:
             gl
             wgpu
             window
-            widgets
+            ui
             examples
             workspace
             deps

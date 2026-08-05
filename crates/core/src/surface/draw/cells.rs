@@ -244,7 +244,7 @@ impl Surface<'_> {
     ///
     /// Always reads `grid`'s layer 0, regardless of which layer this surface itself is currently
     /// writing to: `grid` is typically a standalone buffer composed elsewhere (e.g.
-    /// `BoxStyle::render`'s output, or `retroglyph-widgets`' `join_h`/`join_v`), and per their own
+    /// `BoxStyle::render`'s output, or `retroglyph-ui`' `join_h`/`join_v`), and per their own
     /// docs those only ever populate layer 0. Reading this surface's own layer off `grid` instead
     /// (what [`Grid::blit`]'s single `layer` parameter would do if called directly) finds nothing
     /// there whenever this surface isn't on layer 0, and the copy silently does nothing.

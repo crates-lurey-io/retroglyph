@@ -110,9 +110,9 @@ kind of break while computing the Release PR. Verified concretely on this repo: 
 **Why it matters in this monorepo:** release-plz attributes a commit's Conventional Commit
 classification (including a `!`) to every crate whose packaged files that commit touches, by file
 path, not by the commit's stated `type(scope)`. A single atomic commit that changes `crates/core/`
-(a real break) and also touches `crates/widgets/` (a companion, non-breaking, mechanical fix needed
-only because of the core change) will have its `!` applied to **both** crates, even though widgets'
-own API is untouched. This happened for real on this repo and required rewriting an already-merged
+(a real break) and also touches `crates/ui/` (a companion, non-breaking, mechanical fix needed only
+because of the core change) will have its `!` applied to **both** crates, even though widgets' own
+API is untouched. This happened for real on this repo and required rewriting an already-merged
 commit to fix (see `RELEASING.md`'s "Known gotcha" section). Since atomic, cross-crate commits are
 the whole point of this being a monorepo, don't try to avoid this by splitting commits; avoid it by
 not putting `!` on commits that don't need it.
@@ -148,4 +148,4 @@ bump. There is no `semver-override` label; see `RELEASING.md` for why.
   general reference library; if a topic here is fully implemented, the code and its rustdoc are the
   reference, not this directory.
 - Nested `AGENTS.md` files exist per-crate/directory for rules specific to that scope (see
-  `crates/widgets/AGENTS.md`, `examples/AGENTS.md`).
+  `crates/ui/AGENTS.md`, `examples/AGENTS.md`).

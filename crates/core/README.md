@@ -10,8 +10,8 @@ grid, tile, style, color, text, terminal, and event types, plus the `Backend` tr
 dependency-free `Headless` test backend. Platform backends
 ([`retroglyph-crossterm`](https://crates.io/crates/retroglyph-crossterm),
 [`retroglyph-software`](https://crates.io/crates/retroglyph-software)) and drawing helpers
-([`retroglyph-widgets`](https://crates.io/crates/retroglyph-widgets)) are separate crates that
-depend on this one.
+([`retroglyph-ui`](https://crates.io/crates/retroglyph-ui)) are separate crates that depend on this
+one.
 
 ## Quick start
 

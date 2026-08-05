@@ -2087,7 +2087,7 @@ use retroglyph_core::event::{Event, KeyCode, KeyModifiers, MouseButton, MouseEve
 use retroglyph_core::grid::{HasSize, Pos, Rect, Size};
 use retroglyph_core::terminal::Terminal;
 use retroglyph_examples::Example;
-use retroglyph_widgets::{Camera, Constraint, Panel, Surface, Widget, split_h, truncate};
+use retroglyph_ui::{Camera, Constraint, Panel, Surface, Widget, split_h, truncate};
 
 use world::{TILE_H, TILE_W, TileMap, World};
 pub use world::{WORLD_H, WORLD_W};

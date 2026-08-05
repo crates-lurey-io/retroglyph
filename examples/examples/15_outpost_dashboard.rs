@@ -52,7 +52,7 @@ use retroglyph_core::grid::{HasSize, Pos, Rect, Size};
 use retroglyph_core::surface::Surface;
 use retroglyph_core::terminal::Terminal;
 use retroglyph_examples::Example;
-use retroglyph_widgets::{
+use retroglyph_ui::{
     Align, Camera, Constraint, Easing, Tween, draw_clipped, split_h, split_h_spaced, split_v,
     truncate,
 };

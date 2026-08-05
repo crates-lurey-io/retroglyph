@@ -21,16 +21,16 @@ If a push to `main` has nothing releasable, there's no Release PR and nothing ha
 
 **Per-crate, independent versions.** Each publishable crate (`retroglyph-core`,
 `retroglyph-terminal`, `retroglyph-crossterm`, `retroglyph-terminal-wasm`, `retroglyph-software`,
-`retroglyph-window`, `retroglyph-widgets`) carries and bumps its own version. release-plz bumps only
-the crates that actually changed. `retroglyph-examples` and `tools/cargo-bin` are `publish = false`
-and never ship.
+`retroglyph-window`, `retroglyph-ui`) carries and bumps its own version. release-plz bumps only the
+crates that actually changed. `retroglyph-examples` and `tools/cargo-bin` are `publish = false` and
+never ship.
 
 **Cascade is expected, not lockstep.** Every crate path-depends on `retroglyph-core`, so a bump to
 `core` updates each dependent's `retroglyph-core = { version = ... }` requirement, which bumps those
 dependents too. This looks like lockstep for any change that touches `core`, but it isn't: a change
-isolated to a leaf crate (say `retroglyph-widgets`, which only depends on `core`) bumps that crate
-alone. The independent-versioning benefit is real only for those leaf-local changes; core-touching
-changes legitimately move most of the workspace.
+isolated to a leaf crate (say `retroglyph-ui`, which only depends on `core`) bumps that crate alone.
+The independent-versioning benefit is real only for those leaf-local changes; core-touching changes
+legitimately move most of the workspace.
 
 This reverses the earlier lockstep decision. Lockstep was chosen for the `0.1.0` hand-publish
 because one version number is simpler to reason about; automation removes that simplicity cost
@@ -95,14 +95,14 @@ anywhere in the commit.
 commit's Conventional Commit classification (including a `!`/`BREAKING CHANGE` marker) to every
 crate whose packaged files that commit touches -- by file path, not by the commit's stated
 `type(scope)`. A single atomic commit that changes `crates/core/` (a real break) and also touches
-`crates/widgets/` (a companion, non-breaking, mechanical fix needed only because of the core change)
-will have its `!` applied to **both** crates, even though widgets' own API is untouched. This isn't
-hypothetical: it happened on this exact repo (`retroglyph-widgets` was incorrectly proposed for a
+`crates/ui/` (a companion, non-breaking, mechanical fix needed only because of the core change) will
+have its `!` applied to **both** crates, even though widgets' own API is untouched. This isn't
+hypothetical: it happened on this exact repo (`retroglyph-ui` was incorrectly proposed for a
 `0.1.0 -> 0.2.0` bump from a `feat(core)!:` commit that happened to also touch a private function in
-`crates/widgets/src/interact/pointer.rs`) and required rewriting an already-merged commit's message
-to fix, since `cliff.toml`/`release-plz.toml` config cannot intervene at the granularity needed --
-the misattribution happens before either file's rules are ever read. See the reserved `!` case below
-for commits that unavoidably need to declare a real break; keep them scoped to the crate(s) actually
+`crates/ui/src/interact/pointer.rs`) and required rewriting an already-merged commit's message to
+fix, since `cliff.toml`/`release-plz.toml` config cannot intervene at the granularity needed -- the
+misattribution happens before either file's rules are ever read. See the reserved `!` case below for
+commits that unavoidably need to declare a real break; keep them scoped to the crate(s) actually
 breaking, and land any companion cross-crate fix as a **separate** commit/PR when practical, since
 that's the only thing that fully avoids this class of misattribution.
 
@@ -200,11 +200,11 @@ release-plz computes and follows this order automatically; it's documented here 
 re-run is needed:
 
 ```text
-core  ->  terminal, window, widgets, terminal-wasm  ->  crossterm, software
+core  ->  terminal, window, ui, terminal-wasm  ->  crossterm, software
 ```
 
-`core` has no workspace dependencies. `terminal`, `window`, `widgets`, and `terminal-wasm` depend
-only on `core`. `crossterm` depends on `terminal` + `core`; `software` depends on `window` + `core`.
+`core` has no workspace dependencies. `terminal`, `window`, `ui`, and `terminal-wasm` depend only on
+`core`. `crossterm` depends on `terminal` + `core`; `software` depends on `window` + `core`.
 
 ### Approval gate
 

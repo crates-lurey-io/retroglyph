@@ -1,7 +1,7 @@
 //! 05: Layout grid
 //!
 //! Core [`Rect`] geometry: subdividing the 50x25 grid into panes by hand, with manual
-//! arithmetic only. `retroglyph-widgets`'s `split_h`/`split_v`/`Constraint`/`Flex` would make
+//! arithmetic only. `retroglyph-ui`'s `split_h`/`split_v`/`Constraint`/`Flex` would make
 //! this shorter, and `09_widgets_dashboard` shows that path; this example is the plain `Rect`
 //! math baseline instead. Each pane gets a box-drawn border and a centered label.
 //!
@@ -28,7 +28,7 @@ pub struct LayoutGrid;
 /// Splits `rect` into a left pane of `left_width` columns and a right pane filling the rest.
 ///
 /// The manual arithmetic a real app writes before reaching for
-/// `retroglyph-widgets`'s `split_h`: no library call, just `Rect::new` twice
+/// `retroglyph-ui`'s `split_h`: no library call, just `Rect::new` twice
 /// with the second pane's `x`/`width` derived from the first.
 const fn split_h(rect: Rect, left_width: u16) -> (Rect, Rect) {
     let left = Rect::new(rect.left(), rect.top(), left_width, rect.height());

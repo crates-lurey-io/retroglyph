@@ -2,7 +2,7 @@
 //!
 //! `Surface` is the workspace's one grid-drawing primitive. [`Terminal`](crate::terminal::Terminal)'s
 //! [`draw`](crate::terminal::Terminal::draw)/[`surface`](crate::terminal::Terminal::surface) hand out a `Surface`
-//! scoped to the whole grid, and `retroglyph-widgets` renders every widget into a `Surface`
+//! scoped to the whole grid, and `retroglyph-ui` renders every widget into a `Surface`
 //! scoped to a sub-[`Rect`](crate::grid::Rect): there is no separate stateful drawing API on `Terminal` itself.
 //!
 //! Place characters directly with [`put`](crate::surface::Surface::put) (or [`print`](crate::surface::Surface::print) for a
@@ -120,7 +120,7 @@ pub enum Layer {
     /// Debug and dev tooling. Always the top-most tier, so it stays visible over an open
     /// [`Layer::Overlay`](crate::surface::Layer::Overlay) rather than being hidden underneath one. Grid layer 3.
     ///
-    /// `retroglyph-widgets`' `PerfOverlayApp` default layer is defined as `Layer::Debug.as_u8()`
+    /// `retroglyph-ui`' `PerfOverlayApp` default layer is defined as `Layer::Debug.as_u8()`
     /// for exactly this reason: a perf HUD that a popup could paint over would be useless
     /// whenever an app actually has a popup open.
     Debug,

@@ -79,12 +79,12 @@ pub enum Event {
     /// The terminal or application window gained input focus.
     ///
     /// This reflects OS/terminal-level focus, not in-app widget focus (see
-    /// `retroglyph-widgets`' focus ring for that).
+    /// `retroglyph-ui`' focus ring for that).
     FocusGained,
     /// The terminal or application window lost input focus.
     ///
     /// This reflects OS/terminal-level focus, not in-app widget focus (see
-    /// `retroglyph-widgets`' focus ring for that).
+    /// `retroglyph-ui`' focus ring for that).
     FocusLost,
     /// An application-defined event injected from outside the normal input
     /// source (e.g. a network, audio, or timer thread), carrying an opaque

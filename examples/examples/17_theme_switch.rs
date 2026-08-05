@@ -1,7 +1,7 @@
 //! 17: Theme switch
 //!
 //! Runtime switching between [`Theme::DARK`] and [`Theme::LIGHT`], using the `.theme()` builder
-//! method every widget in `retroglyph-widgets` has: [`Panel`] (border and fill), [`Tabs`]
+//! method every widget in `retroglyph-ui` has: [`Panel`] (border and fill), [`Tabs`]
 //! (unselected/selected), [`List`] (item/selected), [`Button`] (all four interaction states,
 //! doubling as the toggle control itself), and [`ProgressBar`] (filled/empty) all re-derive
 //! their colors from whichever [`Theme`] is active on every frame; no widget bakes in a palette
@@ -28,9 +28,7 @@ use retroglyph_core::event::{Event, KeyCode};
 use retroglyph_core::grid::Rect;
 use retroglyph_core::terminal::Terminal;
 use retroglyph_examples::Example;
-use retroglyph_widgets::{
-    Button, Interaction, List, ListState, Panel, ProgressBar, Tabs, Theme, Ui,
-};
+use retroglyph_ui::{Button, Interaction, List, ListState, Panel, ProgressBar, Tabs, Theme, Ui};
 
 /// Identifies the demo's one interactive widget for [`Interaction`]'s hit-testing and focus ring.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

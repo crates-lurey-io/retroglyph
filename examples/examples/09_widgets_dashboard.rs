@@ -1,6 +1,6 @@
 //! 09: Widgets dashboard
 //!
-//! A `retroglyph-widgets` showcase covering every widget in the crate: [`Table`] (a scrollable
+//! A `retroglyph-ui` showcase covering every widget in the crate: [`Table`] (a scrollable
 //! service list with a [`ListState`]-driven highlighted row), [`Tabs`] (switches the right panel
 //! between "Metrics" and "Alerts"), [`List`] (the Alerts panel, its own [`ListState`]-driven
 //! highlighted item), [`Button`] (a "Ping" button on the Metrics panel, styled from an
@@ -9,7 +9,7 @@
 //! graph), [`BoxStyle`] (a bordered legend box, rendered into a standalone [`Grid`] and blitted
 //! in), [`split_h`]/[`split_v`] (the whole layout), [`Ui`] (pairing the frame's surface with
 //! `Interaction`, via [`Interaction::frame`]), and [`Theme`] (every color in this example comes
-//! from [`Theme::DARK`], not a hand-picked one-off). `retroglyph-widgets` is backend-generic:
+//! from [`Theme::DARK`], not a hand-picked one-off). `retroglyph-ui` is backend-generic:
 //! nothing here is software, crossterm, or headless specific.
 //!
 //! ```sh
@@ -30,7 +30,7 @@ use retroglyph_core::event::{Event, KeyCode};
 use retroglyph_core::grid::Rect;
 use retroglyph_core::terminal::Terminal;
 use retroglyph_examples::Example;
-use retroglyph_widgets::{
+use retroglyph_ui::{
     BoxStyle, Button, Constraint, Gauge, Interaction, List, ListState, Sides, Sparkline, Table,
     Tabs, Theme, Ui, split_h, split_v,
 };

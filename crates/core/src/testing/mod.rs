@@ -57,7 +57,7 @@ pub const DEFAULT_MAX_STEPS: u32 = 64;
 /// # The two-frame rule
 ///
 /// A press and a release queued together resolve a frame later than the same gesture arriving
-/// from real input, because hit-testing (e.g. `retroglyph-widgets`' `Interaction`) snapshots the
+/// from real input, because hit-testing (e.g. `retroglyph-ui`' `Interaction`) snapshots the
 /// *previous* frame's pointer state before this frame's queued events are applied. [`click`](
 /// Self::click) queues both events for you, but resolving them still costs two frames: call
 /// [`run`](Self::run) or [`settle`](Self::settle) after queuing input, not a single
