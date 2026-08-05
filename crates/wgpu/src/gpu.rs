@@ -152,7 +152,10 @@ impl WindowSurface {
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format,
-            color_space: wgpu::SurfaceColorSpace::Srgb,
+            // `Auto` is the only value guaranteed supported for every format an adapter reports;
+            // an explicit space must appear in that format's own `color_spaces` set or `configure`
+            // fails validation. For the 8-bit formats here it resolves to sRGB anyway.
+            color_space: wgpu::SurfaceColorSpace::Auto,
             // A zero-size surface is invalid; a window can legitimately report one while
             // minimized, so clamp rather than fail.
             width: width.max(1),

@@ -26,10 +26,12 @@ pub enum SurfaceError {
     /// The device was lost (a GPU reset, a driver update, or an eviction) and every resource
     /// created from it is now invalid.
     ///
-    /// Treated as fatal at this layer: recovering means rebuilding the adapter, device, and every
-    /// GPU resource, which only [`Presenter::init_surface`](retroglyph_window::Presenter::init_surface)
-    /// does. The winit driver calls that again after enough consecutive present failures, so a
-    /// lost device does get one rebuild attempt, just not through a bare retry of `present`.
+    /// Treated as recoverable, because the recovery that helps is the one the event loop performs:
+    /// after enough consecutive present failures it calls
+    /// [`Presenter::init_surface`](retroglyph_window::Presenter::init_surface) again, which
+    /// rebuilds the adapter, device, surface, and every GPU resource from scratch. Reporting this
+    /// as unrecoverable would skip that path, leaving the loop logging the same failure every
+    /// frame with nothing rebuilding.
     DeviceLost(String),
 }
 
@@ -47,7 +49,9 @@ impl std::error::Error for SurfaceError {}
 
 impl retroglyph_window::RecoverableError for SurfaceError {
     fn is_recoverable(&self) -> bool {
-        matches!(self, Self::Frame(_))
+        // Only a failed init is unrecoverable: it is the very call a retry would make again, so
+        // there is nothing left to escalate to.
+        !matches!(self, Self::Init(_))
     }
 }
 
@@ -57,10 +61,12 @@ mod tests {
     use retroglyph_window::RecoverableError as _;
 
     #[test]
-    fn only_frame_failures_are_worth_retrying() {
+    fn only_init_failures_are_unrecoverable() {
         assert!(!SurfaceError::Init("no adapter".into()).is_recoverable());
         assert!(SurfaceError::Frame("timeout".into()).is_recoverable());
-        assert!(!SurfaceError::DeviceLost("reset".into()).is_recoverable());
+        // A lost device is recoverable *through `init_surface`*, which the event loop only reaches
+        // for a recoverable error; reporting `false` here would strand the loop instead.
+        assert!(SurfaceError::DeviceLost("reset".into()).is_recoverable());
     }
 
     #[test]

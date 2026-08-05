@@ -33,6 +33,7 @@ use crate::instance::{CELL_STRIDE, Cell};
 use crate::shaders::{self, Shader};
 use bytemuck::{Pod, Zeroable};
 use retroglyph_window::atlas::{ATLAS_COLS, ATLAS_ROWS, AtlasData};
+#[cfg(feature = "tilesets")]
 use wgpu::util::DeviceExt as _;
 
 #[cfg(feature = "tilesets")]
@@ -707,8 +708,15 @@ fn upload_array_texture(
 /// Rejects an atlas the device cannot hold, with a message naming the limit it exceeded.
 ///
 /// Every other resource here is sized by the caller's grid, which the builder already bounds. The
-/// atlas is sized by the font chain, so this is the one place a legal configuration can still be
-/// too big for the hardware, and a clear error beats a device-lost panic from the validation layer.
+/// atlas is sized by the font chain (or the tileset), so this is the one place a legal
+/// configuration can still be too big for the hardware, and a clear error beats a device-lost
+/// panic from the validation layer.
+///
+/// The binding limit in practice is `max_texture_array_layers`, which the requested downlevel
+/// limits pin at 256 regardless of what the adapter offers. The glyph atlas grid-packs 256 glyphs
+/// per layer, so even a full 65536-slot font chain fits exactly. A tileset does not: sprites are
+/// variable-sized and get one layer each, so a set of more than 256 distinct sprites is refused
+/// here even on hardware that would allow more.
 fn check_atlas_fits(
     device: &wgpu::Device,
     width: u32,
