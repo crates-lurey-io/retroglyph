@@ -27,6 +27,10 @@
   - changed-files:
       - any-glob-to-any-file: 'crates/gl/**'
 
+'c:wgpu':
+  - changed-files:
+      - any-glob-to-any-file: 'crates/wgpu/**'
+
 'c:window':
   - changed-files:
       - any-glob-to-any-file: 'crates/window/**'
