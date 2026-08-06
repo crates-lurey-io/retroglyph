@@ -240,6 +240,28 @@ impl WindowConfig {
         self.event_driven
     }
 
+    /// Overwrites [`target_fps`](Self::target_fps) and [`event_driven`](Self::event_driven) with
+    /// `options`' own [`target_fps`](retroglyph_core::app::RunOptions::target_fps) and
+    /// [`is_event_driven`](retroglyph_core::app::RunOptions::is_event_driven), so pacing can be
+    /// configured the same way as the blocking driver's
+    /// [`run_blocking_with`](retroglyph_core::app::run_blocking_with).
+    ///
+    /// Like any other builder call, applying this after [`fit`](Self::fit)/[`animated`](Self::animated)
+    /// makes `options` win over whatever those constructors set; call it last if both a `target_fps`/
+    /// `event_driven` pair and a [`RunOptions`](retroglyph_core::app::RunOptions) are in play, so
+    /// there is exactly one answer for "how do I pace this" rather than two competing ones.
+    ///
+    /// [`RunOptions::idle_wake`](retroglyph_core::app::RunOptions::idle_wake) has no windowed
+    /// meaning and is ignored: winit's redraw-on-demand mode (`event_driven: true`) already
+    /// parks the loop until the next event instead of a periodic wake, so there is no idle-poll
+    /// interval for it to configure here.
+    #[must_use]
+    pub const fn with_run_options(mut self, options: retroglyph_core::app::RunOptions) -> Self {
+        self.target_fps = options.target_fps();
+        self.event_driven = options.is_event_driven();
+        self
+    }
+
     /// Sets whether to size (and keep resizing) the canvas to fill the browser viewport on
     /// `wasm32`, instead of the pixel size [`fit`](Self::fit) computed: a full-screen,
     /// mobile-web-app feel for games that want it. Has no effect on native, where the OS window
@@ -457,7 +479,7 @@ where
 {
     run_windowed_with_typed_proxy_and_exit_flag(
         config,
-        presenter,
+        Terminal::new(WindowBackend::new(presenter)),
         app_loop,
         on_proxy,
         push_custom_event,
@@ -551,7 +573,7 @@ where
 {
     run_windowed_with_typed_proxy_and_exit_flag(
         config,
-        presenter,
+        Terminal::new(WindowBackend::new(presenter)),
         app_loop,
         on_proxy,
         on_custom_event,
@@ -568,7 +590,9 @@ fn push_custom_event<P: Presenter>(id: u64, term: &mut Terminal<WindowBackend<P>
 }
 
 /// Shared implementation behind [`run_windowed_with_proxy`], [`run_windowed_with_typed_proxy`],
-/// [`run_app_with_proxy`], and [`run_app_with_typed_proxy`].
+/// [`run_app_with_proxy`], [`run_app_with_typed_proxy`], and (via `run_app_on_with_typed_proxy`)
+/// [`run_app_on`]. Takes an already-built `Terminal` rather than a bare `presenter`: every caller
+/// but [`run_app_on`] itself builds one with `Terminal::new(WindowBackend::new(presenter))` first.
 ///
 /// `exit_requested` is checked after every [`WindowEvent::RedrawRequested`] and, when set, drives
 /// [`ActiveEventLoop::exit`] so the loop unwinds normally (see [`WindowApp::exit_requested`]'s doc
@@ -580,7 +604,7 @@ fn push_custom_event<P: Presenter>(id: u64, term: &mut Terminal<WindowBackend<P>
 /// [`Flow::Idle`](retroglyph_core::app::Flow::Idle).
 fn run_windowed_with_typed_proxy_and_exit_flag<T, P, F, O, D>(
     config: WindowConfig,
-    presenter: P,
+    terminal: Terminal<WindowBackend<P>>,
     app_loop: F,
     on_proxy: O,
     on_custom_event: D,
@@ -594,7 +618,6 @@ where
     O: FnOnce(EventProxy<T>),
     D: FnMut(T, &mut Terminal<WindowBackend<P>>) + 'static,
 {
-    let terminal = Terminal::new(WindowBackend::new(presenter));
     let event_loop = EventLoop::<T>::with_user_event().build()?;
     on_proxy(EventProxy(event_loop.create_proxy()));
 
@@ -679,6 +702,15 @@ where
 /// [`Event::Resize`] with the new cell dimensions; the app must poll that event and call
 /// [`Terminal::resize`] to resize the terminal's own grid buffers.
 ///
+/// # Return contract differs on `wasm32`
+///
+/// On native this call blocks and only returns once the loop reaches
+/// [`Flow::Exit`](retroglyph_core::app::Flow::Exit). On `wasm32` it returns `Ok(())` immediately
+/// after handing the app to the browser's `requestAnimationFrame`-driven runner: the app keeps
+/// running after this call returns, so code that follows it executes concurrently with a live
+/// app rather than after it exits. [`retroglyph_core::app::run_blocking_with`] has no such split;
+/// it always blocks until the app exits, on every target.
+///
 /// # Errors
 ///
 /// Returns [`winit::error::EventLoopError`] if the event loop cannot be
@@ -693,6 +725,38 @@ where
     A: retroglyph_core::app::App<WindowBackend<P>> + 'static,
 {
     run_app_with_proxy(config, presenter, app, |_proxy| {})
+}
+
+/// Same as [`run_app`], but takes an already-built [`Terminal`] instead of a bare `presenter`.
+///
+/// [`run_app`] builds its `Terminal` internally (`Terminal::new(WindowBackend::new(presenter))`);
+/// this is the lower-level entry for a caller that needs to configure the `Terminal` (or reach
+/// into its [`WindowBackend`]) before the loop starts, which is impossible through `run_app`
+/// alone.
+///
+/// See [`run_app`]'s "Presenting is automatic", "Resizing is not automatic", and "Return contract
+/// differs on `wasm32`" sections: this function shares all three behaviors.
+///
+/// # Errors
+///
+/// Returns [`winit::error::EventLoopError`] if the event loop cannot be
+/// created or fails while running.
+pub fn run_app_on<P, A>(
+    config: WindowConfig,
+    terminal: Terminal<WindowBackend<P>>,
+    app: A,
+) -> Result<(), winit::error::EventLoopError>
+where
+    P: Presenter + 'static,
+    A: retroglyph_core::app::App<WindowBackend<P>> + 'static,
+{
+    run_app_on_with_typed_proxy(
+        config,
+        terminal,
+        app,
+        |_proxy: EventProxy| {},
+        push_custom_event,
+    )
 }
 
 /// Same as [`run_app`], but also hands `on_proxy` an [`EventProxy`] for injecting cross-thread
@@ -740,6 +804,32 @@ where
 pub fn run_app_with_typed_proxy<T, P, A, O, D>(
     config: WindowConfig,
     presenter: P,
+    app: A,
+    on_proxy: O,
+    on_custom_event: D,
+) -> Result<(), winit::error::EventLoopError>
+where
+    T: Send + 'static,
+    P: Presenter + 'static,
+    A: retroglyph_core::app::App<WindowBackend<P>> + 'static,
+    O: FnOnce(EventProxy<T>),
+    D: FnMut(T, &mut Terminal<WindowBackend<P>>) + 'static,
+{
+    run_app_on_with_typed_proxy(
+        config,
+        Terminal::new(WindowBackend::new(presenter)),
+        app,
+        on_proxy,
+        on_custom_event,
+    )
+}
+
+/// Shared implementation behind [`run_app_with_typed_proxy`] and [`run_app_on`], taking an
+/// already-built `Terminal` the way [`run_app_on`] does; [`run_app_with_typed_proxy`] builds one
+/// from a bare `presenter` and delegates here.
+fn run_app_on_with_typed_proxy<T, P, A, O, D>(
+    config: WindowConfig,
+    terminal: Terminal<WindowBackend<P>>,
     mut app: A,
     on_proxy: O,
     on_custom_event: D,
@@ -759,7 +849,7 @@ where
     let skip_present_in_loop = skip_present.clone();
     run_windowed_with_typed_proxy_and_exit_flag(
         config,
-        presenter,
+        terminal,
         move |term| {
             let now = web_time::Instant::now();
             let delta = now.duration_since(last);
