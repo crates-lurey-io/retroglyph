@@ -3576,6 +3576,29 @@ mod tests {
         assert!(!config.event_driven());
     }
 
+    #[test]
+    fn with_run_options_overwrites_target_fps_and_event_driven() {
+        let presenter = MockPresenter::default();
+        let options = retroglyph_core::app::RunOptions::default()
+            .with_target_fps(30)
+            .event_driven(false);
+        let config = WindowConfig::fit(&presenter, "test", None, true).with_run_options(options);
+        assert_eq!(config.target_fps(), Some(30));
+        assert!(!config.event_driven());
+    }
+
+    #[test]
+    fn with_run_options_wins_when_applied_after_fit() {
+        // Builder call order decides precedence: `with_run_options` applied last overrides
+        // whatever `fit`'s positional `target_fps`/`event_driven` set, giving `RunOptions` the
+        // final say the same way it does for `run_blocking_with`.
+        let presenter = MockPresenter::default();
+        let config = WindowConfig::fit(&presenter, "test", Some(60), false)
+            .with_run_options(retroglyph_core::app::RunOptions::default());
+        assert_eq!(config.target_fps(), None);
+        assert!(config.event_driven());
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn frame_deadline_in_the_future_parks_the_loop() {
