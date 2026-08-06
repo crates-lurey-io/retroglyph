@@ -492,6 +492,33 @@ mod tests {
         run_blocking_with(term, app, RunOptions::animated(1000)).expect("run_blocking_with");
     }
 
+    #[cfg(feature = "std")]
+    #[test]
+    fn run_builds_the_terminal_and_exits_on_flow_exit() {
+        let mut backend = Headless::new(4, 1);
+        backend.push_event(Event::Key(KeyEvent::new(
+            KeyCode::Char('q'),
+            KeyModifiers::NONE,
+        )));
+        let app = Counter { frames: 0 };
+        // `run` takes the bare backend rather than a `Terminal`, unlike `run_blocking`; reaching
+        // the next line proves it still builds one and drives the loop to `Flow::Exit`.
+        run(backend, app).expect("run");
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn run_with_builds_the_terminal_and_honors_options() {
+        let backend = Headless::new(2, 1);
+        let app = DrawsAndExits {
+            frames: 0,
+            exit_at: 2,
+        };
+        // Same proof as `run_blocking_with_animated_options_runs_to_completion`, but starting
+        // from a bare backend to cover `run_with`'s own `Terminal::new` call.
+        run_with(backend, app, RunOptions::animated(1000)).expect("run_with");
+    }
+
     #[test]
     fn run_options_animated_sets_fields() {
         let animated = RunOptions::animated(30);
