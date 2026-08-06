@@ -6,8 +6,10 @@
 //! The loop decomposes into three pieces:
 //!
 //! - the contract ([`App`](crate::app::App), [`Flow`](crate::app::Flow), [`Frame`](crate::app::Frame)), here in the core;
-//! - the generic blocking driver ([`run_blocking`](crate::app::run_blocking)/[`run_blocking_with`](crate::app::run_blocking_with), `std` only), which
-//!   covers `Crossterm` (in `retroglyph-crossterm`) and [`Headless`](crate::backend::Headless);
+//! - the generic blocking driver ([`run`](crate::app::run)/[`run_with`](crate::app::run_with), and the
+//!   `Terminal`-taking [`run_blocking`](crate::app::run_blocking)/[`run_blocking_with`](crate::app::run_blocking_with)
+//!   they're built on, `std` only), which covers `Crossterm` (in `retroglyph-crossterm`) and
+//!   [`Headless`](crate::backend::Headless);
 //! - the inverted driver in the windowing layer (the software backend's
 //!   `run_app`), which cannot be generic because winit owns the loop instead of
 //!   handing control back to a shared driver function.
@@ -313,6 +315,55 @@ where
             term.wait_for_input(options.idle_wake().unwrap_or(Duration::MAX));
         }
     }
+}
+
+/// Builds a [`Terminal`](crate::terminal::Terminal) over `backend` and drives `app` with
+/// [`run_blocking`](crate::app::run_blocking).
+///
+/// The canonical entry point for a blocking-loop backend (`Crossterm` in
+/// `retroglyph-crossterm`, [`Headless`](crate::backend::Headless), and any future backend with a
+/// loop it can enter and return from): construct the backend, hand it here with the app, and the
+/// terminal is built and owned for you. Backends whose control flow is inverted (winit owns the
+/// loop) or push-driven (wasm's `requestAnimationFrame`) keep their own drivers instead; see
+/// this module's doc comment for that split.
+///
+/// # Errors
+///
+/// Returns `backend`'s error if it fails to build a [`Terminal`](crate::terminal::Terminal) over
+/// itself, or if the automatic `present()` call fails while `app` is running. See
+/// [`run_blocking`](crate::app::run_blocking) for the exact loop behavior.
+#[cfg(feature = "std")]
+pub fn run<B, A>(backend: B, app: A) -> Result<(), B::Error>
+where
+    B: Backend,
+    A: App<B>,
+{
+    run_blocking(Terminal::new(backend), app)
+}
+
+/// Builds a [`Terminal`](crate::terminal::Terminal) over `backend` and drives `app` with
+/// [`run_blocking_with`](crate::app::run_blocking_with), paced by `options`.
+///
+/// The `options`-taking counterpart to [`run`](crate::app::run); see that function for which
+/// backends this suits, and [`RunOptions`](crate::app::RunOptions) for the available pacing and
+/// idle-blocking controls.
+///
+/// # Errors
+///
+/// Returns `backend`'s error if it fails to build a [`Terminal`](crate::terminal::Terminal) over
+/// itself, or if the automatic `present()` call fails while `app` is running. See
+/// [`run_blocking_with`](crate::app::run_blocking_with) for the exact loop behavior.
+///
+/// # Panics
+///
+/// Panics if `options.target_fps` is `Some(0)`; see [`run_blocking_with`](crate::app::run_blocking_with).
+#[cfg(feature = "std")]
+pub fn run_with<B, A>(backend: B, app: A, options: RunOptions) -> Result<(), B::Error>
+where
+    B: Backend,
+    A: App<B>,
+{
+    run_blocking_with(Terminal::new(backend), app, options)
 }
 
 #[cfg(test)]
