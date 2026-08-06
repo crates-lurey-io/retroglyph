@@ -669,7 +669,7 @@ impl SoftwareBackend {
             return Err(SoftwareBackendError::ZeroGrid);
         }
 
-        let geometry = CellGeometry::new(glyph_w, glyph_h, u16::from(self.scale));
+        let geometry = CellGeometry::new(glyph_w, glyph_h, self.scale);
         let (buf_w, buf_h) = geometry.surface_size(self.cols, self.rows);
         // u32 always fits in usize (all targets: 32- and 64-bit).
         let buf_w = usize::try_from(buf_w).expect("surface width fits usize");

@@ -106,7 +106,7 @@ fn sprite_frame(cols: u16, rows: u16) -> Vec<(u8, Pos, Tile)> {
 }
 
 /// Registers the glyph-heavy `draw_layers` benchmark for one `(cols, rows, scale)`.
-fn bench_glyph(c: &mut Criterion, cols: u16, rows: u16, scale: u8) {
+fn bench_glyph(c: &mut Criterion, cols: u16, rows: u16, scale: u16) {
     let mut group = c.benchmark_group(format!("raster/glyph/{cols}x{rows}@scale{scale}"));
     let frame = glyph_frame(cols, rows);
     let mut renderer = SoftwareBackendBuilder::new()
@@ -131,7 +131,7 @@ fn bench_glyph(c: &mut Criterion, cols: u16, rows: u16, scale: u8) {
 
 /// Registers the sprite-heavy `draw_layers` benchmark for one `(cols, rows, scale)`.
 #[cfg(feature = "tilesets")]
-fn bench_sprite(c: &mut Criterion, cols: u16, rows: u16, scale: u8) {
+fn bench_sprite(c: &mut Criterion, cols: u16, rows: u16, scale: u16) {
     let mut group = c.benchmark_group(format!("raster/sprite/{cols}x{rows}@scale{scale}"));
     let frame = sprite_frame(cols, rows);
     let tileset = TilesetOptions::builder(make_sprite_sheet_png())
@@ -166,7 +166,7 @@ fn raster(c: &mut Criterion) {
     // actually gets used at in practice, and `scale` multiplies inner-loop work
     // quadratically, so 4x is worth measuring even though it's an extreme.
     for &(cols, rows) in &[(40u16, 20u16), (80, 24), (160, 48)] {
-        for &scale in &[1u8, 2, 4] {
+        for &scale in &[1u16, 2, 4] {
             bench_glyph(c, cols, rows, scale);
             #[cfg(feature = "tilesets")]
             bench_sprite(c, cols, rows, scale);

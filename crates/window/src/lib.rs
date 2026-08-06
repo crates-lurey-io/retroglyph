@@ -156,6 +156,8 @@ pub mod geometry;
 pub mod palette;
 /// The [`Presenter`] trait and [`WindowHandle`](presenter::WindowHandle).
 pub mod presenter;
+/// The [`PresenterBuilder`] trait shared by the software/GL/wgpu backend builders.
+pub mod presenter_builder;
 #[cfg(feature = "tilesets")]
 pub mod sprite_cache;
 #[cfg(feature = "tilesets")]
@@ -183,6 +185,7 @@ pub use geometry::CellGeometry;
 pub use presenter::{
     GenericSurfaceError, Presenter, RecoverableError, WindowHandle, cell_art_glyph,
 };
+pub use presenter_builder::PresenterBuilder;
 
 // Re-exported so presenters can name the handle traits without adding their
 // own raw-window-handle dependency (and so versions can't drift apart).

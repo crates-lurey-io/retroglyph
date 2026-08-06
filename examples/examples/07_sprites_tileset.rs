@@ -311,10 +311,9 @@ impl SpritesTileset {
 
 /// The example's two sprite sheets, as backend-agnostic options.
 ///
-/// Shared verbatim by [`SpritesTileset::configure_software`],
-/// [`SpritesTileset::configure_gl`], and [`SpritesTileset::configure_wgpu`]: the three builders
-/// are different types, but the tilesets they register are the same ones, so they are described
-/// once here.
+/// Shared by [`SpritesTileset::configure`]'s single override across every windowed backend: the
+/// three builders are different types, but the tilesets they register are the same ones, so they
+/// are described once here.
 ///
 /// The first sheet is the one-cell room tiles; the second is the chest, a single 32x32 sprite
 /// that covers the 4x2 cells [`CHEST_ART`] spans. Nothing in the tileset says how many cells a
@@ -345,38 +344,13 @@ fn tilesets() -> [retroglyph_window::tileset::TilesetOptions; 2] {
 impl Example for SpritesTileset {
     const NAME: &'static str = "07_sprites_tileset";
 
-    /// Registers the sprite sheet on the software backend's builder -- one of the two
-    /// customization points [`Example`] threads through, so this example can still end in a plain
-    /// [`retroglyph_examples::example_main!`] call like every other one, rather than hand-writing
-    /// its own `main`.
-    #[cfg(feature = "software")]
-    fn configure_software(
-        builder: retroglyph_software::SoftwareBackendBuilder,
-    ) -> retroglyph_software::SoftwareBackendBuilder {
-        tilesets().into_iter().fold(
-            builder,
-            retroglyph_software::SoftwareBackendBuilder::tileset,
-        )
-    }
-
-    /// Registers the same sheets on the GL backend, so the WebGL2 build renders sprites rather
-    /// than falling back to bitmap glyphs.
-    #[cfg(feature = "gl")]
-    fn configure_gl(builder: retroglyph_gl::GlBackendBuilder) -> retroglyph_gl::GlBackendBuilder {
-        tilesets()
-            .into_iter()
-            .fold(builder, retroglyph_gl::GlBackendBuilder::tileset)
-    }
-
-    /// Registers the same sheets on the wgpu backend, so the native Vulkan/Metal/D3D12 build
-    /// renders sprites rather than falling back to bitmap glyphs.
-    #[cfg(feature = "wgpu")]
-    fn configure_wgpu(
-        builder: retroglyph_wgpu::WgpuBackendBuilder,
-    ) -> retroglyph_wgpu::WgpuBackendBuilder {
-        tilesets()
-            .into_iter()
-            .fold(builder, retroglyph_wgpu::WgpuBackendBuilder::tileset)
+    /// Registers the sprite sheets on every windowed backend's builder, so the software, WebGL2,
+    /// and wgpu variants all render sprites rather than falling back to bitmap glyphs. One
+    /// override, generic over `B: PresenterBuilder`, customizes every backend the example is
+    /// built with (retroglyph#1192).
+    #[cfg(any(feature = "software", feature = "gl", feature = "wgpu"))]
+    fn configure<B: retroglyph_window::PresenterBuilder>(builder: B) -> B {
+        tilesets().into_iter().fold(builder, B::tileset)
     }
 
     fn tick<B: Backend>(

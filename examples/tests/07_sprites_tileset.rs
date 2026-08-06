@@ -13,7 +13,7 @@
 //! since they are the same scene rendered by both kinds of backend: the headless and
 //! SVG snapshots must show the chest's eight ASCII glyphs, and the PNG must show one
 //! chest sprite covering those cells instead. The PNG is the only one of the three
-//! where `Example::configure_software`'s tileset registration (see
+//! where `Example::configure`'s tileset registration (see
 //! `support::png_snapshot`'s doc comment) renders real sprites at all.
 
 #![allow(unreachable_pub)]

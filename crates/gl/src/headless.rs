@@ -484,7 +484,7 @@ fn matches_software_backend_pixel_for_pixel() {
     // Reference CPU rasterization, same font, same grid.
     let mut sw = retroglyph_software::SoftwareBackendBuilder::new()
         .grid_size(cols, rows)
-        .scale(scale as u8)
+        .scale(scale)
         .build()
         .expect("default-font builds")
         .into_renderer()
@@ -512,7 +512,7 @@ fn matches_software_backend_with_layers_pixel_for_pixel() {
     // Software composites the same stream on the CPU (the parity reference).
     let mut sw = retroglyph_software::SoftwareBackendBuilder::new()
         .grid_size(cols, rows)
-        .scale(scale as u8)
+        .scale(scale)
         .build()
         .expect("default-font builds")
         .into_renderer()
@@ -942,10 +942,9 @@ fn matches_software_backend_for_multicell_spans() {
     paint_layers(&mut gl, &scene);
     let frame = render_to_frame(&ctx, &gl).expect("render");
 
-    #[allow(clippy::cast_possible_truncation)]
     let mut sw = retroglyph_software::SoftwareBackendBuilder::new()
         .grid_size(cols, rows)
-        .scale(scale as u8)
+        .scale(scale)
         .tileset(tileset())
         .build()
         .expect("default-font builds")
@@ -996,7 +995,7 @@ fn matches_software_backend_for_a_span_covered_cells_default_background() {
 
     let mut sw = retroglyph_software::SoftwareBackendBuilder::new()
         .grid_size(cols, rows)
-        .scale(scale as u8)
+        .scale(scale)
         .build()
         .expect("default-font builds")
         .into_renderer()

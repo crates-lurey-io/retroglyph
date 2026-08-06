@@ -79,52 +79,24 @@ pub trait Example: Default + Sized + 'static {
         Self::default()
     }
 
-    /// Customize the software backend's builder before it's built.
+    /// Customize a windowed backend's builder before it's built.
     ///
-    /// Default: `builder` unchanged, i.e. [`run_software`]'s standard 50x25-at-2x grid with no
-    /// tileset. Override this (rather than hand-writing a custom `main`) when an example needs a
-    /// non-default grid size, scale, font, or tileset -- see `07_sprites_tileset.rs` for a real
-    /// override. `launch::<E>()`/`example_main!` still dispatch through the exact same path on
-    /// every backend either way; this is the one customization point `run_software` threads
-    /// through to the example, the same way [`init`](Self::init) is the one customization point
-    /// for backend-dependent startup state.
-    #[cfg(feature = "software")]
-    fn configure_software(
-        builder: retroglyph_software::SoftwareBackendBuilder,
-    ) -> retroglyph_software::SoftwareBackendBuilder {
-        builder
-    }
-
-    /// Customize the GL backend's builder before it's built.
+    /// Generic over [`PresenterBuilder`](retroglyph_window::PresenterBuilder) rather than one
+    /// method per backend crate: `SoftwareBackendBuilder`, `GlBackendBuilder`, and
+    /// `WgpuBackendBuilder` are different types from different crates, but
+    /// [`PresenterBuilder`](retroglyph_window::PresenterBuilder) names the shape they share, so one
+    /// override here customizes every windowed backend the example is built with instead of one
+    /// per crate (retroglyph#1192). An example that registers a tileset needs it on every
+    /// graphical backend it supports, or a WebGL2/wgpu variant renders bitmap glyphs where the
+    /// software variant renders sprites -- see `07_sprites_tileset.rs` for a real override.
     ///
-    /// The GL counterpart of [`configure_software`](Self::configure_software), and the reason it
-    /// is a second method rather than a shared one: the two builders are different types from
-    /// different crates. An example that registers a tileset needs to register it on both, or the
-    /// docs gallery's WebGL2 variant renders bitmap glyphs where the software variant renders
-    /// sprites. The [`TilesetOptions`](retroglyph_window::tileset::TilesetOptions) themselves are
-    /// shared, so the usual shape is one helper returning the options and two one-line overrides
-    /// -- see `07_sprites_tileset.rs`.
-    ///
-    /// Default: `builder` unchanged, i.e. [`run_gl`]'s standard 50x25-at-2x grid with no tileset.
-    #[cfg(feature = "gl")]
-    fn configure_gl(builder: retroglyph_gl::GlBackendBuilder) -> retroglyph_gl::GlBackendBuilder {
-        builder
-    }
-
-    /// Customize the wgpu backend's builder before it's built.
-    ///
-    /// The wgpu counterpart of [`configure_software`](Self::configure_software)/
-    /// [`configure_gl`](Self::configure_gl), for the same reason `configure_gl` is its own method
-    /// rather than a shared one: `WgpuBackendBuilder` is yet another type, from yet another crate.
-    /// An example that registers a tileset needs to register it on every graphical backend it
-    /// supports, or the native wgpu build renders bitmap glyphs where software/gl render sprites.
-    ///
-    /// Default: `builder` unchanged, i.e. [`run_wgpu`]'s standard 50x25-at-2x grid with no
-    /// tileset.
-    #[cfg(feature = "wgpu")]
-    fn configure_wgpu(
-        builder: retroglyph_wgpu::WgpuBackendBuilder,
-    ) -> retroglyph_wgpu::WgpuBackendBuilder {
+    /// Default: `builder` unchanged, i.e. [`run_software`]/[`run_gl`]/[`run_wgpu`]'s standard
+    /// 50x25-at-2x grid with no tileset. `launch::<E>()`/`example_main!` still dispatch through the
+    /// exact same path on every backend either way; this is the one customization point the
+    /// windowed drivers thread through to the example, the same way [`init`](Self::init) is the
+    /// one customization point for backend-dependent startup state.
+    #[cfg(any(feature = "software", feature = "gl", feature = "wgpu"))]
+    fn configure<B: retroglyph_window::PresenterBuilder>(builder: B) -> B {
         builder
     }
 
@@ -386,6 +358,42 @@ impl<B: Backend, E: Example> App<B> for CrosstermToggleApp<E> {
 #[cfg(any(feature = "software", feature = "gl", feature = "wgpu"))]
 const TARGET_FPS: Option<u32> = Some(60);
 
+/// Drives a already-configured [`PresenterBuilder`](retroglyph_window::PresenterBuilder) to
+/// completion: builds its presenter, wires up the perf overlay and wasm toggle button, and hands
+/// both to `retroglyph-window`'s winit `App` driver.
+///
+/// Shared by [`run_software_with`], [`run_gl`], and [`run_wgpu`] -- the one driver behind all
+/// three, generic over `B: PresenterBuilder` (retroglyph#1192). `backend_label` becomes the perf
+/// overlay's backend readout and the panic message's backend name; it is the one thing that still
+/// varies per caller, since [`PresenterBuilder`](retroglyph_window::PresenterBuilder) has no
+/// associated name of its own.
+///
+/// Deliberately does not call [`Example::configure`]: the caller applies that (or not) before
+/// `builder` reaches here, which is what lets [`run_software_with`] hand in an already-customized
+/// builder without `configure` being silently re-applied on top of it.
+///
+/// # Panics
+///
+/// Panics if `builder` fails to build its presenter, or if the event loop fails to start.
+#[cfg(any(feature = "software", feature = "gl", feature = "wgpu"))]
+fn run_windowed<E: Example, B: retroglyph_window::PresenterBuilder>(
+    builder: B,
+    backend_label: &'static str,
+) {
+    #[cfg(target_arch = "wasm32")]
+    console_error_panic_hook::set_once();
+
+    let renderer = builder
+        .build_presenter()
+        .unwrap_or_else(|e| panic!("failed to initialize {backend_label} backend: {e}"));
+    let config = retroglyph_window::winit::WindowConfig::fit(&renderer, E::NAME, TARGET_FPS, false)
+        .fill_viewport(E::fill_viewport());
+    let app = WasmToggleApp::<E> {
+        inner: perf_overlay_app(ExampleApp::<E>::new(), backend_label),
+    };
+    retroglyph_window::winit::run_app(config, renderer, app).expect("event loop failed");
+}
+
 /// Runs `E` on the software (winit + softbuffer/Canvas2D) backend.
 ///
 /// Builds a 50x25 window at `scale(2)` sized to fit via
@@ -402,7 +410,7 @@ const TARGET_FPS: Option<u32> = Some(60);
 /// fails to start.
 #[cfg(feature = "software")]
 pub fn run_software<E: Example>() {
-    run_software_with::<E>(E::configure_software(
+    run_software_with::<E>(E::configure(
         retroglyph_software::SoftwareBackendBuilder::new()
             .grid_size(50, 25)
             .scale(2),
@@ -414,11 +422,11 @@ pub fn run_software<E: Example>() {
 /// default.
 ///
 /// This is the lower-level building block [`run_software`] itself delegates to (via
-/// [`Example::configure_software`]), so both stay in sync automatically; most examples that need
+/// [`Example::configure`]), so both stay in sync automatically; most examples that need
 /// a non-default grid size, scale, font, or tileset should override
-/// [`configure_software`](Example::configure_software) instead of calling this directly, since
+/// [`configure`](Example::configure) instead of calling this directly, since
 /// that keeps `example_main!`'s single-call-site convention intact. Calling this directly from a
-/// hand-written `main` remains available for anything `configure_software`'s builder-in,
+/// hand-written `main` remains available for anything `configure`'s builder-in,
 /// builder-out shape can't express.
 ///
 /// # Panics
@@ -427,20 +435,7 @@ pub fn run_software<E: Example>() {
 /// fails to start.
 #[cfg(feature = "software")]
 pub fn run_software_with<E: Example>(builder: retroglyph_software::SoftwareBackendBuilder) {
-    #[cfg(target_arch = "wasm32")]
-    console_error_panic_hook::set_once();
-
-    let renderer = builder
-        .build()
-        .expect("failed to initialize software backend")
-        .into_renderer()
-        .expect("failed to build headless renderer");
-    let config = retroglyph_window::winit::WindowConfig::fit(&renderer, E::NAME, TARGET_FPS, false)
-        .fill_viewport(E::fill_viewport());
-    let app = WasmToggleApp::<E> {
-        inner: perf_overlay_app(ExampleApp::<E>::new(), "software"),
-    };
-    retroglyph_window::winit::run_app(config, renderer, app).expect("event loop failed");
+    run_windowed::<E, _>(builder, "software");
 }
 
 // ── GL backend (desktop + WASM) ─────────────────────────────────────────────
@@ -450,32 +445,24 @@ pub fn run_software_with<E: Example>(builder: retroglyph_software::SoftwareBacke
 /// Builds a 50x25 window at `scale(2)` sized to fit via
 /// [`WindowConfig::fit`](retroglyph_window::winit::WindowConfig::fit), then drives it with
 /// `retroglyph-window`'s winit `App` driver -- the same driver `run_software` uses, since
-/// `GlRenderer` is a `Presenter` too. Customization goes through [`Example::configure_gl`]
-/// rather than [`Example::configure_software`], since the two backends have different builder
-/// types. Like `run_software`, it honors [`Example::fill_viewport`] to fill the browser viewport
-/// on `wasm32` (the grid then grows to the canvas via the winit resize path).
+/// `GlRenderer` is a `Presenter` too. Customization goes through [`Example::configure`], the same
+/// hook every windowed backend shares. Like `run_software`, it honors [`Example::fill_viewport`]
+/// to fill the browser viewport on `wasm32` (the grid then grows to the canvas via the winit
+/// resize path).
 ///
 /// # Panics
 ///
 /// Panics if the GL backend fails to initialize, or if the event loop fails to start.
 #[cfg(feature = "gl")]
 pub fn run_gl<E: Example>() {
-    #[cfg(target_arch = "wasm32")]
-    console_error_panic_hook::set_once();
-
-    let renderer = E::configure_gl(
-        retroglyph_gl::GlBackendBuilder::new()
-            .grid_size(50, 25)
-            .scale(2),
-    )
-    .build()
-    .expect("failed to initialize gl backend");
-    let config = retroglyph_window::winit::WindowConfig::fit(&renderer, E::NAME, TARGET_FPS, false)
-        .fill_viewport(E::fill_viewport());
-    let app = WasmToggleApp::<E> {
-        inner: perf_overlay_app(ExampleApp::<E>::new(), "gl"),
-    };
-    retroglyph_window::winit::run_app(config, renderer, app).expect("event loop failed");
+    run_windowed::<E, _>(
+        E::configure(
+            retroglyph_gl::GlBackendBuilder::new()
+                .grid_size(50, 25)
+                .scale(2),
+        ),
+        "gl",
+    );
 }
 
 // ── wgpu backend ────────────────────────────────────────────────────────────
@@ -485,9 +472,8 @@ pub fn run_gl<E: Example>() {
 /// Builds a 50x25 window at `scale(2)` sized to fit via
 /// [`WindowConfig::fit`](retroglyph_window::winit::WindowConfig::fit), then drives it with
 /// `retroglyph-window`'s winit `App` driver -- the same driver `run_software`/`run_gl` use, since
-/// `WgpuRenderer` is a `Presenter` too. Customization goes through [`Example::configure_wgpu`]
-/// rather than [`Example::configure_software`]/[`Example::configure_gl`], since all three backends
-/// have different builder types.
+/// `WgpuRenderer` is a `Presenter` too. Customization goes through [`Example::configure`], the
+/// same hook every windowed backend shares.
 ///
 /// Runs in a browser as well as natively, through WebGPU. [`Example::fill_viewport`] is honored on
 /// `wasm32` exactly as it is for the other two windowed backends.
@@ -502,22 +488,14 @@ pub fn run_gl<E: Example>() {
 /// Panics if the wgpu backend fails to initialize, or if the event loop fails to start.
 #[cfg(feature = "wgpu")]
 pub fn run_wgpu<E: Example>() {
-    #[cfg(target_arch = "wasm32")]
-    console_error_panic_hook::set_once();
-
-    let renderer = E::configure_wgpu(
-        retroglyph_wgpu::WgpuBackendBuilder::new()
-            .grid_size(50, 25)
-            .scale(2),
-    )
-    .build()
-    .expect("failed to initialize wgpu backend");
-    let config = retroglyph_window::winit::WindowConfig::fit(&renderer, E::NAME, TARGET_FPS, false)
-        .fill_viewport(E::fill_viewport());
-    let app = WasmToggleApp::<E> {
-        inner: perf_overlay_app(ExampleApp::<E>::new(), "wgpu"),
-    };
-    retroglyph_window::winit::run_app(config, renderer, app).expect("event loop failed");
+    run_windowed::<E, _>(
+        E::configure(
+            retroglyph_wgpu::WgpuBackendBuilder::new()
+                .grid_size(50, 25)
+                .scale(2),
+        ),
+        "wgpu",
+    );
 }
 
 // ── Crossterm backend ───────────────────────────────────────────────────────
@@ -616,14 +594,14 @@ pub fn render_headless_frames<E: Example>(frames: u32) -> Vec<String> {
 pub fn render_perf_overlay_rgb<E: Example>(
     cols: u16,
     rows: u16,
-    scale: u8,
+    scale: u16,
     settle_frames: u32,
     toggles: u32,
 ) -> (u32, u32, Vec<u8>) {
     use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyModifiers};
     use retroglyph_window::Presenter;
 
-    let renderer = E::configure_software(
+    let renderer = E::configure(
         retroglyph_software::SoftwareBackendBuilder::new()
             .grid_size(cols, rows)
             .scale(scale),

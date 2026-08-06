@@ -269,6 +269,36 @@ impl WgpuBackendBuilder {
     }
 }
 
+impl retroglyph_window::PresenterBuilder for WgpuBackendBuilder {
+    type Presenter = WgpuRenderer;
+    type Error = WgpuBackendError;
+
+    fn new() -> Self {
+        Self::new()
+    }
+
+    fn grid_size(self, cols: u16, rows: u16) -> Self {
+        self.grid_size(cols, rows)
+    }
+
+    fn scale(self, scale: u16) -> Self {
+        self.scale(scale)
+    }
+
+    fn font(self, fonts: impl Into<FontChain<'static>>) -> Self {
+        self.font(fonts)
+    }
+
+    #[cfg(feature = "tilesets")]
+    fn tileset(self, opts: TilesetOptions) -> Self {
+        self.tileset(opts)
+    }
+
+    fn build_presenter(self) -> Result<Self::Presenter, Self::Error> {
+        self.build()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{WgpuBackendBuilder, WgpuBackendError};

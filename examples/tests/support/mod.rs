@@ -39,10 +39,10 @@ pub fn headless_snapshot<E: Example>(frames: u32) -> String {
 }
 
 /// Builds a `SoftwareRenderer` (`cols`x`rows` grid, embedded default font, `scale`, plus
-/// whatever `E::configure_software` adds -- a tileset, most likely), runs `E::init` + one
+/// whatever `E::configure` adds -- a tileset, most likely), runs `E::init` + one
 /// `E::tick`, and PNG-encodes the resulting pixel buffer.
 ///
-/// Threading every example's own [`Example::configure_software`] through here (rather than
+/// Threading every example's own [`Example::configure`] through here (rather than
 /// building a bare, uncustomized renderer) keeps this snapshot honest: it's built from exactly
 /// the same builder `cargo run --example <name> --features software` would use, not a simplified
 /// stand-in that could drift from it (e.g. missing a registered tileset, so the PNG never
@@ -57,12 +57,12 @@ pub fn headless_snapshot<E: Example>(frames: u32) -> String {
 /// Panics if the software backend or PNG encoding fails.
 #[cfg(all(feature = "software", not(target_arch = "wasm32")))]
 #[must_use]
-pub fn png_snapshot<E: Example>(cols: u16, rows: u16, scale: u8) -> Vec<u8> {
+pub fn png_snapshot<E: Example>(cols: u16, rows: u16, scale: u16) -> Vec<u8> {
     use retroglyph_core::terminal::Terminal;
     use retroglyph_software::SoftwareBackendBuilder;
     use retroglyph_window::Presenter;
 
-    let builder = E::configure_software(
+    let builder = E::configure(
         SoftwareBackendBuilder::new()
             .grid_size(cols, rows)
             .scale(scale),

@@ -110,7 +110,7 @@ fn png_snapshot_light() {
     use retroglyph_software::SoftwareBackendBuilder;
     use retroglyph_window::Presenter;
 
-    let (cols, rows, scale) = (50u16, 25u16, 2u8);
+    let (cols, rows, scale) = (50u16, 25u16, 2u16);
     let renderer = SoftwareBackendBuilder::new()
         .grid_size(cols, rows)
         .scale(scale)

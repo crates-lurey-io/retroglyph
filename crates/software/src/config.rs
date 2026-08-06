@@ -161,7 +161,7 @@ pub struct SoftwareBackend {
     ///
     /// A scale of 2 renders each 1-bit font pixel as a 2×2 block, making
     /// the Unscii 16 font display at 16×32 pixels per cell. Default is 1.
-    pub scale: u8,
+    pub scale: u16,
     /// Registered tileset options, loaded at
     /// [`into_renderer`](SoftwareBackend::into_renderer) time.
     #[cfg(feature = "tilesets")]
@@ -249,7 +249,7 @@ impl SoftwareBackendBuilder {
     /// 8×16 font a scale of 2 gives 16×32 pixel cells, more readable
     /// on modern displays.
     #[must_use]
-    pub const fn scale(mut self, scale: u8) -> Self {
+    pub const fn scale(mut self, scale: u16) -> Self {
         self.options.scale = scale;
         self
     }
@@ -336,6 +336,36 @@ impl SoftwareBackendBuilder {
             return Err(SoftwareBackendError::ZeroGrid);
         }
         Ok(self.options)
+    }
+}
+
+impl retroglyph_window::PresenterBuilder for SoftwareBackendBuilder {
+    type Presenter = crate::SoftwareRenderer;
+    type Error = SoftwareBackendError;
+
+    fn new() -> Self {
+        Self::new()
+    }
+
+    fn grid_size(self, cols: u16, rows: u16) -> Self {
+        self.grid_size(cols, rows)
+    }
+
+    fn scale(self, scale: u16) -> Self {
+        self.scale(scale)
+    }
+
+    fn font(self, fonts: impl Into<FontChain<'static>>) -> Self {
+        self.font(fonts)
+    }
+
+    #[cfg(feature = "tilesets")]
+    fn tileset(self, opts: TilesetOptions) -> Self {
+        self.tileset(opts)
+    }
+
+    fn build_presenter(self) -> Result<Self::Presenter, Self::Error> {
+        self.build()?.into_renderer()
     }
 }
 
