@@ -19,14 +19,15 @@ mod support;
 mod dashboard;
 
 use dashboard::{HitTarget, MIN_TARGET_H, MIN_TARGET_W, OutpostDashboard, Tab};
-use retroglyph_core::app::Frame;
 use retroglyph_core::backend::Headless;
 use retroglyph_core::event::{
     Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
 };
 use retroglyph_core::grid::{Pos, Rect};
 use retroglyph_core::terminal::Terminal;
+use retroglyph_core::testing::TestHarness;
 use retroglyph_examples::{Example, HEADLESS_FRAME_DELTA};
+use support::TestApp;
 
 const fn key(code: KeyCode) -> Event {
     Event::Key(KeyEvent::new(code, KeyModifiers::NONE))
@@ -38,36 +39,29 @@ const fn mouse(kind: MouseEventKind, x: u16, y: u16) -> Event {
 
 /// Drives `E` through one synthetic event per tick, returning each frame's
 /// [`Headless::format_view`] text.
+///
+/// `with_step_delta(HEADLESS_FRAME_DELTA)` (retroglyph#1001): `OutpostDashboard::advance` tweens
+/// stat values and rises/expires floating acknowledgement text from `frame.delta`, calibrated
+/// against [`HEADLESS_FRAME_DELTA`]'s 100ms (see its own doc comment), not [`TestHarness::step`]'s
+/// default 16ms -- matching it keeps those animations at the same position each test below
+/// asserts on.
 fn drive_sized<E: Example>(width: u16, height: u16, events: &[Event]) -> (E, Vec<String>) {
-    let backend = Headless::new(width, height);
-    let mut term = Terminal::new(backend);
-    let mut state = E::init(&mut term);
+    let mut harness = TestHarness::new(width, height).with_step_delta(HEADLESS_FRAME_DELTA);
+    let mut app = TestApp(E::init(harness.term_mut()));
 
     // Prime one frame with no input first: `draw()` is what populates layout state like
     // `last_map_rect`, and a real interactive loop always draws at least once before any input
     // arrives, so mouse events aimed at the map on the very first driven tick need that state
     // to already exist.
-    let priming_frame = Frame {
-        delta: HEADLESS_FRAME_DELTA,
-        frame: 0,
-    };
-    state.tick(&mut term, &priming_frame);
-    term.present().ok();
+    harness.step(&mut app);
 
-    let mut views = vec![term.backend().format_view()];
+    let mut views = vec![harness.view()];
     for event in events {
-        term.backend_mut().push_event(event.clone());
-        let frame = Frame {
-            delta: HEADLESS_FRAME_DELTA,
-            frame: 0,
-        };
-        if !state.tick(&mut term, &frame) {
-            break;
-        }
-        term.present().ok();
-        views.push(term.backend().format_view());
+        harness.push_event(event.clone());
+        harness.step(&mut app);
+        views.push(harness.view());
     }
-    (state, views)
+    (app.0, views)
 }
 
 fn drive<E: Example>(events: &[Event]) -> (E, Vec<String>) {
@@ -77,17 +71,11 @@ fn drive<E: Example>(events: &[Event]) -> (E, Vec<String>) {
 /// Draws one idle frame at `width`x`height` and returns the resulting state (with its hitboxes
 /// populated) alongside the rendered view.
 fn draw_at(width: u16, height: u16) -> (OutpostDashboard, String) {
-    let backend = Headless::new(width, height);
-    let mut term = Terminal::new(backend);
-    let mut state = OutpostDashboard::init(&mut term);
-    let frame = Frame {
-        delta: HEADLESS_FRAME_DELTA,
-        frame: 0,
-    };
-    state.tick(&mut term, &frame);
-    term.present().ok();
-    let view = term.backend().format_view();
-    (state, view)
+    let mut harness = TestHarness::new(width, height).with_step_delta(HEADLESS_FRAME_DELTA);
+    let mut app = TestApp(OutpostDashboard::init(harness.term_mut()));
+    harness.step(&mut app);
+    let view = harness.view();
+    (app.0, view)
 }
 
 fn find_target(hitboxes: &[(Rect, HitTarget)], want: HitTarget) -> Rect {

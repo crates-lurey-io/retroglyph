@@ -19,14 +19,15 @@ mod support;
 mod overworld;
 
 use overworld::{Overworld, View, WORLD_H, WORLD_W};
-use retroglyph_core::app::Frame;
 use retroglyph_core::backend::Headless;
 use retroglyph_core::event::{
     Event, KeyCode, KeyEvent, KeyEventKind, KeyLocation, KeyModifiers, MouseButton, MouseEvent,
     MouseEventKind,
 };
 use retroglyph_core::terminal::Terminal;
+use retroglyph_core::testing::TestHarness;
 use retroglyph_examples::{Example, HEADLESS_FRAME_DELTA};
+use support::TestApp;
 
 const fn mouse(kind: MouseEventKind, x: u16, y: u16) -> Event {
     Event::Mouse(MouseEvent::new(
@@ -64,32 +65,24 @@ fn draw_at(width: u16, height: u16) -> (Overworld, String) {
 /// `last_minimap_rect`, and a real interactive loop always draws at least once before any input
 /// arrives, so mouse events aimed at the sidebar on the very first driven tick need that state
 /// to already exist.
+///
+/// `with_step_delta(HEADLESS_FRAME_DELTA)` (retroglyph#1001): `Overworld::tick` accumulates
+/// `self.time` from `frame.delta`, feeding the ambient biome shimmer/twinkle effects rendered
+/// below, calibrated against [`HEADLESS_FRAME_DELTA`]'s 100ms (see its own doc comment) rather
+/// than [`TestHarness::step`]'s default 16ms.
 fn drive_sized(width: u16, height: u16, events: &[Event]) -> (Overworld, Vec<String>) {
-    let backend = Headless::new(width, height);
-    let mut term = Terminal::new(backend);
-    let mut state = Overworld::init(&mut term);
+    let mut harness = TestHarness::new(width, height).with_step_delta(HEADLESS_FRAME_DELTA);
+    let mut app = TestApp(Overworld::init(harness.term_mut()));
 
-    let priming = Frame {
-        delta: HEADLESS_FRAME_DELTA,
-        frame: 0,
-    };
-    state.tick(&mut term, &priming);
-    term.present().ok();
+    harness.step(&mut app);
 
-    let mut views = vec![term.backend().format_view()];
+    let mut views = vec![harness.view()];
     for event in events {
-        term.backend_mut().push_event(event.clone());
-        let frame = Frame {
-            delta: HEADLESS_FRAME_DELTA,
-            frame: 0,
-        };
-        if !state.tick(&mut term, &frame) {
-            break;
-        }
-        term.present().ok();
-        views.push(term.backend().format_view());
+        harness.push_event(event.clone());
+        harness.step(&mut app);
+        views.push(harness.view());
     }
-    (state, views)
+    (app.0, views)
 }
 
 /// [`drive_sized`] at 100x32 -- wide/tall enough for the sidebar and its minimap to appear (see

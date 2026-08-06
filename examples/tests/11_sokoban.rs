@@ -16,12 +16,11 @@ mod support;
 #[allow(dead_code)] // `main`/the `wasm_entry!` FFI surface aren't exercised by these tests
 mod sokoban;
 
-use retroglyph_core::app::Frame;
-use retroglyph_core::backend::Headless;
 use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyModifiers};
-use retroglyph_core::terminal::Terminal;
+use retroglyph_core::testing::TestHarness;
 use retroglyph_examples::{Example, HEADLESS_FRAME_DELTA};
 use sokoban::Sokoban;
+use support::TestApp;
 
 /// A plain, unmodified key press.
 const fn key(code: KeyCode) -> Event {
@@ -29,24 +28,21 @@ const fn key(code: KeyCode) -> Event {
 }
 
 /// Drives `E` through one synthetic key event per tick, returning each frame's
-/// [`Headless::format_view`] text.
+/// [`Headless::format_view`](retroglyph_core::backend::Headless::format_view) text.
+///
+/// `with_step_delta(HEADLESS_FRAME_DELTA)` (retroglyph#1001): `Sokoban::tick` feeds `frame.delta`
+/// to `player`/`boxes`' slide animation, calibrated against [`HEADLESS_FRAME_DELTA`]'s 100ms (see
+/// its own doc comment), not [`TestHarness::step`]'s default 16ms -- matching it keeps the
+/// solve sequence below needing the same number of ticks to see each push settle.
 fn drive<E: Example>(events: &[Event]) -> String {
-    let backend = Headless::new(50, 25);
-    let mut term = Terminal::new(backend);
-    let mut state = E::init(&mut term);
+    let mut harness = TestHarness::new(50, 25).with_step_delta(HEADLESS_FRAME_DELTA);
+    let mut app = TestApp(E::init(harness.term_mut()));
 
     let mut views = Vec::new();
-    for (i, event) in events.iter().enumerate() {
-        term.backend_mut().push_event(event.clone());
-        let frame = Frame {
-            delta: HEADLESS_FRAME_DELTA,
-            frame: i as u64,
-        };
-        if !state.tick(&mut term, &frame) {
-            break;
-        }
-        term.present().ok();
-        views.push(term.backend().format_view());
+    for event in events {
+        harness.push_event(event.clone());
+        harness.step(&mut app);
+        views.push(harness.view());
     }
     views.join("\n--- frame ---\n")
 }

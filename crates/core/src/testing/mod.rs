@@ -108,6 +108,7 @@ pub struct TestHarness {
     term: Terminal<Headless>,
     frame: u64,
     queued: VecDeque<Event>,
+    step_delta: Duration,
 }
 
 impl TestHarness {
@@ -118,7 +119,22 @@ impl TestHarness {
             term: Terminal::new(Headless::new(width, height)),
             frame: 0,
             queued: VecDeque::new(),
+            step_delta: STEP_DELTA,
         }
+    }
+
+    /// Overrides the [`Frame::delta`](crate::app::Frame::delta) [`step`](Self::step) hands to
+    /// [`App::update`](crate::app::App::update), replacing [`STEP_DELTA`] (builder style).
+    ///
+    /// For an app under test whose animation timing is calibrated against a different fixed
+    /// delta than [`STEP_DELTA`]'s 16ms (a `retroglyph_ui::Tween`/[`FrameClock`](crate::frames::FrameClock)
+    /// tuned in real seconds, for example): matching that calibration here keeps however many
+    /// `step` calls an animation takes to settle the same as what tuned it, rather than retuning
+    /// the animation (or the test's assertions) around the harness's own default instead.
+    #[must_use]
+    pub const fn with_step_delta(mut self, delta: Duration) -> Self {
+        self.step_delta = delta;
+        self
     }
 
     /// Queues a synthetic event for the next [`step`](Self::step) call.
@@ -195,7 +211,7 @@ impl TestHarness {
             self.term.backend_mut().push_event(event);
         }
         let frame = Frame {
-            delta: STEP_DELTA,
+            delta: self.step_delta,
             frame: self.frame,
         };
         self.frame = self.frame.wrapping_add(1);
@@ -416,6 +432,24 @@ mod tests {
         let mut app = AlwaysExits { calls: 0 };
         harness.run_steps(&mut app, 3);
         assert_eq!(app.calls, 3);
+    }
+
+    #[test]
+    fn with_step_delta_overrides_the_delta_step_hands_to_update() {
+        struct RecordsDelta {
+            seen: Option<Duration>,
+        }
+        impl<B: Backend> App<B> for RecordsDelta {
+            fn update(&mut self, _term: &mut Terminal<B>, frame: &Frame) -> Flow {
+                self.seen = Some(frame.delta);
+                Flow::Continue
+            }
+        }
+
+        let mut harness = TestHarness::new(2, 1).with_step_delta(Duration::from_millis(100));
+        let mut app = RecordsDelta { seen: None };
+        harness.step(&mut app);
+        assert_eq!(app.seen, Some(Duration::from_millis(100)));
     }
 
     #[test]

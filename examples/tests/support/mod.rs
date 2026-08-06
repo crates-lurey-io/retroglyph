@@ -26,9 +26,32 @@
 
 #![allow(dead_code)] // not every test file uses every helper
 
+use retroglyph_core::app::{App, Flow, Frame};
+use retroglyph_core::backend::Backend;
+use retroglyph_core::terminal::Terminal;
 use retroglyph_examples::Example;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
+
+/// Adapts an [`Example`] into an [`App`](retroglyph_core::app::App), so
+/// [`TestHarness`](retroglyph_core::testing::TestHarness) can drive it (retroglyph#1001):
+/// `Example::tick`'s `bool` becomes [`Flow::Continue`]/[`Flow::Exit`], the only two states an
+/// example ever returns (an example has no equivalent of `App`'s [`Flow::Idle`]).
+///
+/// Wraps an already-[`init`](Example::init)ed `E` rather than building one itself, so a caller
+/// keeps its own handle to the state for post-hoc assertions (hitboxes, the example's own fields)
+/// the same way the old hand-rolled `drive` loops did.
+pub struct TestApp<E>(pub E);
+
+impl<B: Backend, E: Example> App<B> for TestApp<E> {
+    fn update(&mut self, term: &mut Terminal<B>, frame: &Frame) -> Flow {
+        if self.0.tick(term, frame) {
+            Flow::Continue
+        } else {
+            Flow::Exit
+        }
+    }
+}
 
 /// Runs `E`'s headless fallback for up to `frames` frames and returns each
 /// frame's rendered text, joined by a separator line -- pass straight to
@@ -82,7 +105,7 @@ pub fn png_snapshot<E: Example>(cols: u16, rows: u16, scale: u8) -> Vec<u8> {
 
     let mut term = Terminal::new(renderer);
     let mut state = E::init(&mut term);
-    let frame = retroglyph_core::app::Frame {
+    let frame = Frame {
         delta: retroglyph_examples::HEADLESS_FRAME_DELTA,
         frame: 0,
     };

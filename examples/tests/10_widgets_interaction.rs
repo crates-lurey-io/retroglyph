@@ -20,37 +20,31 @@ mod support;
 #[allow(dead_code)] // `main`/the `wasm_entry!` FFI surface aren't exercised by these tests
 mod widgets_interaction;
 
-use retroglyph_core::app::Frame;
-use retroglyph_core::backend::Headless;
 use retroglyph_core::event::{
     Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
 };
 use retroglyph_core::grid::Pos;
-use retroglyph_core::terminal::Terminal;
-use retroglyph_examples::{Example, HEADLESS_FRAME_DELTA};
+use retroglyph_core::testing::TestHarness;
+use retroglyph_examples::Example;
+use support::TestApp;
 use widgets_interaction::WidgetsInteraction;
 
 /// Drives `WidgetsInteraction` through `events` (one batch of zero or more events per tick),
 /// returning each frame's rendered text.
 fn drive(events: &[&[Event]]) -> String {
-    let backend = Headless::new(50, 25);
-    let mut term = Terminal::new(backend);
-    let mut state = WidgetsInteraction::init(&mut term);
+    let mut harness = TestHarness::new(50, 25);
+    let mut app = TestApp(WidgetsInteraction::init(harness.term_mut()));
 
     let mut views = Vec::new();
-    for (i, batch) in events.iter().enumerate() {
+    for batch in events {
+        // Pushed straight onto the backend (bypassing `TestHarness`'s own single-event queue),
+        // like the raw `Headless::push_event` this replaces: a whole batch has to land in the
+        // same `update` call, not be drip-fed one event per `step`.
         for event in *batch {
-            term.backend_mut().push_event(event.clone());
+            harness.term_mut().backend_mut().push_event(event.clone());
         }
-        let frame = Frame {
-            delta: HEADLESS_FRAME_DELTA,
-            frame: i as u64,
-        };
-        if !state.tick(&mut term, &frame) {
-            break;
-        }
-        term.present().ok();
-        views.push(term.backend().format_view());
+        harness.step(&mut app);
+        views.push(harness.view());
     }
     views.join("\n--- frame ---\n")
 }
