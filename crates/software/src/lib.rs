@@ -4,7 +4,7 @@
 //! # Architecture
 //!
 //! [`SoftwareBackend`] holds configuration only (font chain, grid size, scale); it
-//! does not implement [`Backend`](retroglyph_core::Backend). Call
+//! does not implement [`Backend`](retroglyph_core::backend::Backend). Call
 //! [`into_renderer`](SoftwareBackend::into_renderer) to build a
 //! [`SoftwareRenderer`], which does the actual rendering work:
 //!
@@ -35,13 +35,13 @@
 //! `Output` implementation satisfies both `Backend`'s output half and `Presenter` directly, with
 //! no duplicated method bodies. `retroglyph-window`'s
 //! [`WindowBackend`](retroglyph_window::WindowBackend) wraps a `Presenter` to provide the full
-//! [`Backend`](retroglyph_core::Backend) for windowed use, owning the input event queue that this
+//! [`Backend`](retroglyph_core::backend::Backend) for windowed use, owning the input event queue that this
 //! crate does not.
 //!
 //! For headless use (in-memory rendering, pixel-level tests) skip windowing
 //! entirely: [`SoftwareRenderer`] implements [`Output`],
 //! [`Input`], and [`Cursor`] directly (bundled
-//! as [`Backend`](retroglyph_core::Backend)), so `Terminal<SoftwareRenderer>` works without a
+//! as [`Backend`](retroglyph_core::backend::Backend)), so `Terminal<SoftwareRenderer>` works without a
 //! window, and [`pixels`](SoftwareRenderer::pixels) gives direct access to the rendered
 //! buffer.
 //!
@@ -106,7 +106,7 @@ use surface::WindowSurface;
 #[doc = include_str!("../README.md")]
 struct ReadmeDoctests;
 
-use retroglyph_core::DrawCell;
+use retroglyph_core::backend::DrawCell;
 use retroglyph_core::backend::{Cursor, Input, Output};
 use retroglyph_core::color::Color;
 
@@ -122,9 +122,9 @@ use alpha_blend::rgba::U8x4Rgba;
 use grixy::buf::GridBuf;
 use grixy::ops::GridWrite;
 use grixy::ops::layout::{LinearLayout, RowMajor};
-use retroglyph_core::HasSize;
-use retroglyph_core::Tint;
+use retroglyph_core::color::Tint;
 use retroglyph_core::event::Event;
+use retroglyph_core::grid::HasSize;
 use retroglyph_core::grid::{Pos, Size};
 use retroglyph_core::tile::Tile;
 use retroglyph_window::WindowHandle;
@@ -202,7 +202,7 @@ struct RenderContext {
     /// Per-cell tints from the last `draw_layers` call, indexed exactly as `prev_tiles`.
     ///
     /// A separate shadow copy because a `Tile` does not carry its tint (it lives in a side table
-    /// on `Grid`, see `retroglyph_core::Grid::tint`). Without it a tint-only change would compare
+    /// on `Grid`, see `retroglyph_core::grid::Grid::tint`). Without it a tint-only change would compare
     /// equal on every `Tile` field and never mark the cell dirty, so recoloring a sprite in
     /// place would silently not repaint.
     prev_tints: Vec<GridBuf<Tint, Vec<Tint>, RowMajor>>,
@@ -270,10 +270,21 @@ impl SoftwareRenderer {
         }
     }
 
-    /// Returns a slice of the rendered pixel buffer (`0x00RRGGBB` format).
+    /// The rendered pixel buffer, row-major, one `u32` per physical pixel.
     ///
-    /// The buffer length is `cols * (glyph_width * scale) * rows * (glyph_height * scale)`.
-    /// Each `u32` is a packed RGB pixel with the top byte unused.
+    /// Each pixel is `0x00RRGGBB`: eight bits per channel with the top byte unused (not an alpha
+    /// channel, and not premultiplied). Index a pixel as `y * width + x`, where `width = cols *
+    /// glyph_width * scale` and the buffer length is `width * rows * glyph_height * scale`. Both
+    /// dimensions come from this renderer's
+    /// [`CellGeometry`], so prefer deriving them from
+    /// [`surface_size`](CellGeometry::surface_size) over recomputing the
+    /// product by hand.
+    ///
+    /// The contents are whatever the last draw call left behind: [`Output::draw_layers`] writes
+    /// directly into this buffer rather than through an intermediate frame, so calling this
+    /// between draw calls (before the frame is complete) yields a partially drawn buffer rather
+    /// than an error. A [`resize`](Output::resize) reallocates the buffer, so the returned
+    /// slice's contents and length are only valid until the next resize.
     ///
     /// This is always available: there is no `Option` wrapper because
     /// `SoftwareRenderer` is guaranteed to have an active rendering context.
@@ -434,7 +445,11 @@ impl SoftwareRenderer {
         self.sprite_cache.get(glyph).is_some()
     }
 
+    // Signature has to match the `tilesets` arm above (both are called uniformly as
+    // `self.has_sprite(glyph)`), so `_glyph` and `self` stay unused here rather than becoming a
+    // `const fn` associated function: see retroglyph#954.
     #[cfg(not(feature = "tilesets"))]
+    #[allow(clippy::unused_self, clippy::missing_const_for_fn)]
     fn has_sprite(&self, _glyph: char) -> bool {
         false
     }
@@ -600,11 +615,12 @@ impl SoftwareBackend {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::Output;
+    /// use retroglyph_core::backend::Output;
     /// use retroglyph_core::tile::Tile;
     /// use retroglyph_core::color::Style;
     /// use retroglyph_core::grid::Pos;
-    /// use retroglyph_core::{Color, DrawCell};
+    /// use retroglyph_core::backend::DrawCell;
+    /// use retroglyph_core::color::Color;
     /// use retroglyph_software::SoftwareBackendBuilder;
     ///
     /// let mut renderer = SoftwareBackendBuilder::new()
@@ -1132,6 +1148,11 @@ fn blit_glyph(
 ///
 /// Blending uses pure integer `U8x4Rgba::source_over`. Fully opaque pixels
 /// (alpha == 255) skip blending entirely and write directly to the buffer.
+///
+/// That arithmetic runs on sRGB-encoded bytes rather than in linear light, which is deliberate:
+/// pixel art is authored in editors that composite the same way, and this blit is the reference
+/// the GPU backends are checked against pixel for pixel, so it defines the result for all three.
+/// See `docs/references/core/color-space.md`.
 #[cfg(feature = "tilesets")]
 #[allow(
     clippy::cast_possible_truncation,
@@ -2378,7 +2399,7 @@ mod tests {
     /// cell rather than panic on the underflowing subtraction.
     #[test]
     fn expand_dirty_spans_skips_a_covered_cell_whose_anchor_offset_underflows() {
-        use retroglyph_core::Grid;
+        use retroglyph_core::grid::Grid;
         use retroglyph_core::grid::Pos;
 
         let cols = 2;
@@ -2406,9 +2427,9 @@ mod tests {
 #[cfg(all(test, feature = "tilesets"))]
 mod span_tests {
     use super::*;
-    use retroglyph_core::Grid;
     use retroglyph_core::color::Color;
     use retroglyph_core::color::Style;
+    use retroglyph_core::grid::Grid;
     use retroglyph_core::grid::Pos;
     use retroglyph_window::tileset::{Codepage, SheetColor, SpriteAlign, TilesetOptions};
 
@@ -2903,7 +2924,7 @@ mod span_tests {
 
         assert_eq!(
             r.ctx.warned_dropped_tint.contains(&'X'),
-            retroglyph_core::DEV
+            retroglyph_core::dev::DEV
         );
     }
 
@@ -2942,7 +2963,7 @@ mod span_tests {
 
         assert_eq!(
             r.ctx.warned_dropped_tint.contains(&'X'),
-            retroglyph_core::DEV
+            retroglyph_core::dev::DEV
         );
     }
 }

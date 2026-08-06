@@ -1,6 +1,6 @@
 [package]
 name = "retroglyph-core"
-version = "0.5.0"
+version = "0.6.0"
 description = "A 2D pseudographic terminal library -- core types, no backend"
 readme = "README.md"
 edition.workspace = true
@@ -29,7 +29,7 @@ dev = []
 # diffing and layout.
 egc = ["dep:unicode-segmentation"]
 # Uses `libm`'s software float implementation (`roundf`/`fmaf`/`sinf`/`cosf`/`powf`) for
-# `animate`'s easing curves and the separable [`BlendMode`] channel math, via this crate's own
+# the separable [`BlendMode`](crate::grid::BlendMode) channel math, via this crate's own
 # `math` shim -- the `no_std` side of that split. See `std` below for the alternative that prefers
 # the platform's own float intrinsics when available; a build needs exactly one of the two.
 libm = [
@@ -40,21 +40,22 @@ libm = [
     "alpha-blend/libm",
     "alpha-blend/libm-arch",
 ]
-# Adds `Serialize`/`Deserialize` impls for [`Color`], [`Style`], `Size`, `Offset`, and (via `ixy`)
-# `Pos`/`Rect`, so a config file can round-trip a saved camera position, window geometry, sub-cell
-# pixel offset, or theme color.
+# Adds `Serialize`/`Deserialize` impls for [`Color`](crate::color::Color), [`Style`](crate::color::Style), `Size`,
+# `Offset`, and (via `ixy`) `Pos`/`Rect`, so a config file can round-trip a saved camera position,
+# window geometry, sub-cell pixel offset, or theme color.
 #
-# [`Color`] serializes through its `Display`/`FromStr` round trip (e.g. `"bright-red"`,
+# [`Color`](crate::color::Color) serializes through its `Display`/`FromStr` round trip (e.g. `"bright-red"`,
 # `"#ff8000"`) rather than a derived structural form, so hand-edited TOML/JSON stays legible.
 serde = ["dep:serde", "ixy/serde"]
 # Enables `gem/std` and `alpha-blend/std`, and uses `std`'s float intrinsics (via this crate's
-# `math` shim) instead of `libm`'s software implementation for `animate` and the separable
-# [`BlendMode`] channel math.
+# `math` shim) instead of `libm`'s software implementation for the separable
+# [`BlendMode`](crate::grid::BlendMode) channel math.
 #
 # Disabling this feature (`--no-default-features`) builds this crate `no_std`, and then needs
 # `libm` above as the float backend instead: see the crate-level `compile_error!` in `src/lib.rs`.
 std = ["dep:alpha-blend", "gem/std", "alpha-blend/std"]
-# Enables `testing`'s `TestHarness`, which drives an [`App`] against [`Headless`] for tests, with
+# Enables `testing`'s `TestHarness`, which drives an [`App`](crate::app::App) against
+# [`Headless`](crate::backend::Headless) for tests, with
 # synthetic input queuing and frame-settling helpers.
 #
 # Test-only surface, `no_std` + `alloc` compatible, off by default so it never ships in a release
@@ -89,9 +90,9 @@ ixy = "0.8.0"
 # they need only the `derive` feature for `Style`/`Size`'s plain `#[derive(Serialize, Deserialize)]`
 # below -- no `alloc` feature, since nothing here deserializes into an owned `String`/`Vec`.
 serde = { version = "1", default-features = false, features = ["derive"], optional = true }
-# Pure-Rust sin/cos/round/pow for `animate`'s trig-based easing curves, its oscillator, and the
-# separable `BlendMode` channel math, via this crate's own `math` shim (see `src/math.rs`) -- the
-# `no_std` side of the `std`/`libm` split those call sites need (see the `libm` feature above).
+# Pure-Rust sin/cos/round/pow for the separable `BlendMode` channel math, via this crate's own
+# `math` shim (see `src/math.rs`) -- the `no_std` side of the `std`/`libm` split those call sites
+# need (see the `libm` feature above).
 #
 # `default-features` is deliberately left on: `libm`'s `arch` feature is what lowers `fmaf`/`sqrtf`
 # to a single hardware instruction (`fmadd`/`fsqrt` on aarch64) instead of a software fallback,

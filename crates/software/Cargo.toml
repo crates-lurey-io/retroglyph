@@ -1,6 +1,6 @@
 [package]
 name = "retroglyph-software"
-version = "0.5.1"
+version = "0.6.0"
 description = "Software (winit + softbuffer) pixel rendering backend for retroglyph"
 readme = "README.md"
 edition.workspace = true
@@ -32,11 +32,11 @@ dev = ["retroglyph-core/dev"]
 tilesets = ["dep:alpha-blend", "retroglyph-window/tilesets"]
 
 [dependencies]
-retroglyph-core = { path = "../core", version = "0.5.0", default-features = false, features = ["std"] }
+retroglyph-core = { path = "../core", version = "0.6.0", default-features = false, features = ["std"] }
 # Seam only (Presenter/WindowBackend/WindowHandle): no winit. The loop is the
 # caller's business -- games depend on retroglyph-window with its default
 # `winit` feature; this crate just implements the renderer side.
-retroglyph-window = { path = "../window", version = "0.4.1", default-features = false }
+retroglyph-window = { path = "../window", version = "0.5.0", default-features = false }
 ixy = "0.7.0"
 grixy = { version = "0.7.0", features = ["alloc", "buffer"] }
 log = "0.4"
@@ -71,7 +71,12 @@ web-sys = { version = "0.3", features = [
 # regardless, so leaving the default `true` here would silently turn `egc` (and the rest of
 # core's defaults) back on for every crate built alongside this one in the same `cargo`
 # invocation (e.g. `just test-default-features`, which deliberately keeps `egc` off).
-retroglyph-core = { path = "../core", version = "0.5.0", default-features = false, features = ["testing"] }
+# No `version` key, unlike the `[dependencies]` entry: a dev-dependency that has one is kept in
+# the packaged manifest and has to resolve against the registry, so `testing` would need to be
+# live on crates.io before any crate that tests with it could publish. It isn't (it postdates
+# core 0.5.0), which broke this crate's first publish. Cargo drops a version-less dev-dependency
+# when packaging, so a test-only feature of a sibling crate no longer gates anyone's release.
+retroglyph-core = { path = "../core", default-features = false, features = ["testing"] }
 insta = { version = "1.34", features = ["yaml"] }
 criterion = "0.5"
 fastrand = "2"
@@ -79,7 +84,7 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 # The windowed doc example in `config.rs` calls into `retroglyph_window::winit`; this crate's own
 # `[dependencies]` entry disables `winit` (a software renderer doesn't need the loop to implement
 # `Presenter`), so doctests need it turned back on to compile that example.
-retroglyph-window = { path = "../window", version = "0.4.1", features = ["winit"] }
+retroglyph-window = { path = "../window", version = "0.5.0", features = ["winit"] }
 
 [[bench]]
 name = "raster"

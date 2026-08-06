@@ -46,8 +46,9 @@ jobs:
             terminal-wasm
             software
             gl
+            wgpu
             window
-            widgets
+            ui
             examples
             workspace
             deps

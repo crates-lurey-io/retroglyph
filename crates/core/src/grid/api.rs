@@ -61,7 +61,9 @@ impl Grid {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Grid, Pos, Style, Tile};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Pos};
+    /// use retroglyph_core::tile::Tile;
     ///
     /// // A ragged map: the second line is shorter than the first.
     /// let grid = Grid::from_charmap("###\n#.", |c| match c {
@@ -105,19 +107,25 @@ impl Grid {
         grid
     }
 
-    /// Returns the width of the grid.
+    /// The grid's width in cells (columns), not pixels. Valid column indices are `0..width`; a
+    /// `Pos` with `x >= width` is out of bounds (see [`Grid`]'s out-of-bounds drawing rule).
+    ///
+    /// Always at least 1: [`new`](Self::new) refuses a zero width, though [`resize`](Self::resize)
+    /// can later shrink it to 0.
     #[must_use]
     pub const fn width(&self) -> u16 {
         self.width
     }
 
-    /// Returns the height of the grid.
+    /// The grid's height in cells (rows), not pixels. Valid row indices are `0..height`; a `Pos`
+    /// with `y >= height` is out of bounds. May be 0 (an empty grid with no rows).
     #[must_use]
     pub const fn height(&self) -> u16 {
         self.height
     }
 
-    /// Returns the grid's dimensions.
+    /// The grid's dimensions in cells: `Size::new(self.width(), self.height())`. See
+    /// [`width`](Self::width)/[`height`](Self::height) for the per-axis bounds and units.
     #[must_use]
     pub const fn size(&self) -> Size {
         Size::new(self.width, self.height)
@@ -414,7 +422,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_grid_new() {
+    fn new_reports_the_requested_width_and_height() {
         let grid = Grid::new(80, 25);
         assert_eq!(grid.width(), 80);
         assert_eq!(grid.height(), 25);
@@ -422,12 +430,12 @@ mod tests {
 
     #[test]
     #[should_panic(expected = "Grid width must be at least 1")]
-    fn test_grid_new_zero_width_panics() {
+    fn new_zero_width_panics() {
         let _ = Grid::new(0, 5);
     }
 
     #[test]
-    fn test_grid_new_zero_height_is_allowed() {
+    fn new_zero_height_is_allowed() {
         let grid = Grid::new(5, 0);
         assert_eq!(grid.width(), 5);
         assert_eq!(grid.height(), 0);
@@ -435,12 +443,12 @@ mod tests {
 
     #[test]
     #[should_panic(expected = "Grid width must be at least 1")]
-    fn test_grid_new_zero_by_zero_panics() {
+    fn new_zero_by_zero_panics() {
         let _ = Grid::new(0, 0);
     }
 
     #[test]
-    fn test_grid_resize_to_zero_width_is_allowed() {
+    fn resize_to_zero_width_is_allowed() {
         let mut grid = Grid::new(5, 5);
         grid.resize(0, 5);
         assert_eq!(grid.width(), 0);
@@ -448,7 +456,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_resize_to_zero_height_is_allowed() {
+    fn resize_to_zero_height_is_allowed() {
         let mut grid = Grid::new(5, 5);
         grid.resize(5, 0);
         assert_eq!(grid.width(), 5);
@@ -456,7 +464,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_resize_to_zero_by_zero_is_allowed() {
+    fn resize_to_zero_by_zero_is_allowed() {
         let mut grid = Grid::new(5, 5);
         grid.resize(0, 0);
         assert_eq!(grid.width(), 0);
@@ -464,7 +472,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_resize_expand() {
+    fn resize_expand_preserves_existing_cells_and_defaults_new_ones() {
         let mut grid = Grid::new(3, 3);
         grid.put_tile(0, (1, 1), Tile::default().with_glyph('X'));
         grid.resize(6, 6);
@@ -475,7 +483,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_resize_shrink() {
+    fn resize_shrink_preserves_cells_still_in_bounds() {
         let mut grid = Grid::new(10, 10);
         grid.put_tile(0, (1, 1), Tile::default().with_glyph('A'));
         grid.resize(5, 5);
@@ -485,7 +493,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_resize_preserves_overlap() {
+    fn resize_shrink_drops_cells_that_fall_outside_the_new_bounds() {
         let mut grid = Grid::new(4, 4);
         grid.put_tile(0, (0, 0), Tile::default().with_glyph('@'));
         grid.put_tile(0, (3, 3), Tile::default().with_glyph('X'));
@@ -497,7 +505,7 @@ mod tests {
     // --- Extra grapheme text (EGC side-table) ---
     #[cfg(feature = "egc")]
     #[test]
-    fn test_grid_write_grapheme_stores_and_reads_extra() {
+    fn write_grapheme_stores_and_reads_extra() {
         let mut g = Grid::new(5, 5);
         g.write_grapheme(0, 1, 1, "e\u{0301}", Style::default());
         assert_eq!(g[Pos::new(1, 1)].glyph, 'e');
@@ -547,7 +555,7 @@ mod tests {
 
     #[cfg(feature = "egc")]
     #[test]
-    fn test_grid_overwrite_clears_extra() {
+    fn put_tile_overwrite_clears_extra() {
         let mut g = Grid::new(5, 5);
         g.write_grapheme(0, 0, 0, "e\u{0301}", Style::default());
         assert_eq!(crate::grid::grapheme_at(&g, 0, 0, 0), Some("e\u{0301}"));
@@ -561,7 +569,7 @@ mod tests {
 
     #[cfg(feature = "egc")]
     #[test]
-    fn test_grid_resize_remaps_extras_to_new_stride() {
+    fn resize_remaps_extras_to_new_stride() {
         let mut g = Grid::new(4, 4);
         g.write_grapheme(0, 3, 1, "e\u{0301}", Style::default());
         assert_eq!(crate::grid::grapheme_at(&g, 0, 3, 1), Some("e\u{0301}"));

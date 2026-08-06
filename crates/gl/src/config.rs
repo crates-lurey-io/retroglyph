@@ -7,7 +7,7 @@
 //! [`Presenter::init_surface`](retroglyph_window::Presenter::init_surface).
 
 use crate::GlRenderer;
-use crate::glyphs::GlyphCache;
+use retroglyph_window::atlas::GlyphAtlas;
 use retroglyph_window::font::FontChain;
 #[cfg(feature = "tilesets")]
 use retroglyph_window::tileset::TilesetOptions;
@@ -85,7 +85,7 @@ impl std::error::Error for GlBackendError {
 /// ```no_run
 /// # #[cfg(not(target_arch = "wasm32"))]
 /// # fn main() {
-/// use retroglyph_core::Style;
+/// use retroglyph_core::color::Style;
 /// use retroglyph_gl::GlBackendBuilder;
 /// use retroglyph_window::winit::{WindowConfig, run_windowed};
 ///
@@ -236,8 +236,8 @@ impl GlBackendBuilder {
         if surface_w > u64::from(u32::MAX) || surface_h > u64::from(u32::MAX) {
             return Err(GlBackendError::SurfaceTooLarge);
         }
-        let glyphs = GlyphCache::bitmap(fonts, glyph_size);
-        if glyphs.slot_count() > u32::from(u16::MAX) + 1 {
+        let glyphs = GlyphAtlas::new(fonts, glyph_size);
+        if glyphs.slot_count() > retroglyph_window::atlas::MAX_SLOTS {
             return Err(GlBackendError::FontChainTooLarge);
         }
         #[cfg_attr(not(feature = "tilesets"), allow(unused_mut))]

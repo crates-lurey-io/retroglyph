@@ -12,7 +12,7 @@
 #![allow(missing_docs)]
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use retroglyph_core::DrawCell;
+use retroglyph_core::backend::DrawCell;
 use retroglyph_core::backend::{Input, Output};
 use retroglyph_core::event::{Event, KeyModifiers, MouseEvent, MouseEventKind};
 use retroglyph_core::grid::{Pos, Size};

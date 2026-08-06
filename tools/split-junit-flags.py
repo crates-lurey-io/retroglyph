@@ -2,7 +2,7 @@
 """Splits the workspace-wide nextest JUnit report into one file per Codecov flag.
 
 `cargo nextest run --workspace` (see `just test-ci`) writes a single `junit.xml` with one
-`<testsuite>` per test binary -- one per library crate (`retroglyph-core`, `retroglyph-widgets`,
+`<testsuite>` per test binary -- one per library crate (`retroglyph-core`, `retroglyph-ui`,
 ...) plus one per `examples/examples/*.rs` example (`retroglyph-examples::01_hello_world`, ...).
 
 Codecov Test Analytics' `flags` filter is populated per *upload*, not per `<testsuite>` inside a
@@ -37,7 +37,7 @@ FLAGS = [
     "software",
     "gl",
     "window",
-    "widgets",
+    "ui",
 ]
 
 

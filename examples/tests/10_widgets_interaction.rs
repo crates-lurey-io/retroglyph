@@ -7,7 +7,7 @@
 //! Both headless tests drive synthetic input through [`Headless::push_event`], mirroring
 //! `04_mouse`'s and `03_keyboard`'s decode-and-echo proofs -- but here what's being proven is
 //! `Interaction`'s resolution, not raw event decode: a mouse click resolves one frame after the
-//! press/release pair arrives (see [`Interaction`](retroglyph_widgets::Interaction)'s own doc
+//! press/release pair arrives (see [`Interaction`](retroglyph_ui::Interaction)'s own doc
 //! comment on why), while Tab-focus and Enter-activation resolve the same frame their event
 //! arrives, since `FocusRing` state is read live rather than snapshotted.
 
@@ -20,10 +20,13 @@ mod support;
 #[allow(dead_code)] // `main`/the `wasm_entry!` FFI surface aren't exercised by these tests
 mod widgets_interaction;
 
+use retroglyph_core::app::Frame;
+use retroglyph_core::backend::Headless;
 use retroglyph_core::event::{
     Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
 };
-use retroglyph_core::{Frame, Headless, Pos, Terminal};
+use retroglyph_core::grid::Pos;
+use retroglyph_core::terminal::Terminal;
 use retroglyph_examples::{Example, HEADLESS_FRAME_DELTA};
 use widgets_interaction::WidgetsInteraction;
 

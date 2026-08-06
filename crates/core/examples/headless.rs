@@ -1,18 +1,18 @@
 //! Minimal `Headless` backend demo.
 //!
-//! Shows the smallest possible use of [`Headless`]: build a `Terminal`,
-//! draw a frame, inject a synthetic key event, tick, and print the grid
-//! before/after via [`Headless::format_view`]: the same technique used in
+//! Shows the smallest possible use of [`Headless`](retroglyph_core::backend::Headless): build a
+//! `Terminal`, draw a frame, inject a synthetic key event, tick, and print the grid
+//! before/after via [`Headless::format_view`](retroglyph_core::backend::Headless::format_view): the same technique used in
 //! this crate's own unit and integration tests. No terminal or window is
 //! required; this only depends on `retroglyph-core` itself, so it's the
 //! right starting point if you haven't picked a backend crate yet.
 //!
 //! Run with: `cargo run -p retroglyph-core --example headless`
 
-use retroglyph_core::Headless;
-use retroglyph_core::Style;
-use retroglyph_core::Terminal;
+use retroglyph_core::backend::Headless;
+use retroglyph_core::color::Style;
 use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+use retroglyph_core::terminal::Terminal;
 
 fn main() {
     let backend = Headless::new(10, 3);

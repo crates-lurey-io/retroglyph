@@ -44,14 +44,17 @@
     clippy::cast_sign_loss
 )]
 
+use retroglyph_core::app::Frame;
+use retroglyph_core::backend::Backend;
+use retroglyph_core::color::{Color, Style};
 use retroglyph_core::event::{Event, KeyCode, MouseButton, MouseEventKind};
-use retroglyph_core::{
-    Backend, Camera, Color, Easing, Frame, HasSize, Pos, Rect, Size, Style, Surface, Terminal,
-    Tween,
-};
+use retroglyph_core::grid::{HasSize, Pos, Rect, Size};
+use retroglyph_core::surface::Surface;
+use retroglyph_core::terminal::Terminal;
 use retroglyph_examples::Example;
-use retroglyph_widgets::{
-    Align, Constraint, draw_clipped, split_h, split_h_spaced, split_v, truncate,
+use retroglyph_ui::{
+    Align, Camera, Constraint, Easing, Tween, draw_clipped, split_h, split_h_spaced, split_v,
+    truncate,
 };
 
 // ── Breakpoints ────────────────────────────────────────────────────────────
@@ -1138,8 +1141,9 @@ impl Example for OutpostDashboard {
     // instead of rendering at a fixed 50x25 grid wherever it lands on the page: this is a
     // flagship, app-like dashboard meant to be the whole page (see the module doc comment's
     // "genuine responsiveness" bullet), and a fixed small grid leaves most of a phone screen
-    // black -- see `Example::fill_viewport`.
-    #[cfg(any(feature = "software", feature = "gl"))]
+    // black -- see `Example::fill_viewport`. Applies to every windowed backend's wasm build alike,
+    // software, gl and wgpu.
+    #[cfg(any(feature = "software", feature = "gl", feature = "wgpu"))]
     fn fill_viewport() -> bool {
         true
     }

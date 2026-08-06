@@ -15,8 +15,8 @@ use core::fmt;
 /// it sits on the tileset rather than at the call site. A sheet of full-color terrain and a sheet
 /// of white icon masks can be loaded side by side and each behave correctly.
 ///
-/// Orthogonal to [`Tint`](retroglyph_core::Tint), which is per-cell and applies on top: see
-/// [`Surface::with_tint`](retroglyph_core::Surface::with_tint).
+/// Orthogonal to [`Tint`](retroglyph_core::color::Tint), which is per-cell and applies on top: see
+/// [`Surface::with_tint`](retroglyph_core::surface::Surface::with_tint).
 ///
 /// Open question (retroglyph#559): a sheet mixing mask tiles and full-colour art tiles has no
 /// way to say so today, since this is a sheet-wide setting. The likely answer is to split such a
@@ -28,14 +28,14 @@ use core::fmt;
 pub enum SheetColor {
     /// Full-color artwork, composited verbatim.
     ///
-    /// The cell's [`Style::fg`](retroglyph_core::Style::fg) does not touch it. The default,
+    /// The cell's [`Style::fg`](retroglyph_core::color::Style::fg) does not touch it. The default,
     /// because a sheet that carries its own color is the common case and rendering it as
     /// authored is the unsurprising outcome.
     #[default]
     Art,
     /// A white-on-transparent mask, colored by the cell's foreground the way a font glyph is.
     ///
-    /// Equivalent to a [`Tint::Multiply`](retroglyph_core::Tint::Multiply) by the resolved
+    /// Equivalent to a [`Tint::Multiply`](retroglyph_core::color::Tint::Multiply) by the resolved
     /// foreground color, so a white pixel takes the foreground exactly and a grey one takes a
     /// proportionally darker shade. This is how libtcod tilesets, Dwarf Fortress's classic
     /// tileset, and `BearLibTerminal`'s bitmap fonts all behave, and it is the one case where
@@ -52,7 +52,7 @@ pub enum SheetColor {
 /// [`TilesetOptions`] for how a sprite's color relates to the cell's style.
 ///
 /// Only observable when the reserved box is larger than the sprite's own pixels, i.e. when
-/// [`Surface::put_span`](retroglyph_core::Surface::put_span) declares more cells than the
+/// [`Surface::put_span`](retroglyph_core::surface::Surface::put_span) declares more cells than the
 /// artwork fills. A sprite drawn into a box its art exactly fills (the common case) renders
 /// identically under every variant. Mirrors `BearLibTerminal`'s tileset `align=` option.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -81,7 +81,7 @@ pub enum SpriteAlign {
 
 impl SpriteAlign {
     /// Returns the offset of a `sprite_w` x `sprite_h` sprite placed inside a `box_w` x `box_h`
-    /// box, in unscaled pixels to match [`Tile::dx`](retroglyph_core::Tile::dx).
+    /// box, in unscaled pixels to match [`Tile::dx`](retroglyph_core::tile::Tile::dx).
     ///
     /// Centring uses integer division, so an odd leftover pixel lands on the right/bottom side.
     /// Saturates at `0` on either axis where the sprite is at least as large as the box, so an
@@ -134,7 +134,7 @@ impl SpriteAlign {
     /// Returns the offset of a `sprite_w` x `sprite_h` sprite inside the box a `span_w` x
     /// `span_h` span of `glyph_w` x `glyph_h` cells reserves for it, in unscaled pixels.
     ///
-    /// `span_w`/`span_h` come from [`Tile::span`](retroglyph_core::Tile::span) and `glyph_w`/
+    /// `span_w`/`span_h` come from [`Tile::span`](retroglyph_core::tile::Tile::span) and `glyph_w`/
     /// `glyph_h` are the unscaled cell size, so the box is `span_w * glyph_w` x `span_h *
     /// glyph_h` pixels. A zero cell size is treated as one pixel, leaving the sprite on its
     /// anchor rather than offsetting it by a meaningless amount.
@@ -215,7 +215,7 @@ pub enum Codepage {
     ///
     /// This is the simplest option when you don't care about Unicode semantics
     /// and just want to reference tiles by a zero-based index. Use
-    /// [`Tile::glyph`](retroglyph_core::Tile::glyph) values 0, 1, 2, … to address
+    /// [`Tile::glyph`](retroglyph_core::tile::Tile::glyph) values 0, 1, 2, … to address
     /// individual sprites in sheet order.
     ///
     /// Tiles whose index falls in the surrogate range (0xD800–0xDFFF) are
@@ -296,7 +296,7 @@ pub const CP437_TO_UNICODE: [char; 256] = [
 /// # Sprites carry their own color
 ///
 /// By default ([`SheetColor::Art`]) a tileset's artwork is composited verbatim: the cell's
-/// [`Style::fg`](retroglyph_core::Style::fg) does not tint it, so a full-color sheet renders
+/// [`Style::fg`](retroglyph_core::color::Style::fg) does not tint it, so a full-color sheet renders
 /// exactly as authored. The cell's background is still painted behind the sprite and shows
 /// through its transparent pixels.
 ///
@@ -305,7 +305,7 @@ pub const CP437_TO_UNICODE: [char; 256] = [
 ///
 /// Recoloring one piece of artwork per cell (biome variants, damage flashes) is a per-draw
 /// decision rather than a sheet-wide one, and goes through
-/// [`Surface::with_tint`](retroglyph_core::Surface::with_tint).
+/// [`Surface::with_tint`](retroglyph_core::surface::Surface::with_tint).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct TilesetOptions {
@@ -391,7 +391,7 @@ impl TilesetOptions {
 /// ```
 ///
 /// How many cells a sprite occupies is a per-write decision, not a tileset-wide one: declare it
-/// with [`Surface::put_span`](retroglyph_core::Surface::put_span) at the draw call.
+/// with [`Surface::put_span`](retroglyph_core::surface::Surface::put_span) at the draw call.
 ///
 /// Unicode private-use area sprite sheet:
 ///

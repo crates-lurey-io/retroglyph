@@ -1,6 +1,6 @@
 [package]
 name = "retroglyph-crossterm"
-version = "0.2.3"
+version = "0.3.0"
 description = "Crossterm terminal backend for retroglyph"
 readme = "README.md"
 edition.workspace = true
@@ -36,8 +36,8 @@ egc = ["retroglyph-terminal/egc", "retroglyph-core/egc"]
 tracing = ["dep:tracing"]
 
 [dependencies]
-retroglyph-core = { path = "../core", version = "0.5.0", default-features = false, features = ["std"] }
-retroglyph-terminal = { path = "../terminal", version = "0.1.6" }
+retroglyph-core = { path = "../core", version = "0.6.0", default-features = false, features = ["std"] }
+retroglyph-terminal = { path = "../terminal", version = "0.1.7" }
 crossterm = "0.28"
 # Only pulled in behind the `tracing` feature (see below); the `draw`/`flush`/`poll_event`
 # spans this enables are the only code in this crate that references it.
@@ -52,7 +52,12 @@ fastrand = "2"
 # regardless, so leaving the default `true` here would silently turn `egc` (and the rest of
 # core's defaults) back on for every crate built alongside this one in the same `cargo`
 # invocation (e.g. `just test-default-features`, which deliberately keeps `egc` off).
-retroglyph-core = { path = "../core", version = "0.5.0", default-features = false, features = ["testing"] }
+# No `version` key, unlike the `[dependencies]` entry: a dev-dependency that has one is kept in
+# the packaged manifest and has to resolve against the registry, so `testing` would need to be
+# live on crates.io before any crate that tests with it could publish. It isn't (it postdates
+# core 0.5.0), which broke this crate's first publish. Cargo drops a version-less dev-dependency
+# when packaging, so a test-only feature of a sibling crate no longer gates anyone's release.
+retroglyph-core = { path = "../core", default-features = false, features = ["testing"] }
 
 [[bench]]
 name = "event_translation"

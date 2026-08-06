@@ -1,5 +1,5 @@
-//! `Grid`'s multi-cell span API: [`Grid::write_span`], [`Grid::write_span_uniform`],
-//! [`Grid::span_owner`], and [`Grid::clear_span`], plus the anchor/covered-cell bookkeeping they
+//! `Grid`'s multi-cell span API: [`Grid::write_span`](crate::grid::Grid::write_span), [`Grid::write_span_uniform`](crate::grid::Grid::write_span_uniform),
+//! [`Grid::span_owner`](crate::grid::Grid::span_owner), and [`Grid::clear_span`](crate::grid::Grid::clear_span), plus the anchor/covered-cell bookkeeping they
 //! share.
 
 use super::{Grid, Pos, Size, to_grixy_pos};
@@ -61,7 +61,8 @@ impl Grid {
     /// ```
     /// # fn main() {
     /// # fn run() -> Option<()> {
-    /// use retroglyph_core::{Grid, Pos, Style};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Pos};
     ///
     /// let mut grid = Grid::new(8, 4);
     /// grid.write_span(0, 1, 1, &["[==]", "|__|"], Style::default())?;
@@ -124,7 +125,8 @@ impl Grid {
     /// ```
     /// # fn main() {
     /// # fn run() -> Option<()> {
-    /// use retroglyph_core::{Grid, Pos, Style};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Pos};
     ///
     /// let mut grid = Grid::new(8, 4);
     /// let anchor = '\u{E000}'; // chosen at runtime from a tilesheet
@@ -234,7 +236,8 @@ impl Grid {
     /// ```
     /// # fn main() {
     /// # fn run() -> Option<()> {
-    /// # use retroglyph_core::{Grid, Pos, Style};
+    /// # use retroglyph_core::color::Style;
+    /// # use retroglyph_core::grid::{Grid, Pos};
     /// # let mut grid = Grid::new(8, 4);
     /// grid.write_span(0, 2, 1, &["[==]", "|__|"], Style::default())?;
     /// let chest = Pos::new(2, 1);
@@ -248,7 +251,7 @@ impl Grid {
     /// # }
     /// ```
     ///
-    /// O(1): a covered tile stores its offset back to the anchor (see [`Tile::span_offset`]), so
+    /// O(1): a covered tile stores its offset back to the anchor (see [`Tile::span_offset`](crate::tile::Tile::span_offset)), so
     /// this is a lookup and a subtraction, not a scan.
     #[must_use]
     pub fn span_owner(&self, layer: u8, x: u16, y: u16) -> Option<Pos> {

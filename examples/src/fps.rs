@@ -1,4 +1,4 @@
-//! Harness-only glue around `retroglyph_widgets::PerfOverlayApp`, which now owns the perf overlay
+//! Harness-only glue around `retroglyph_ui::PerfOverlayApp`, which now owns the perf overlay
 //! itself (toggle key, frame-time bookkeeping, drawing) generically for every backend -- see
 //! `launch.rs`'s `ExampleApp`/`WasmToggleApp`.
 //!
@@ -13,9 +13,11 @@
 #![allow(clippy::redundant_pub_crate)]
 
 #[cfg(feature = "crossterm")]
+use retroglyph_core::backend::{Cursor, Input, Output};
+#[cfg(feature = "crossterm")]
 use retroglyph_core::event::Event;
 #[cfg(feature = "crossterm")]
-use retroglyph_core::{Cursor, Input, Output, Pos, Size};
+use retroglyph_core::grid::{Pos, Size};
 #[cfg(feature = "crossterm")]
 use std::cell::Cell;
 #[cfg(feature = "crossterm")]
@@ -49,7 +51,7 @@ fn visible_from_env(value: Option<&str>) -> bool {
 }
 
 /// Toggle-key presses seen by a [`ToggleFilter`] and not yet applied to the wrapping
-/// [`PerfOverlayApp`](retroglyph_widgets::PerfOverlayApp) via [`CrosstermToggleApp`](crate::launch).
+/// [`PerfOverlayApp`](retroglyph_ui::PerfOverlayApp) via [`CrosstermToggleApp`](crate::launch).
 ///
 /// Shared by clone: the filter wraps the raw backend, the driver owns the `PerfOverlayApp`, and
 /// `run_blocking` takes both by value into separate owners, so the count has to live outside
@@ -58,19 +60,19 @@ fn visible_from_env(value: Option<&str>) -> bool {
 #[cfg(feature = "crossterm")]
 pub(crate) type TogglePresses = Rc<Cell<usize>>;
 
-/// Wraps a [`Backend`](retroglyph_core::Backend) and swallows [`PerfOverlayApp`]'s toggle key
-/// ([`retroglyph_widgets::default_is_toggle_key`]) on its way out of
-/// [`Input::poll_event`](retroglyph_core::Input::poll_event), counting each press into a shared
+/// Wraps a [`Backend`](retroglyph_core::backend::Backend) and swallows [`PerfOverlayApp`]'s toggle key
+/// ([`retroglyph_ui::default_is_toggle_key`]) on its way out of
+/// [`Input::poll_event`](retroglyph_core::backend::Input::poll_event), counting each press into a shared
 /// [`TogglePresses`] for the driver.
 ///
-/// [`PerfOverlayApp`](retroglyph_widgets::PerfOverlayApp) already does this itself generically, by
-/// draining [`Terminal`](retroglyph_core::Terminal)'s own event queue and re-pushing whatever
+/// [`PerfOverlayApp`](retroglyph_ui::PerfOverlayApp) already does this itself generically, by
+/// draining [`Terminal`](retroglyph_core::terminal::Terminal)'s own event queue and re-pushing whatever
 /// isn't the toggle key (see that type's "Toggling" docs) -- which is race-free for the windowed
 /// backends, where winit fills the queue from its own event loop before `App::update` ever runs,
 /// so a drain-at-the-top-of-the-frame genuinely sees everything the app could possibly see that
 /// frame.
 ///
-/// Crossterm has no such queue: [`Input::poll_event`](retroglyph_core::Input::poll_event) reads
+/// Crossterm has no such queue: [`Input::poll_event`](retroglyph_core::backend::Input::poll_event) reads
 /// the OS directly, so an event that arrives *after* `PerfOverlayApp`'s drain and *before* the
 /// example's own `drain_events` inside `tick` skips `PerfOverlayApp` entirely and lands in the
 /// example, which drops it on the floor (every example in the gallery ignores keys it doesn't
@@ -101,14 +103,14 @@ impl<B: Output> Output for ToggleFilter<B> {
 
     fn draw<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = retroglyph_core::DrawCell<'a>>,
+        I: Iterator<Item = retroglyph_core::backend::DrawCell<'a>>,
     {
         self.inner.draw(content)
     }
 
     fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
     where
-        I: Iterator<Item = retroglyph_core::DrawCell<'a>>,
+        I: Iterator<Item = retroglyph_core::backend::DrawCell<'a>>,
     {
         self.inner.draw_layers(content)
     }
@@ -145,7 +147,7 @@ impl<B: Input> Input for ToggleFilter<B> {
         let mut remaining = timeout;
         loop {
             let event = self.inner.poll_event(remaining)?;
-            if !retroglyph_widgets::default_is_toggle_key(&event) {
+            if !retroglyph_ui::default_is_toggle_key(&event) {
                 return Some(event);
             }
             self.presses.set(self.presses.get().saturating_add(1));
@@ -186,7 +188,10 @@ impl<B: Cursor> Cursor for ToggleFilter<B> {
 /// toggle like the native one does (it isn't an [`Event`](retroglyph_core::event::Event) and
 /// never enters the backend's queue), so it records a request that `WasmToggleApp` picks up on
 /// the next frame instead.
-#[cfg(all(target_arch = "wasm32", any(feature = "software", feature = "gl")))]
+#[cfg(all(
+    target_arch = "wasm32",
+    any(feature = "software", feature = "gl", feature = "wgpu")
+))]
 pub(crate) mod wasm_toggle {
     use std::cell::Cell;
     use wasm_bindgen::JsCast as _;

@@ -1,12 +1,12 @@
-//! Float ops [`animate`](super::animate) and [`grid`](super::grid)'s separable blend math need but
-//! the core language doesn't provide outside `std`: dispatched to `std`'s own intrinsics when the
-//! `std` feature is on, and to `libm`'s software implementation otherwise.
+//! Float ops [`grid`](super::grid)'s separable blend math needs but the core language doesn't
+//! provide outside `std`: dispatched to `std`'s own intrinsics when the `std` feature is on, and
+//! to `libm`'s software implementation otherwise.
 //!
 //! One of `std`/`libm` is required crate-wide (see the `compile_error!` in `lib.rs`), so every
 //! function here can assume a backend is present -- there is no third "no float backend" case for
 //! these to handle.
 //!
-//! [`exp`] has no caller in this crate: it's here for `retroglyph-widgets`, which shares this
+//! [`exp`] has no caller in this crate: it's here for `retroglyph-ui`, which shares this
 //! module (`#[doc(hidden)] pub`, see its declaration in `lib.rs`) instead of vendoring its own
 //! copy. Don't remove it as unused.
 //!

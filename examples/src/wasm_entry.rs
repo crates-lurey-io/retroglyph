@@ -57,12 +57,12 @@ macro_rules! example_main {
 /// example built with no wasm-capable feature just doesn't get any FFI
 /// surface, which is correct since nothing would call it).
 ///
-/// - `software` or `gl` (either wins if enabled): a `#[wasm_bindgen(start)]`
-///   shim that calls the example's own `main()`. Both `run_software::<E>()`
-///   and `run_gl::<E>()` are already portable to `wasm32` via winit (canvas +
-///   WebGL2 for `gl`); they just need something to invoke them when the
-///   module loads.
-/// - `wasm-headless` (if `software`/`gl` are off): drives a
+/// - `software`, `gl`, or `wgpu` (the first enabled wins): a `#[wasm_bindgen(start)]`
+///   shim that calls the example's own `main()`. `run_software::<E>()`,
+///   `run_gl::<E>()` and `run_wgpu::<E>()` are all portable to `wasm32` via
+///   winit (a canvas, plus WebGL2 for `gl` and WebGPU for `wgpu`); they just
+///   need something to invoke them when the module loads.
+/// - `wasm-headless` (if all three are off): drives a
 ///   `Terminal<Headless>` from a browser `requestAnimationFrame` loop. See
 ///   [`wasm_headless`](crate::util::wasm_headless) for the FFI key decoder.
 /// - `wasm-terminal` (if none of the above is on): drives a
@@ -71,9 +71,12 @@ macro_rules! example_main {
 #[macro_export]
 macro_rules! wasm_entry {
     ($E:ty) => {
-        // Both windowed backends (software canvas, gl WebGL2) run their winit event loop from
-        // `main()`; this shim is the module-load hook that invokes it.
-        #[cfg(all(any(feature = "software", feature = "gl"), target_arch = "wasm32"))]
+        // Every windowed backend (software canvas, gl WebGL2, wgpu WebGPU) runs its winit event
+        // loop from `main()`; this shim is the module-load hook that invokes it.
+        #[cfg(all(
+            any(feature = "software", feature = "gl", feature = "wgpu"),
+            target_arch = "wasm32"
+        ))]
         #[allow(missing_docs)]
         #[::wasm_bindgen::prelude::wasm_bindgen(start)]
         pub fn __rg_wasm_start() -> ::std::result::Result<(), ::wasm_bindgen::JsValue> {
@@ -98,12 +101,12 @@ macro_rules! __wasm_headless_entry {
     ($E:ty) => {
         #[cfg(all(
             feature = "wasm-headless",
-            not(any(feature = "software", feature = "gl")),
+            not(any(feature = "software", feature = "gl", feature = "wgpu")),
             target_arch = "wasm32"
         ))]
         const _: () = {
             struct __RgWasmHeadlessState {
-                term: ::retroglyph_core::Terminal<::retroglyph_core::Headless>,
+                term: ::retroglyph_core::terminal::Terminal<::retroglyph_core::backend::Headless>,
                 state: $E,
                 last_tick: ::web_time::Instant,
                 frame_count: u64,
@@ -120,8 +123,8 @@ macro_rules! __wasm_headless_entry {
             #[allow(missing_docs)]
             pub fn wasm_headless_init() {
                 ::console_error_panic_hook::set_once();
-                let backend = ::retroglyph_core::Headless::new(50, 25);
-                let mut term = ::retroglyph_core::Terminal::new(backend);
+                let backend = ::retroglyph_core::backend::Headless::new(50, 25);
+                let mut term = ::retroglyph_core::terminal::Terminal::new(backend);
                 let state = <$E as $crate::Example>::init(&mut term);
                 __RG_WASM_HEADLESS.with(|cell| {
                     *cell.borrow_mut() = ::std::option::Option::Some(__RgWasmHeadlessState {
@@ -178,7 +181,7 @@ macro_rules! __wasm_headless_entry {
                         return ::std::string::String::new();
                     };
                     let now = ::web_time::Instant::now();
-                    let frame = ::retroglyph_core::Frame {
+                    let frame = ::retroglyph_core::app::Frame {
                         delta: now.duration_since(s.last_tick),
                         frame: s.frame_count,
                     };
@@ -210,12 +213,17 @@ macro_rules! __wasm_terminal_entry {
     ($E:ty) => {
         #[cfg(all(
             feature = "wasm-terminal",
-            not(any(feature = "software", feature = "gl", feature = "wasm-headless")),
+            not(any(
+                feature = "software",
+                feature = "gl",
+                feature = "wgpu",
+                feature = "wasm-headless"
+            )),
             target_arch = "wasm32"
         ))]
         const _: () = {
             struct __RgWasmTerminalState {
-                term: ::retroglyph_core::Terminal<::retroglyph_terminal_wasm::TerminalWasm>,
+                term: ::retroglyph_core::terminal::Terminal<::retroglyph_terminal_wasm::TerminalWasm>,
                 state: $E,
                 last_tick: ::web_time::Instant,
                 frame_count: u64,
@@ -236,7 +244,7 @@ macro_rules! __wasm_terminal_entry {
                 ::console_error_panic_hook::set_once();
                 let mut backend = ::retroglyph_terminal_wasm::TerminalWasm::new(width, height);
                 ::retroglyph_core::backend::Cursor::set_cursor_visible(&mut backend, false);
-                let mut term = ::retroglyph_core::Terminal::new(backend);
+                let mut term = ::retroglyph_core::terminal::Terminal::new(backend);
                 let state = <$E as $crate::Example>::init(&mut term);
                 __RG_WASM_TERMINAL.with(|cell| {
                     *cell.borrow_mut() = ::std::option::Option::Some(__RgWasmTerminalState {
@@ -274,7 +282,7 @@ macro_rules! __wasm_terminal_entry {
                 };
                 __RG_WASM_TERMINAL.with(|cell| {
                     if let ::std::option::Option::Some(s) = cell.borrow_mut().as_mut() {
-                        ::retroglyph_core::Input::push_event(
+                        ::retroglyph_core::backend::Input::push_event(
                             s.term.backend_mut(),
                             ::retroglyph_core::event::Event::Key(event),
                         );
@@ -292,7 +300,7 @@ macro_rules! __wasm_terminal_entry {
                 };
                 __RG_WASM_TERMINAL.with(|cell| {
                     if let ::std::option::Option::Some(s) = cell.borrow_mut().as_mut() {
-                        ::retroglyph_core::Input::push_event(s.term.backend_mut(), event);
+                        ::retroglyph_core::backend::Input::push_event(s.term.backend_mut(), event);
                     }
                 });
             }
@@ -311,7 +319,7 @@ macro_rules! __wasm_terminal_entry {
                         return ::std::string::String::new();
                     };
                     let now = ::web_time::Instant::now();
-                    let frame = ::retroglyph_core::Frame {
+                    let frame = ::retroglyph_core::app::Frame {
                         delta: now.duration_since(s.last_tick),
                         frame: s.frame_count,
                     };

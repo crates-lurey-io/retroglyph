@@ -38,7 +38,11 @@ clippy:
     # is optional (see their crate-level `compile_error!`s), so their `no_std` builds need `libm`
     # as the backend -- plain `--no-default-features` doesn't compile on its own.
     cargo clippy -p retroglyph-core --no-default-features --features libm -- -D warnings
-    cargo clippy -p retroglyph-widgets --no-default-features --features libm -- -D warnings
+    cargo clippy -p retroglyph-ui --no-default-features --features libm -- -D warnings
+    # retroglyph#954: the two lines above and --all-features never build retroglyph-software
+    # without `tilesets`, so a lint that only fires on that stub (e.g. the has_sprite one fixed
+    # alongside this) can land on main undetected.
+    cargo clippy -p retroglyph-software --features default-font -- -D warnings
 
 # Typecheck the modules the host build skips (retroglyph#552).
 #
@@ -95,10 +99,10 @@ compile:
     # retroglyph#886: with no `std`, `animate`'s and `BlendMode`'s float math needs `libm` as its
     # backend instead; this is the `no_std` build that exercises that dispatch path.
     cargo check -p retroglyph-core --no-default-features --features libm
-    # retroglyph#882: retroglyph-widgets forwards a `std` feature to retroglyph-core's own, so
+    # retroglyph#882: retroglyph-ui forwards a `std` feature to retroglyph-core's own, so
     # this is its `no_std` (alloc-only) build, the same reason retroglyph-core gets its own line
     # above.
-    cargo check -p retroglyph-widgets --no-default-features --features libm
+    cargo check -p retroglyph-ui --no-default-features --features libm
     # retroglyph#903: what replaced #547's zero-features line, which stopped compiling when a
     # float backend became mandatory. Asserting the *message* rather than just the failure is the
     # point: a backendless build is meant to stop at retroglyph-core's own `compile_error!`, which
@@ -115,7 +119,7 @@ compile:
     # another PR happens to combine it with something else (#886). `cargo hack check
     # --each-feature` builds every feature in isolation instead, catching that gap directly.
     #
-    # retroglyph-core and retroglyph-widgets get their own scoped runs rather than folding into
+    # retroglyph-core and retroglyph-ui get their own scoped runs rather than folding into
     # the `--workspace` sweep below: a float backend is mandatory in both (see their crate-level
     # `compile_error!`s), so every one of their features fails on its own. `--features libm`
     # supplies that backend in every generated combination, which is what makes the isolated runs
@@ -124,8 +128,8 @@ compile:
     # the `--exclude-features` lists this used to need: nothing is excluded, so nothing can hide
     # in one.
     cargo bin cargo-hack check --each-feature --no-dev-deps -p retroglyph-core --features libm
-    cargo bin cargo-hack check --each-feature --no-dev-deps -p retroglyph-widgets --features libm
-    cargo bin cargo-hack check --each-feature --no-dev-deps --workspace --exclude retroglyph-core --exclude retroglyph-widgets
+    cargo bin cargo-hack check --each-feature --no-dev-deps -p retroglyph-ui --features libm
+    cargo bin cargo-hack check --each-feature --no-dev-deps --workspace --exclude retroglyph-core --exclude retroglyph-ui
 
 doc: check-features
     # --exclude: none of the three are part of the published API surface (cargo-bin and
@@ -220,11 +224,11 @@ test-ci: build-pty-examples
 # command (retroglyph#843). retroglyph#903: plus `--features libm`, since a float backend is
 # mandatory and `--no-default-features` alone no longer compiles; see `compile` above.
 test-default-features:
-    cargo test -p retroglyph-widgets -p retroglyph-terminal -p retroglyph-crossterm -p retroglyph-window -p retroglyph-gl
+    cargo test -p retroglyph-ui -p retroglyph-terminal -p retroglyph-crossterm -p retroglyph-window -p retroglyph-gl
     cargo test -p retroglyph-core --no-default-features --features libm
     # retroglyph#882: same rationale as the `retroglyph-core` line above, now that
-    # `retroglyph-widgets` has its own `std` feature forwarding to `retroglyph-core`'s.
-    cargo test -p retroglyph-widgets --no-default-features --features libm
+    # `retroglyph-ui` has its own `std` feature forwarding to `retroglyph-core`'s.
+    cargo test -p retroglyph-ui --no-default-features --features libm
 
 test-v: build-pty-examples
     cargo bin cargo-nextest run --workspace --all-features --no-capture
@@ -267,7 +271,7 @@ deny-licenses:
 # it in would turn one compile of the workspace into several:
 #   - fmt-check, markdown, prose (`just fmt-check`, `just markdown`, `just prose`): not cargo
 #     builds at all, and not a feature-set variant of anything either -- run them directly.
-#   - the `-p core`/`-p widgets --no-default-features` clippy lines (retroglyph#887), `compile`'s
+#   - the `-p core`/`-p ui --no-default-features` clippy lines (retroglyph#887), `compile`'s
 #     `--no-default-features`/`cargo hack --each-feature` lines, and `test-default-features`
 #     (retroglyph#757, #843, #882): real feature-interaction coverage, each added after a real bug
 #     -- left out of this fast loop, not left uncovered, see below.

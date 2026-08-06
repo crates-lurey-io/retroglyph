@@ -83,7 +83,9 @@ impl Surface<'_> {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Grid, Pos, Rect, Style, Surface};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Pos, Rect};
+    /// use retroglyph_core::surface::Surface;
     ///
     /// let mut grid = Grid::new(4, 4);
     /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0);
@@ -119,7 +121,9 @@ impl Surface<'_> {
 
     /// [`put`](Self::put), in coordinates relative to this surface's own area origin, where a
     /// negative coordinate is expressible and simply falls outside (a no-op, matching `put`'s
-    /// out-of-bounds behavior).
+    /// out-of-bounds behavior). A coordinate that stays non-negative but exceeds `u16::MAX` after
+    /// this surface's translate offset is subtracted is dropped the same way: it addresses a cell
+    /// this surface's `u16` grid space cannot name.
     ///
     /// Scrolling/camera code (e.g. a viewport over a wider world) computes positions in a
     /// coordinate space that can go negative relative to the viewport, which [`Pos`] (backed by
@@ -129,7 +133,9 @@ impl Surface<'_> {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Grid, Pos, Rect, Style, Surface};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Pos, Rect};
+    /// use retroglyph_core::surface::Surface;
     ///
     /// let mut grid = Grid::new(4, 4);
     /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0);
@@ -195,7 +201,9 @@ impl Surface<'_> {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Grid, Pos, Rect, Style, Surface};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Pos, Rect};
+    /// use retroglyph_core::surface::Surface;
     ///
     /// let mut grid = Grid::new(4, 4);
     /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0);
@@ -236,7 +244,7 @@ impl Surface<'_> {
     ///
     /// Always reads `grid`'s layer 0, regardless of which layer this surface itself is currently
     /// writing to: `grid` is typically a standalone buffer composed elsewhere (e.g.
-    /// `BoxStyle::render`'s output, or `retroglyph-widgets`' `join_h`/`join_v`), and per their own
+    /// `BoxStyle::render`'s output, or `retroglyph-ui`' `join_h`/`join_v`), and per their own
     /// docs those only ever populate layer 0. Reading this surface's own layer off `grid` instead
     /// (what [`Grid::blit`]'s single `layer` parameter would do if called directly) finds nothing
     /// there whenever this surface isn't on layer 0, and the copy silently does nothing.
@@ -256,7 +264,10 @@ impl Surface<'_> {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Grid, Layer, Rect, Style, Surface, Tile};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Rect};
+    /// use retroglyph_core::surface::{Layer, Surface};
+    /// use retroglyph_core::tile::Tile;
     ///
     /// let mut src = Grid::new(2, 2);
     /// src.put_tile(0, (0, 0), Tile::new('x', Style::default()));
@@ -339,7 +350,9 @@ impl Surface<'_> {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_core::{Grid, Pos, Rect, Style, Surface};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Pos, Rect};
+    /// use retroglyph_core::surface::Surface;
     ///
     /// let mut grid = Grid::new(4, 4);
     /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0);

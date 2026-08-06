@@ -22,7 +22,7 @@
 //!   (opening the raw `.snap` text file directly wouldn't render, since
 //!   insta prepends a YAML header that isn't valid SVG).
 //!
-//! [`Headless::format_view`]: retroglyph_core::Headless::format_view
+//! [`Headless::format_view`]: retroglyph_core::backend::Headless::format_view
 
 #![allow(dead_code)] // not every test file uses every helper
 
@@ -58,7 +58,7 @@ pub fn headless_snapshot<E: Example>(frames: u32) -> String {
 #[cfg(all(feature = "software", not(target_arch = "wasm32")))]
 #[must_use]
 pub fn png_snapshot<E: Example>(cols: u16, rows: u16, scale: u8) -> Vec<u8> {
-    use retroglyph_core::Terminal;
+    use retroglyph_core::terminal::Terminal;
     use retroglyph_software::SoftwareBackendBuilder;
     use retroglyph_window::Presenter;
 
@@ -82,7 +82,7 @@ pub fn png_snapshot<E: Example>(cols: u16, rows: u16, scale: u8) -> Vec<u8> {
 
     let mut term = Terminal::new(renderer);
     let mut state = E::init(&mut term);
-    let frame = retroglyph_core::Frame {
+    let frame = retroglyph_core::app::Frame {
         delta: retroglyph_examples::HEADLESS_FRAME_DELTA,
         frame: 0,
     };
@@ -195,7 +195,7 @@ const POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(5);
 ///
 /// This is a liveness check, not a wall-clock budget, and the difference is the whole point. An
 /// example whose marker only appears once an animation has finished measures that animation in
-/// real elapsed time, and [`FrameClock::advance`](retroglyph_core::FrameClock::advance) caps
+/// real elapsed time, and [`FrameClock::advance`](retroglyph_core::frames::FrameClock::advance) caps
 /// catch-up at five steps -- so every stretch the child spends descheduled under a loaded runner
 /// is animation time it never gets back, and a fixed total budget turns that into an
 /// intermittent, load-dependent failure (retroglyph#544). Measuring "has it stopped talking to
@@ -246,7 +246,7 @@ const ANIMATION_TIME_SCALE: &str = "20";
 /// frame. `06_layers` and `08_animation` deliberately do not: both animate to a parked end state
 /// and announce *that*, because an animation that loops forever never settles into a single frame
 /// a snapshot can pin. That makes their markers a wall-clock wait, and
-/// [`FrameClock`](retroglyph_core::FrameClock)'s catch-up cap means the wait cannot be made up
+/// [`FrameClock`](retroglyph_core::frames::FrameClock)'s catch-up cap means the wait cannot be made up
 /// after a stall -- see [`READY_IDLE_TIMEOUT`] and retroglyph#544.
 ///
 /// Scaling time keeps the marker's meaning intact ("the animation has settled", still reached by
@@ -494,7 +494,16 @@ pub fn capture_pty_until(
         }
     }
 
-    writer.write_all(b"q").expect("write quit");
+    // Only pokes the child if it hasn't already quit on its own: an example whose own quit key
+    // differs from `q` (sent as part of `input` above, e.g. Escape) can already have exited by
+    // this point, and writing to a PTY whose slave side is fully closed fails with `EIO` on
+    // macOS -- `try_wait` (already used the same way in `wait_for_marker` above) tells the two
+    // cases apart without adding a real wait of its own; a `try_wait` error is treated the same
+    // as "still running" so every existing caller (whose child is always alive here) keeps
+    // sending `q` exactly as before.
+    if !matches!(child.try_wait(), Ok(Some(_))) {
+        writer.write_all(b"q").expect("write quit");
+    }
     drop(writer);
     let _ = child.wait();
 

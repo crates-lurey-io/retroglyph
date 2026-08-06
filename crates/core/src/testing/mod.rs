@@ -1,11 +1,12 @@
-//! Headless test harness driving an [`App`] with synthetic input.
+//! Headless test harness driving an [`App`](crate::app::App) with synthetic input.
 //!
 //! Also home to [`conformance`](crate::testing::conformance), the cross-backend harness that
 //! tests a raw [`Backend`](crate::backend::Backend) facet against its own trait contract.
 //!
-//! [`TestHarness`] exists so every consumer stops rewriting the same loop by hand
-//! (retroglyph#612): `Headless` gives a test a backend and [`Headless::push_event`]; everything
-//! between that and an assertion used to be the consumer's own problem. Feature-gated
+//! [`TestHarness`](crate::testing::TestHarness) owns the drive-until-settled loop that a test
+//! would otherwise hand-roll around `Headless` (retroglyph#612): `Headless` supplies the backend
+//! and [`Headless::push_event`](crate::backend::Headless::push_event), and the harness supplies
+//! everything between that and the assertion. Feature-gated
 //! (`testing`), no effect on release builds. Not a UI-testing framework: no assertions, no
 //! matchers, no fixtures, just the loop and the input synthesis that otherwise gets rewritten per
 //! consumer. See ["Driving an `App` with `TestHarness`"](https://github.com/crates-lurey-io/retroglyph/blob/main/docs/testing.md#driving-an-app-with-testharness)
@@ -31,22 +32,32 @@ use alloc::string::String;
 use core::fmt;
 use core::time::Duration;
 
-/// Fixed per-frame delta [`TestHarness::step`] hands to [`App::update`].
+/// Fixed per-frame delta [`TestHarness::step`](crate::testing::TestHarness::step) hands to [`App::update`](crate::app::App::update).
 ///
-/// Headless tests have no wall clock; this exists only so [`Frame::delta`]-driven code (tweens,
-/// [`FrameClock`](crate::FrameClock)) advances instead of stalling.
+/// Headless tests have no wall clock; this exists only so [`Frame::delta`](crate::app::Frame::delta)-driven code (tweens,
+/// [`FrameClock`](crate::frames::FrameClock)) advances instead of stalling. 16ms is one frame at
+/// ~60fps; the value is otherwise arbitrary, but it is load-bearing for any test that counts steps
+/// to reach an animation state: a duration-D animation finishes in `ceil(D / 16ms)` steps, so
+/// changing this shifts those step counts.
 pub const STEP_DELTA: Duration = Duration::from_millis(16);
 
-/// Default step budget for [`TestHarness::run`].
+/// Default step budget for [`TestHarness::run`](crate::testing::TestHarness::run) before it treats a
+/// non-draining event queue as a stuck app and panics.
+///
+/// Sized to comfortably clear any single queued gesture (a click is two events, the two-frame rule
+/// costs a frame each), with headroom, while still failing fast on an app that never drains its
+/// input. The exact value is picked by feel, not measured; a test with a legitimately long settle
+/// should call [`settle`](crate::testing::TestHarness::settle) with a larger budget rather than
+/// raise this shared default.
 pub const DEFAULT_MAX_STEPS: u32 = 64;
 
-/// Drives an [`App`] against a [`Headless`] backend: queues synthetic input, steps frames, and
+/// Drives an [`App`](crate::app::App) against a [`Headless`](crate::backend::Headless) backend: queues synthetic input, steps frames, and
 /// reads back the rendered view.
 ///
 /// # The two-frame rule
 ///
 /// A press and a release queued together resolve a frame later than the same gesture arriving
-/// from real input, because hit-testing (e.g. `retroglyph-widgets`' `Interaction`) snapshots the
+/// from real input, because hit-testing (e.g. `retroglyph-ui`' `Interaction`) snapshots the
 /// *previous* frame's pointer state before this frame's queued events are applied. [`click`](
 /// Self::click) queues both events for you, but resolving them still costs two frames: call
 /// [`run`](Self::run) or [`settle`](Self::settle) after queuing input, not a single
@@ -54,7 +65,7 @@ pub const DEFAULT_MAX_STEPS: u32 = 64;
 ///
 /// # Presenting
 ///
-/// [`step`](Self::step) presents automatically: skipped on [`Flow::Idle`], skipped as a no-op if
+/// [`step`](Self::step) presents automatically: skipped on [`Flow::Idle`](crate::app::Flow::Idle), skipped as a no-op if
 /// `update` already presented (mirroring [`run_blocking`](crate::app::run_blocking)'s own
 /// behavior). Nothing queued is visible in [`view`](Self::view) until a `step` call has run.
 ///
@@ -62,7 +73,10 @@ pub const DEFAULT_MAX_STEPS: u32 = 64;
 ///
 /// ```
 /// use retroglyph_core::testing::TestHarness;
-/// use retroglyph_core::{App, Backend, Flow, Frame, Style, Terminal};
+/// use retroglyph_core::app::{App, Flow, Frame};
+/// use retroglyph_core::backend::Backend;
+/// use retroglyph_core::color::Style;
+/// use retroglyph_core::terminal::Terminal;
 ///
 /// struct Counter(u32);
 ///
@@ -97,7 +111,7 @@ pub struct TestHarness {
 }
 
 impl TestHarness {
-    /// Creates a harness with a `width` x `height` [`Headless`] backend.
+    /// Creates a harness with a `width` x `height` [`Headless`](crate::backend::Headless) backend.
     #[must_use]
     pub fn new(width: u16, height: u16) -> Self {
         Self {
@@ -111,14 +125,14 @@ impl TestHarness {
     ///
     /// Only queues: the app does not see it until a frame runs. Prefer the typed helpers
     /// ([`click`](Self::click), [`key`](Self::key), [`mouse_move`](Self::mouse_move)) unless the
-    /// [`Event`] variant needed isn't one of them.
+    /// [`Event`](crate::event::Event) variant needed isn't one of them.
     pub fn push_event(&mut self, event: Event) {
         self.queued.push_back(event);
     }
 
     /// Queues a left-button click (press then release) at `(x, y)`, with no modifiers.
     ///
-    /// See "the two-frame rule" on [`TestHarness`] before asserting after a single
+    /// See "the two-frame rule" on [`TestHarness`](crate::testing::TestHarness) before asserting after a single
     /// [`step`](Self::step): use [`run`](Self::run)/[`settle`](Self::settle) instead.
     pub fn click(&mut self, x: u16, y: u16) {
         self.click_button(x, y, MouseButton::Left);
@@ -160,10 +174,10 @@ impl TestHarness {
         self.push_event(Event::Key(KeyEvent::new(code, modifiers)));
     }
 
-    /// Resizes the backend and queues the matching [`Event::Resize`] a real terminal would also
+    /// Resizes the backend and queues the matching [`Event::Resize`](crate::event::Event::Resize) a real terminal would also
     /// deliver.
     ///
-    /// Unlike calling <code>[term_mut](Self::term_mut)().[resize](Terminal::resize)</code>
+    /// Unlike calling <code>[term_mut](Self::term_mut)().[resize](crate::terminal::Terminal::resize)</code>
     /// directly, this also queues the event, matching what a real backend delivers alongside its
     /// own resize.
     pub fn resize(&mut self, width: u16, height: u16) {
@@ -172,10 +186,10 @@ impl TestHarness {
     }
 
     /// Runs exactly one frame: pops at most one queued event into the backend, calls
-    /// [`App::update`], and presents unless `update` returned [`Flow::Idle`] or already presented.
+    /// [`App::update`](crate::app::App::update), and presents unless `update` returned [`Flow::Idle`](crate::app::Flow::Idle) or already presented.
     ///
     /// Draining only one queued event per call, rather than the whole queue at once, is what
-    /// reproduces the two-frame rule described on [`TestHarness`] instead of masking it.
+    /// reproduces the two-frame rule described on [`TestHarness`](crate::testing::TestHarness) instead of masking it.
     pub fn step<A: App<Headless>>(&mut self, app: &mut A) -> Flow {
         if let Some(event) = self.queued.pop_front() {
             self.term.backend_mut().push_event(event);
@@ -197,15 +211,15 @@ impl TestHarness {
     }
 
     /// Runs [`step`](Self::step) until the event queue is empty (with at least one frame run),
-    /// stopping early on [`Flow::Exit`], bounded by `max_steps`.
+    /// stopping early on [`Flow::Exit`](crate::app::Flow::Exit), bounded by `max_steps`.
     ///
     /// This is the "run until settled" primitive: queuing input only stages it, `settle` resolves
-    /// the two-frame rule (see [`TestHarness`]) instead of requiring two manual `step` calls per
+    /// the two-frame rule (see [`TestHarness`](crate::testing::TestHarness)) instead of requiring two manual `step` calls per
     /// gesture.
     ///
     /// # Errors
     ///
-    /// Returns [`RunError::ExceededMaxSteps`] if the queue is still non-empty after `max_steps`
+    /// Returns [`RunError::ExceededMaxSteps`](crate::testing::RunError::ExceededMaxSteps) if the queue is still non-empty after `max_steps`
     /// steps: an app that never drains its input is a bug in the test or the app, not a case to
     /// loop on forever.
     pub fn settle<A: App<Headless>>(
@@ -239,7 +253,7 @@ impl TestHarness {
         }
     }
 
-    /// Runs a fixed number of frames, regardless of queue state or the [`Flow`] each one returns.
+    /// Runs a fixed number of frames, regardless of queue state or the [`Flow`](crate::app::Flow) each one returns.
     ///
     /// For tests asserting on the app still running after N frames (e.g. an idle animation)
     /// rather than on input settling; [`run`](Self::run)/[`settle`](Self::settle) cover the
@@ -251,31 +265,31 @@ impl TestHarness {
     }
 
     /// The rendered view as of the last [`step`](Self::step) call (see
-    /// [`Headless::format_view`]).
+    /// [`Headless::format_view`](crate::backend::Headless::format_view)).
     #[must_use]
     pub fn view(&self) -> String {
         self.term.backend().format_view()
     }
 
-    /// The underlying [`Terminal`], for anything not wrapped directly (cursor position,
-    /// [`Terminal::grid`], a manual [`Terminal::draw`] outside the `App` loop).
+    /// The underlying [`Terminal`](crate::terminal::Terminal), for anything not wrapped directly (cursor position,
+    /// [`Terminal::grid`](crate::terminal::Terminal::grid), a manual [`Terminal::draw`](crate::terminal::Terminal::draw) outside the `App` loop).
     #[must_use]
     pub const fn term(&self) -> &Terminal<Headless> {
         &self.term
     }
 
-    /// The underlying [`Terminal`], mutably.
+    /// The underlying [`Terminal`](crate::terminal::Terminal), mutably.
     #[must_use]
     pub const fn term_mut(&mut self) -> &mut Terminal<Headless> {
         &mut self.term
     }
 }
 
-/// Error returned by [`TestHarness::settle`] when the queue never drained within the step budget.
+/// Error returned by [`TestHarness::settle`](crate::testing::TestHarness::settle) when the queue never drained within the step budget.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum RunError {
-    /// The queue still had pending events after `max_steps` [`TestHarness::step`] calls.
+    /// The queue still had pending events after `max_steps` [`TestHarness::step`](crate::testing::TestHarness::step) calls.
     ExceededMaxSteps {
         /// The budget that was exceeded.
         max_steps: u32,

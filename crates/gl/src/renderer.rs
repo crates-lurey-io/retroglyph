@@ -10,12 +10,12 @@
 // is intentional, so it's allowed crate-locally.
 #![allow(clippy::redundant_pub_crate)]
 
-use crate::atlas::{ATLAS_COLS, ATLAS_ROWS, AtlasData};
 use crate::error::SurfaceError;
 use crate::shaders::{GlslFlavor, Shader, source};
 #[cfg(feature = "tilesets")]
 use crate::sprites::{SpriteInstance, SpriteSet};
 use glow::HasContext as _;
+use retroglyph_window::atlas::{ATLAS_COLS, ATLAS_ROWS, AtlasData};
 
 /// Per-cell instance data, tightly packed to 16 bytes and uploaded straight to the GPU.
 ///
@@ -710,6 +710,10 @@ impl SpriteGpu {
 
             // Source-over blend so a sprite's transparent pixels reveal what's beneath; keep the
             // framebuffer alpha at 1 (`ONE`/`ONE_MINUS_SRC_ALPHA`) so the surface stays opaque.
+            //
+            // This composites sRGB-encoded values, not linear light, matching the CPU rasterizer
+            // this backend is checked against and the editors tilesets are drawn in. Deliberate;
+            // see `docs/references/core/color-space.md`.
             gl.enable(glow::BLEND);
             gl.blend_func_separate(
                 glow::SRC_ALPHA,

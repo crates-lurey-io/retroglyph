@@ -10,3 +10,6 @@
 # Generated files
 .bin/
 
+# Local pi tooling artifacts
+.pi-subagents/
+

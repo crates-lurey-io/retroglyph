@@ -16,7 +16,7 @@
 //!
 //! impl retroglyph_examples::Example for MyExample {
 //!     const NAME: &'static str = "my_example";
-//!     fn tick<B: retroglyph_core::Backend>(&mut self, term: &mut retroglyph_core::Terminal<B>) -> bool { todo!() }
+//!     fn tick<B: retroglyph_core::backend::Backend>(&mut self, term: &mut retroglyph_core::terminal::Terminal<B>) -> bool { todo!() }
 //! }
 //!
 //! retroglyph_examples::example_main!(MyExample);
@@ -36,7 +36,12 @@
 
 // Only the live backends have a frame rate worth reporting: the headless paths are frame-stepped
 // at a fixed synthetic delta, and nothing there constructs the `ExampleApp` driver that draws it.
-#[cfg(any(feature = "crossterm", feature = "software", feature = "gl"))]
+#[cfg(any(
+    feature = "crossterm",
+    feature = "software",
+    feature = "gl",
+    feature = "wgpu"
+))]
 mod fps;
 mod launch;
 pub mod util;
@@ -52,5 +57,7 @@ pub use launch::run_crossterm;
 #[cfg(feature = "gl")]
 pub use launch::run_gl;
 pub use launch::run_headless_stdout;
+#[cfg(feature = "wgpu")]
+pub use launch::run_wgpu;
 #[cfg(feature = "software")]
 pub use launch::{run_software, run_software_with};

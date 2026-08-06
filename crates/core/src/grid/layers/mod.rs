@@ -148,7 +148,9 @@ impl Grid {
     /// [`Surface::fill_rect`](crate::surface::Surface::fill_rect)'s own fallback.
     ///
     /// ```
-    /// use retroglyph_core::{Grid, Pos, Rect, Style, Tile};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Pos, Rect};
+    /// use retroglyph_core::tile::Tile;
     ///
     /// let mut grid = Grid::new(4, 4);
     /// grid.fill_region(0, Rect::new(1, 1, 2, 2), Tile::new('#', Style::default()));
@@ -262,8 +264,8 @@ impl Grid {
     /// matters because [`max_layer`](Self::max_layer) only ever grows on write (see its own doc):
     /// a layer that is merely cleared still counts toward it, while a deallocated one does not,
     /// letting `max_layer` fall back down once every layer above it is also gone. This is what lets
-    /// [`crate::Terminal::drop_layer`] undo a layer's permanent allocation and, once every layer
-    /// above 0 is dropped, put [`crate::Terminal::present`] back on its single-layer fast path
+    /// [`crate::terminal::Terminal::drop_layer`] undo a layer's permanent allocation and, once every layer
+    /// above 0 is dropped, put [`crate::terminal::Terminal::present`] back on its single-layer fast path
     /// (retroglyph#1028).
     ///
     /// If `layer` was the current `max_layer`, the table is rescanned downward for the next
@@ -296,7 +298,7 @@ impl Grid {
     /// Whether `layer` is unallocated, or allocated but every tile on it is untouched (see
     /// [`Tile::is_empty`]).
     ///
-    /// Used by [`crate::Terminal::drop_layer`]'s deferred deallocation to tell a layer that is
+    /// Used by [`crate::terminal::Terminal::drop_layer`]'s deferred deallocation to tell a layer that is
     /// still genuinely empty (safe to free) apart from one that was redrawn after the drop was
     /// requested (some tile is no longer empty), which must cancel the drop instead of silently
     /// discarding content the app just wrote.
@@ -311,7 +313,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_grid_put_get() {
+    fn put_tile_then_index_reads_back_the_written_glyph() {
         let mut grid = Grid::new(10, 10);
         let tile = Tile::default().with_glyph('X');
 
@@ -320,7 +322,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_checked_put_get() {
+    fn put_tile_then_tile_reads_back_the_written_glyph_and_out_of_bounds_is_none() {
         let mut grid = Grid::new(10, 10);
         let tile = Tile::default().with_glyph('Y');
 
@@ -332,13 +334,13 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_put_tile_out_of_bounds_returns_none() {
+    fn put_tile_out_of_bounds_returns_none() {
         let mut grid = Grid::new(10, 10);
         assert!(grid.put_tile(0, (10, 0), Tile::default()).is_none());
     }
 
     #[test]
-    fn test_grid_layers_yields_every_allocated_cell_in_layer_then_row_major_order() {
+    fn layers_yields_every_allocated_cell_in_layer_then_row_major_order() {
         let mut grid = Grid::new(2, 2);
         grid.put_tile(0, (1, 0), Tile::default().with_glyph('A'));
         grid.put_tile(2, (0, 1), Tile::default().with_glyph('B'));
@@ -366,7 +368,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_layer_zero_always_allocated() {
+    fn layer_zero_always_allocated() {
         let g = Grid::new(5, 5);
         assert!(g.layer(0).is_some());
         for id in 1u8..=5 {
@@ -375,7 +377,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_put_tile_allocates_layer() {
+    fn put_tile_allocates_layer() {
         let mut g = Grid::new(5, 5);
         g.put_tile(3, (0, 0), Tile::new('@', Style::default()));
         assert!(g.layer(3).is_some());
@@ -383,7 +385,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_new_layer_table_starts_at_a_single_slot() {
+    fn new_layer_table_starts_at_a_single_slot() {
         // retroglyph#264: the layer-table `Vec` itself should start small (a single slot for
         // layer 0), not pre-allocate all 256 possible slots up front.
         let g = Grid::new(5, 5);
@@ -392,7 +394,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_layer_or_alloc_grows_table_lazily_to_the_written_id() {
+    fn layer_or_alloc_grows_table_lazily_to_the_written_id() {
         let mut g = Grid::new(5, 5);
         g.put_tile(10, (0, 0), Tile::new('@', Style::default()));
         // The table grows to exactly `id + 1` slots, not all 256.
@@ -405,7 +407,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_layer_beyond_table_length_reads_as_none() {
+    fn layer_beyond_table_length_reads_as_none() {
         // A layer id past the current table length (never written) must read identically to an
         // in-bounds `None` slot, not panic or error.
         let g = Grid::new(5, 5);
@@ -416,7 +418,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_clear_beyond_table_length_is_a_no_op() {
+    fn clear_beyond_table_length_is_a_no_op() {
         // Clearing an id past the current table length must not panic: it's equivalent to
         // clearing an unallocated in-bounds layer (does nothing).
         let mut g = Grid::new(5, 5);
@@ -449,13 +451,13 @@ mod tests {
 
     #[test]
     #[should_panic(expected = "layer 0 is always allocated")]
-    fn test_grid_deallocate_layer_zero_panics() {
+    fn deallocate_layer_zero_panics() {
         let mut g = Grid::new(4, 4);
         g.deallocate_layer(0);
     }
 
     #[test]
-    fn test_grid_deallocate_layer_the_top_layer_lowers_max_layer() {
+    fn deallocate_layer_the_top_layer_lowers_max_layer() {
         let mut g = Grid::new(4, 4);
         g.put_tile(3, (0, 0), Tile::new('@', Style::default()));
         assert_eq!(g.max_layer(), 3);
@@ -466,7 +468,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_deallocate_layer_rescans_down_to_the_next_allocated_layer() {
+    fn deallocate_layer_rescans_down_to_the_next_allocated_layer() {
         let mut g = Grid::new(4, 4);
         g.put_tile(2, (0, 0), Tile::new('a', Style::default()));
         g.put_tile(5, (0, 0), Tile::new('b', Style::default()));
@@ -479,7 +481,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_deallocate_layer_below_the_top_leaves_max_layer_unchanged() {
+    fn deallocate_layer_below_the_top_leaves_max_layer_unchanged() {
         let mut g = Grid::new(4, 4);
         g.put_tile(2, (0, 0), Tile::new('a', Style::default()));
         g.put_tile(5, (0, 0), Tile::new('b', Style::default()));
@@ -491,7 +493,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_deallocate_layer_reads_back_as_unallocated() {
+    fn deallocate_layer_reads_back_as_unallocated() {
         let mut g = Grid::new(4, 4);
         g.put_tile(1, (0, 0), Tile::new('@', Style::default()));
         g.deallocate_layer(1);
@@ -499,7 +501,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_deallocate_layer_already_unallocated_is_a_no_op() {
+    fn deallocate_layer_already_unallocated_is_a_no_op() {
         let mut g = Grid::new(4, 4);
         g.deallocate_layer(1);
         assert_eq!(g.max_layer(), 0);
@@ -529,7 +531,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_layer_table_growth_is_monotonic_across_writes() {
+    fn layer_table_growth_is_monotonic_across_writes() {
         // Writing to a lower layer id after a higher one must not shrink the table, and must
         // preserve the higher layer's content.
         let mut g = Grid::new(5, 5);
@@ -547,7 +549,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_put_and_get_on_layer_2() {
+    fn put_tile_on_layer_2_reads_back_independently_of_layer_0() {
         use crate::color::Style;
         let mut g = Grid::new(5, 5);
         g.put_tile(2, (1, 1), Tile::new('Z', Style::default()));
@@ -559,7 +561,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_tile_mut_writes_in_place_without_clearing_spans() {
+    fn tile_mut_writes_in_place_without_clearing_spans() {
         let mut g = Grid::new(4, 4);
         g.write_span(0, 0, 0, &["C=", "[]"], Style::default())
             .unwrap();
@@ -575,7 +577,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_clear_layer() {
+    fn clear_layer_resets_only_that_layer() {
         let mut g = Grid::new(5, 5);
         g.put_tile(1, (0, 0), Tile::new('Z', Style::default()));
         g.put_tile(0, (0, 0), Tile::new('A', Style::default()));
@@ -586,7 +588,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_clear_all() {
+    fn clear_all_resets_every_layer() {
         let mut g = Grid::new(5, 5);
         g.put_tile(1, (0, 0), Tile::new('Z', Style::default()));
         g.put_tile(0, (0, 0), Tile::new('A', Style::default()));
@@ -597,7 +599,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_clone_is_independent() {
+    fn clone_is_independent() {
         let mut g = Grid::new(3, 3);
         g.put_tile(0, (0, 0), Tile::new('A', Style::default()));
         g.put_tile(2, (1, 1), Tile::new('B', Style::default()));

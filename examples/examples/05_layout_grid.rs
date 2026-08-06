@@ -1,7 +1,7 @@
 //! 05: Layout grid
 //!
 //! Core [`Rect`] geometry: subdividing the 50x25 grid into panes by hand, with manual
-//! arithmetic only. `retroglyph-widgets`'s `split_h`/`split_v`/`Constraint`/`Flex` would make
+//! arithmetic only. `retroglyph-ui`'s `split_h`/`split_v`/`Constraint`/`Flex` would make
 //! this shorter, and `09_widgets_dashboard` shows that path; this example is the plain `Rect`
 //! math baseline instead. Each pane gets a box-drawn border and a centered label.
 //!
@@ -13,8 +13,12 @@
 //!
 //! Keys: `q` or `Escape` quits, or close the window.
 
+use retroglyph_core::backend::Backend;
+use retroglyph_core::color::Style;
 use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::{Backend, Rect, Style, Surface, Terminal};
+use retroglyph_core::grid::Rect;
+use retroglyph_core::surface::Surface;
+use retroglyph_core::terminal::Terminal;
 use retroglyph_examples::Example;
 
 /// State for the layout example (none needed: the pane layout never changes).
@@ -24,7 +28,7 @@ pub struct LayoutGrid;
 /// Splits `rect` into a left pane of `left_width` columns and a right pane filling the rest.
 ///
 /// The manual arithmetic a real app writes before reaching for
-/// `retroglyph-widgets`'s `split_h`: no library call, just `Rect::new` twice
+/// `retroglyph-ui`'s `split_h`: no library call, just `Rect::new` twice
 /// with the second pane's `x`/`width` derived from the first.
 const fn split_h(rect: Rect, left_width: u16) -> (Rect, Rect) {
     let left = Rect::new(rect.left(), rect.top(), left_width, rect.height());
@@ -116,7 +120,7 @@ impl Example for LayoutGrid {
     fn tick<B: Backend>(
         &mut self,
         term: &mut Terminal<B>,
-        _frame: &retroglyph_core::Frame,
+        _frame: &retroglyph_core::app::Frame,
     ) -> bool {
         if !self.handle_events(term) {
             return false;

@@ -19,8 +19,8 @@ impl Surface<'_> {
     /// area's own top-left, matching [`put_signed`](Self::put_signed)'s convention), not an
     /// absolute grid coordinate: a local check against `(0, 0)..(width, height)` here, followed
     /// by re-adding [`area`](Self::area)'s own top-left, so a clipped area that does not itself
-    /// start at grid `(0, 0)` (e.g. [`Camera::surface`](crate::Camera::surface)'s
-    /// `clip_translate`) still resolves to the right absolute cell. The result is then checked
+    /// start at grid `(0, 0)` (e.g. a scrolling-camera widget's `clip_translate`-based
+    /// `surface` method) still resolves to the right absolute cell. The result is then checked
     /// against [`clip_rect`](Self::clip_rect), not `area`, since the clip, never the area, is
     /// what decides whether a write lands.
     pub(super) fn shift(&self, x: u16, y: u16) -> Option<(u16, u16)> {
@@ -37,6 +37,19 @@ impl Surface<'_> {
         let gx = self.area.left() + sx;
         let gy = self.area.top() + sy;
         self.clip.contains(gx, gy).then_some((gx, gy))
+    }
+
+    /// The exclusive right column, in this surface's own (possibly translated) coordinate space,
+    /// past which `print`/`print_line` stop a row: they wrap onto the next row, or skip the
+    /// remaining spans, once the cursor reaches it.
+    ///
+    /// `shift` subtracts `origin_offset` from every incoming coordinate before bounds-checking it,
+    /// so the cursor the text writers advance lives in that shifted space. The threshold has to
+    /// live there too, or a translated surface (any `Camera::surface`, or a plain `translate`)
+    /// wraps or skips early by exactly the offset. The result is `i64` because folding the offset
+    /// back into a `u16` clip edge can land outside the `u16` range in either direction.
+    pub(super) fn wrap_right(&self) -> i64 {
+        i64::from(self.clip.right()) - i64::from(self.area.left()) + i64::from(self.origin_offset.0)
     }
 
     /// Applies this surface's tint to the cell just written at `(x, y)`.

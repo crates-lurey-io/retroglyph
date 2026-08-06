@@ -1,6 +1,6 @@
 //! 13: Combat log
 //!
-//! Four `retroglyph-widgets` widgets none of the earlier examples exercise: [`StatBar`] (a
+//! Four `retroglyph-ui` widgets none of the earlier examples exercise: [`StatBar`] (a
 //! health readout), [`Log`] (a scrolled-back message tail), [`Scrollbar`] (its track and thumb),
 //! and [`Modal`] (a centered end-of-game dialog). A turn-based fight against a fixed-stat
 //! goblin, deterministic on purpose: every attack does the same damage, so every run, and every
@@ -30,11 +30,16 @@
 //! Keys: `a` attacks. `Up`/`Down`, or the mouse wheel over the log, scroll it. `r` resets after
 //! the fight ends. `q` or `Escape` quits at any time.
 
+use retroglyph_core::app::Frame;
+use retroglyph_core::backend::Backend;
+use retroglyph_core::color::{AnsiColor, Color, Style};
 use retroglyph_core::event::{Event, KeyCode};
+use retroglyph_core::grid::Rect;
+use retroglyph_core::surface::Surface;
+use retroglyph_core::terminal::Terminal;
 use retroglyph_core::text::Line;
-use retroglyph_core::{AnsiColor, Backend, Color, Frame, Rect, Style, Surface, Terminal};
 use retroglyph_examples::Example;
-use retroglyph_widgets::{Interaction, Log, Modal, ScrollState, Scrollbar, Sense, StatBar, Widget};
+use retroglyph_ui::{Interaction, Log, Modal, ScrollState, Scrollbar, Sense, StatBar, Widget};
 
 const PLAYER_MAX_HP: u32 = 30;
 const ENEMY_MAX_HP: u32 = 40;

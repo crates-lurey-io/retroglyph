@@ -24,7 +24,7 @@ pub(super) struct WrappedLine {
     pub(super) width: u16,
 }
 
-/// Greedy word-wrap over a [`Line`]'s spans.
+/// Greedy word-wrap over a [`Line`](crate::text::Line)'s spans.
 ///
 /// Breaks on ASCII space (`' '`): the space is consumed (not placed) at the
 /// break point, and overlong words are force-broken at the column boundary.
@@ -107,7 +107,7 @@ pub(super) fn wrap_line(line: &Line, max_width: u16) -> Vec<WrappedLine> {
     lines
 }
 
-/// Word-wraps `line` to `max_width` columns, returning the broken-apart [`Line`]s.
+/// Word-wraps `line` to `max_width` columns, returning the broken-apart [`Line`](crate::text::Line)s.
 ///
 /// This is the same greedy, grapheme-cluster-aware wrap pass [`TextLayout`](super::TextLayout)
 /// runs internally on every render (breaking on ASCII space, honoring hard `\n`s, force-breaking
@@ -117,8 +117,8 @@ pub(super) fn wrap_line(line: &Line, max_width: u16) -> Vec<WrappedLine> {
 /// messages.
 ///
 /// Each returned `Line` is a single unstyled or uniformly-styled run per source span that
-/// survived onto that row; adjacent graphemes carrying the same [`Style`] are coalesced back
-/// into one [`Span`], so wrapping a plain [`Line::raw`] round-trips to plain `Line::raw` rows.
+/// survived onto that row; adjacent graphemes carrying the same [`Style`](crate::color::Style) are coalesced back
+/// into one [`Span`](crate::text::Span), so wrapping a plain [`Line::raw`](crate::text::Line::raw) round-trips to plain `Line::raw` rows.
 ///
 /// # Examples
 ///

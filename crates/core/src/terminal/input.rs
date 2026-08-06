@@ -54,7 +54,7 @@ impl<B: Backend> Terminal<B> {
     /// call yields them again before the backend is polled for anything new.
     ///
     /// This is the supported way for a wrapper that drains events to intercept some of them
-    /// (e.g. `retroglyph-widgets`' `PerfOverlayApp` filtering out its own toggle key) to give
+    /// (e.g. `retroglyph-ui`' `PerfOverlayApp` filtering out its own toggle key) to give
     /// the rest back: it goes through `Terminal`'s own queue, never a backend-specific input
     /// path, so it works identically on every [`Backend`] regardless of how (or whether) that
     /// backend implements [`Input::push_event`](crate::backend::Input::push_event).
@@ -136,7 +136,7 @@ impl<B: Backend> Terminal<B> {
     /// [`drain_events`](Self::drain_events) call still observes it: this method only answers
     /// "did something happen", it never hands the event to the caller. That's what lets a driver
     /// loop block between frames without stealing the event the app's own `update` reads; see
-    /// [`run_blocking_with`](crate::run_blocking_with)'s use of this for [`Flow::Idle`](crate::Flow::Idle).
+    /// [`run_blocking_with`](crate::app::run_blocking_with)'s use of this for [`Flow::Idle`](crate::app::Flow::Idle).
     ///
     /// Returns `true` if an event arrived within `timeout`, `false` if `timeout` elapsed with
     /// nothing pending. Pass [`Duration::MAX`] to block indefinitely.

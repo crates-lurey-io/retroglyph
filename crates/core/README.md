@@ -10,8 +10,8 @@ grid, tile, style, color, text, terminal, and event types, plus the `Backend` tr
 dependency-free `Headless` test backend. Platform backends
 ([`retroglyph-crossterm`](https://crates.io/crates/retroglyph-crossterm),
 [`retroglyph-software`](https://crates.io/crates/retroglyph-software)) and drawing helpers
-([`retroglyph-widgets`](https://crates.io/crates/retroglyph-widgets)) are separate crates that
-depend on this one.
+([`retroglyph-ui`](https://crates.io/crates/retroglyph-ui)) are separate crates that depend on this
+one.
 
 ## Quick start
 
@@ -21,7 +21,9 @@ cargo add retroglyph-core
 
 ```rust
 # fn main() -> Result<(), core::convert::Infallible> {
-use retroglyph_core::{Terminal, Color, Style, backend::Headless};
+use retroglyph_core::backend::Headless;
+use retroglyph_core::color::{Color, Style};
+use retroglyph_core::terminal::Terminal;
 
 let mut term = Terminal::new(Headless::new(80, 24));
 term.draw(|s| s.put((5, 5), '@', Style::new().fg(Color::GREEN)))?;
@@ -85,10 +87,10 @@ diffing and layout.
 
 ⚪ Optional.
 
-Uses `libm`'s software float implementation (`roundf`/`fmaf`/`sinf`/`cosf`/`powf`) for `animate`'s
-easing curves and the separable `BlendMode` channel math, via this crate's own `math` shim -- the
-`no_std` side of that split. See `std` below for the alternative that prefers the platform's own
-float intrinsics when available; a build needs exactly one of the two.
+Uses `libm`'s software float implementation (`roundf`/`fmaf`/`sinf`/`cosf`/`powf`) for the separable
+`BlendMode` channel math, via this crate's own `math` shim -- the `no_std` side of that split. See
+`std` below for the alternative that prefers the platform's own float intrinsics when available; a
+build needs exactly one of the two.
 
 ### `serde`
 
@@ -106,8 +108,7 @@ rather than a derived structural form, so hand-edited TOML/JSON stays legible.
 🟢 Enabled by default.
 
 Enables `gem/std` and `alpha-blend/std`, and uses `std`'s float intrinsics (via this crate's `math`
-shim) instead of `libm`'s software implementation for `animate` and the separable `BlendMode`
-channel math.
+shim) instead of `libm`'s software implementation for the separable `BlendMode` channel math.
 
 Disabling this feature (`--no-default-features`) builds this crate `no_std`, and then needs `libm`
 above as the float backend instead: see the crate-level `compile_error!` in `src/lib.rs`.

@@ -1,0 +1,126 @@
+[package]
+name = "retroglyph-wgpu"
+version = "0.1.0"
+description = "GPU rendering backend for retroglyph: Vulkan, Metal, D3D12, and WebGPU via wgpu"
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+# Unlike `retroglyph-gl`, this crate keeps the workspace lint table verbatim, `unsafe_code =
+# "forbid"` included: `wgpu` is a safe API (resource creation, draw calls, and buffer mapping are
+# all checked), and `bytemuck`'s derives cover the plain-old-data casts a renderer needs for its
+# instance and uniform buffers. Nothing here needs to opt out.
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[features]
+# Embeds the Unscii 16 default font so a caller can build a renderer with no font of its own.
+#
+# Forwards to `retroglyph-window`'s `default-font` feature.
+default-font = ["retroglyph-window/default-font"]
+# Forwards `retroglyph-core`'s `dev` feature, which forces development diagnostics on in a build
+# that would otherwise compile them out (see [`retroglyph_core::dev`]).
+dev = ["retroglyph-core/dev"]
+# PNG sprite/tileset support: decodes sprite sheets into an RGBA array-texture atlas and draws
+# them in a third, source-over blended pass per grid layer.
+#
+# Forwards to `retroglyph-window`'s shared tileset decode.
+tilesets = ["retroglyph-window/tilesets"]
+
+[dependencies]
+retroglyph-core = { path = "../core", version = "0.6.0", default-features = false, features = ["std"] }
+# The glyph source (BitmapFont + unscii16) lives in retroglyph-window's winit-free `font` module,
+# which this crate already depends on for `Presenter`. `default-font` forwards to window's feature.
+retroglyph-window = { path = "../window", version = "0.5.0", default-features = false }
+# `default-features = false` drops `gles`: OpenGL ES/WebGL2 is what `retroglyph-gl` already covers,
+# from a codebase that targets the GL feature floor directly; routing it through wgpu's translation
+# layer would add a second way to reach the same drivers without adding a platform. What is left is
+# the modern explicit-API set: Vulkan (Linux/Android/Windows), Metal (Apple), D3D12 (Windows), and
+# (wasm32 only, see the target section below) WebGPU. Naming all four costs nothing on any one
+# target: `wgpu-hal` gates each backend to the platforms it runs on, so a macOS build compiles the
+# Metal stack and no Vulkan, and a Linux build compiles `ash` and no Metal. `wgsl` is naga's WGSL
+# front end, required to compile `src/*.wgsl` at all.
+wgpu = { version = "30", default-features = false, features = [
+  "std",
+  "wgsl",
+  "vulkan",
+  "metal",
+  "dx12",
+] }
+# Plain-old-data casts for the instance and uniform buffers (`bytemuck::cast_slice`,
+# `bytes_of`). The derives generate the `Pod`/`Zeroable` impls with their safety conditions
+# checked at compile time, which is what lets this crate keep `unsafe_code = "forbid"`.
+bytemuck = { version = "1", features = ["derive"] }
+log = "0.4"
+raw-window-handle = "0.6"
+
+# `request_adapter`/`request_device` are `async` on every target. On a native target their futures
+# resolve without an executor, so the smallest possible block-on is all that is needed; pulling in
+# tokio or async-std for two calls at startup would be a much larger dependency for no gain.
+# `pollster::block_on` panics if a future actually yields, which is exactly what a browser main
+# thread's futures do (see the `wasm32` target section below), so this is native-only.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+pollster = "0.4"
+
+# `Presenter::init_surface` is synchronous, but `request_adapter`/`request_device` are `async` on
+# every target, and a browser main thread has no way to block on a future the way `pollster` does
+# natively. `crate::gpu` defers instead: it creates the surface synchronously (that part *is*
+# synchronous everywhere) and spawns the adapter/device request with `wasm_bindgen_futures::
+# spawn_local`, writing the result into a slot `Presenter::present` polls each frame. See
+# `crate::gpu::PendingGpu` and the crate docs' "Platform support" section.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# `webgpu` is the only addition needed on top of the shared feature list above: wgpu resolves
+# `RawWindowHandle::WebCanvas` (what winit reports on wasm32) to the DOM canvas internally, so this
+# crate needs no `web-sys` canvas lookup of its own (contrast `retroglyph-gl`'s `context_wasm.rs`,
+# which creates its WebGL2 context by hand and so does look the canvas up itself).
+wgpu = { version = "30", default-features = false, features = ["webgpu"] }
+# Drives the deferred adapter/device request (see the module comment above) on the browser's
+# microtask queue without blocking the main thread.
+wasm-bindgen-futures = "0.4"
+# Not called directly (there is no `wasm_bindgen::` reference in this crate's own code, unlike
+# `retroglyph-gl`'s `JsCast`/`Closure` use), but `wgpu`'s `webgpu` feature and `wasm-bindgen-futures`
+# both depend on it, and Cargo unifies target-specific dependencies into one workspace lockfile.
+# Pinned to match every other `wasm32` crate in the workspace (`crates/gl`, `crates/window`,
+# `crates/software`, `crates/terminal-wasm`, `examples`), so this crate's own manifest states the
+# same requirement rather than relying on a sibling crate's pin to hold the lockfile at one version
+# for it.
+wasm-bindgen = "=0.2.126"
+
+[dev-dependencies]
+# Cross-backend Output conformance harness (retroglyph#763): dev-only, so the `testing` feature's
+# assertion helpers never ship in a release build of this crate. `default-features = false`
+# matches the `[dependencies]` entry above: a dev-dependency's features unify with it regardless,
+# so leaving the default `true` here would silently turn `egc` (and the rest of core's defaults)
+# back on for every crate built alongside this one in the same `cargo` invocation.
+# No `version` key, unlike the `[dependencies]` entry: a dev-dependency that has one is kept in
+# the packaged manifest and has to resolve against the registry, so `testing` would need to be
+# live on crates.io before any crate that tests with it could publish. It isn't (it postdates
+# core 0.5.0), which broke this crate's first publish. Cargo drops a version-less dev-dependency
+# when packaging, so a test-only feature of a sibling crate no longer gates anyone's release.
+retroglyph-core = { path = "../core", default-features = false, features = ["testing"] }
+# The README quick start and `WgpuBackendBuilder`'s doc example call into `retroglyph_window::
+# winit`; this crate's own `[dependencies]` entry disables `winit` (a wgpu renderer needs only
+# `Presenter` and the font module), so doctests need it turned back on to compile those examples.
+retroglyph-window = { path = "../window", version = "0.5.0", features = ["winit"] }
+# Offscreen render tests (src/headless.rs): they run the real pipeline into a texture and read the
+# pixels back to compare against the CPU rasterizer (cross-backend parity).
+# `retroglyph-software` is that reference rasterizer; both backends share `retroglyph-window`'s
+# font, so the comparison is a real pixel-identity check. Deliberately no `version` key (see the
+# equivalent dev-dependency in crates/gl/Cargo.toml): release-plz doesn't order publishing by
+# dev-dependency edges, so a version pin here would make packaging this crate require
+# `retroglyph-software` to already be on crates.io even though nothing establishes that ordering.
+retroglyph-software = { path = "../software", default-features = false, features = [
+  "default-font",
+  "tilesets",
+] }
+# Generates tiny in-memory PNG tilesets for the sprite render tests.
+image = { version = "0.25", default-features = false, features = ["png"] }

@@ -1,7 +1,5 @@
-//! [`Grid::diff`], the zero-allocation per-cell change iterator [`Terminal::present`] and the
+//! [`Grid::diff`](crate::grid::Grid::diff), the zero-allocation per-cell change iterator [`Terminal::present`](crate::terminal::Terminal::present) and the
 //! software backend build on, plus its per-layer [`LayerDiff`] helper.
-//!
-//! [`Terminal::present`]: crate::Terminal::present
 
 use super::{Grid, Pos, flat_index_to_xy};
 use crate::backend::DrawCell;
@@ -145,7 +143,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_grid_diff() {
+    fn diff_reports_a_written_cell_as_a_draw_cell() {
         let mut g1 = Grid::new(2, 2);
         let g2 = Grid::new(2, 2);
 
@@ -160,14 +158,14 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_diff_empty_when_identical() {
+    fn diff_empty_when_identical() {
         let g = Grid::new(5, 5);
         let prev = Grid::new(5, 5);
         assert_eq!(g.diff(&prev).count(), 0);
     }
 
     #[test]
-    fn test_grid_diff_reports_changed_cell() {
+    fn diff_reports_changed_cell() {
         let mut cur = Grid::new(5, 5);
         let prev = Grid::new(5, 5);
         cur.put_tile(0, (2, 3), Tile::new('X', Style::default()));
@@ -179,7 +177,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_diff_new_layer_yields_all_cells() {
+    fn diff_new_layer_yields_all_cells() {
         let mut cur = Grid::new(3, 4);
         let prev = Grid::new(3, 4);
         cur.put_tile(1, (0, 0), Tile::new('A', Style::default()));
@@ -190,7 +188,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_diff_mismatched_sizes_yields_full_diff() {
+    fn diff_mismatched_sizes_yields_full_diff() {
         // A smaller `other` must not panic; every cell in `self` is reported as changed instead.
         let mut cur = Grid::new(3, 2);
         let prev = Grid::new(2, 2);
@@ -201,7 +199,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_diff_layer_major_order() {
+    fn diff_layer_major_order() {
         let mut cur = Grid::new(3, 3);
         let prev = Grid::new(3, 3);
         cur.put_tile(2, (0, 0), Tile::new('B', Style::default()));
@@ -213,7 +211,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_diff_reports_layer_that_stopped_being_written() {
+    fn diff_reports_layer_that_stopped_being_written() {
         // frame 1: a HUD is drawn on layer 5.
         let mut a = Grid::new(4, 4);
         a.put_tile(5, (0, 0), Tile::new('H', Style::default()));
@@ -231,7 +229,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_diff_stopped_layer_with_size_mismatch_yields_nothing_for_that_layer() {
+    fn diff_stopped_layer_with_size_mismatch_yields_nothing_for_that_layer() {
         // A layer that stopped being written *and* a size change happening at once can't be
         // expressed against `other`'s buffer, so it falls back to "nothing yielded", same as a
         // layer absent from both sides.
@@ -245,7 +243,7 @@ mod tests {
 
     #[cfg(feature = "egc")]
     #[test]
-    fn test_grid_diff_detects_grapheme_only_change() {
+    fn diff_detects_grapheme_only_change() {
         // Same glyph, style, and flags on both sides: only the combining
         // mark differs. A `Tile`-only diff would miss this.
         let mut cur = Grid::new(2, 2);
@@ -265,7 +263,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_diff_detects_tint_only_change() {
+    fn diff_detects_tint_only_change() {
         // Same glyph, style, and flags on both sides: only the tint (the side table's other
         // member) differs. A `Tile`-only diff would miss this too, same as the grapheme case.
         let mut cur = Grid::new(2, 2);

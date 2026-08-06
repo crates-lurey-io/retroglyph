@@ -1,10 +1,10 @@
 //! Input event system.
 //!
-//! [`Terminal::poll`](crate::Terminal::poll) returns an optional [`Event`] with support for
+//! [`Terminal::poll`](crate::terminal::Terminal::poll) returns an optional [`Event`] with support for
 //! keyboard ([`KeyEvent`], all standard keys plus [`KeyModifiers`]), mouse ([`MouseEvent`]:
 //! buttons, movement, scroll), touch (synthesized into the same mouse events on the
 //! software/WASM backend), window resize, and close events.
-//! [`has_input`](crate::Terminal::has_input) checks for a pending event without blocking. Resize
+//! [`has_input`](crate::terminal::Terminal::has_input) checks for a pending event without blocking. Resize
 //! events are applied to the grid automatically, before the event reaches your code.
 
 mod key;
@@ -47,8 +47,8 @@ pub enum Event {
     Mouse(MouseEvent),
     /// Terminal window resized to the given `(cols, rows)`.
     ///
-    /// When this event comes from [`Terminal::poll`](crate::Terminal::poll) (or the other
-    /// [`Terminal`](crate::Terminal) methods that route through it), the grid has already been
+    /// When this event comes from [`Terminal::poll`](crate::terminal::Terminal::poll) (or the other
+    /// [`Terminal`](crate::terminal::Terminal) methods that route through it), the grid has already been
     /// resized to these dimensions by the time the event reaches your code; the payload is there
     /// so the app can react, for example recomputing layout or redrawing. A consumer driving
     /// [`Input::poll_event`](crate::backend::Input::poll_event) directly on a raw backend gets no
@@ -79,12 +79,12 @@ pub enum Event {
     /// The terminal or application window gained input focus.
     ///
     /// This reflects OS/terminal-level focus, not in-app widget focus (see
-    /// `retroglyph-widgets`' focus ring for that).
+    /// `retroglyph-ui`' focus ring for that).
     FocusGained,
     /// The terminal or application window lost input focus.
     ///
     /// This reflects OS/terminal-level focus, not in-app widget focus (see
-    /// `retroglyph-widgets`' focus ring for that).
+    /// `retroglyph-ui`' focus ring for that).
     FocusLost,
     /// An application-defined event injected from outside the normal input
     /// source (e.g. a network, audio, or timer thread), carrying an opaque

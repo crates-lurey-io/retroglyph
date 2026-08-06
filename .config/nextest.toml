@@ -1,11 +1,27 @@
 [store]
 dir = "target/nextest"
 
+# `retroglyph-wgpu`'s offscreen render tests each create their own `wgpu` adapter and device, and
+# nextest runs every test in its own process. At full workspace concurrency that is a dozen or more
+# simultaneous device creations against one driver, which has been observed to abort with SIGBUS on
+# macOS/Metal. Serializing them costs about a second and removes the flake; nothing in that suite
+# benefits from running in parallel with itself, since each test is a handful of draw calls.
+[test-groups]
+gpu = { max-threads = 1 }
+
 [profile.default]
 fail-fast = false
 slow-timeout = { period = "20s", terminate-after = 2 }
+
+[[profile.default.overrides]]
+filter = 'package(retroglyph-wgpu) and test(/^headless::/)'
+test-group = 'gpu'
 
 [profile.ci]
 fail-fast = false
 slow-timeout = { period = "20s", terminate-after = 2 }
 junit = { path = "junit.xml" }
+
+[[profile.ci.overrides]]
+filter = 'package(retroglyph-wgpu) and test(/^headless::/)'
+test-group = 'gpu'

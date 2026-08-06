@@ -19,7 +19,8 @@
 #![allow(missing_docs)]
 
 use criterion::{BatchSize, Criterion, Throughput, criterion_group, criterion_main};
-use retroglyph_core::{Style, Terminal};
+use retroglyph_core::color::Style;
+use retroglyph_core::terminal::Terminal;
 use retroglyph_terminal_wasm::TerminalWasm;
 use std::hint::black_box;
 

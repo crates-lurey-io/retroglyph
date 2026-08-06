@@ -55,7 +55,7 @@ use glow::HasContext as _;
 use glutin::config::{ConfigSurfaceTypes, ConfigTemplateBuilder};
 use glutin::context::{ContextApi, ContextAttributesBuilder, Version};
 use glutin::prelude::*;
-use retroglyph_core::DrawCell;
+use retroglyph_core::backend::DrawCell;
 use retroglyph_core::backend::Output;
 use retroglyph_core::color::Color;
 use retroglyph_core::color::Style;
@@ -316,7 +316,7 @@ fn paint_layers(out: &mut impl Output, cells: &[(u8, Pos, Tile)]) {
 fn paint_layers_tinted(
     out: &mut impl Output,
     cells: &[(u8, Pos, Tile)],
-    tint: retroglyph_core::Tint,
+    tint: retroglyph_core::color::Tint,
 ) {
     out.draw_layers(
         cells
@@ -452,7 +452,7 @@ fn glyph_matches_font_coverage_fg_vs_bg() {
 
     let frame = render_to_frame(&ctx, &r).expect("render");
 
-    let glyph = r.glyphs.font_chain().resolve('A').expect("'A' is in CP437");
+    let glyph = r.glyphs.fonts().resolve('A').expect("'A' is in CP437");
     let gw = u32::from(glyph.font().glyph_width());
     let gh = u32::from(glyph.font().glyph_height());
     let rows = glyph.rows();
@@ -695,7 +695,7 @@ fn sprite_cells_render_their_tileset_colors() {
 #[cfg(feature = "tilesets")]
 #[test]
 fn a_tinted_sprite_matches_what_sprite_tint_apply_computes() {
-    use retroglyph_core::Tint;
+    use retroglyph_core::color::Tint;
     use retroglyph_window::palette::DEFAULT_FG;
     use retroglyph_window::sprite_cache::SpriteTint;
     use retroglyph_window::tileset::{Codepage, SheetColor, TilesetOptions};
@@ -788,7 +788,7 @@ fn wide_tile_png(w: u32, h: u32) -> Vec<u8> {
 /// A `cols` x `rows` grid painted from `grid`'s layer 0, in the all-cells layer-major order a
 /// `composites_layers` backend receives.
 #[cfg(feature = "tilesets")]
-fn span_scene(grid: &retroglyph_core::Grid) -> Vec<(u8, Pos, Tile)> {
+fn span_scene(grid: &retroglyph_core::grid::Grid) -> Vec<(u8, Pos, Tile)> {
     (0..grid.height())
         .flat_map(|y| (0..grid.width()).map(move |x| (x, y)))
         .map(|(x, y)| (0u8, Pos::new(x, y), *grid.tile(0, (x, y)).unwrap()))
@@ -798,7 +798,7 @@ fn span_scene(grid: &retroglyph_core::Grid) -> Vec<(u8, Pos, Tile)> {
 #[cfg(feature = "tilesets")]
 #[test]
 fn multicell_span_covers_every_cell_of_its_footprint() {
-    use retroglyph_core::Grid;
+    use retroglyph_core::grid::Grid;
     use retroglyph_window::tileset::{Codepage, TilesetOptions};
 
     let Some(ctx) = context_or_skip("multicell_span_covers_every_cell_of_its_footprint") else {
@@ -846,7 +846,7 @@ fn multicell_span_covers_every_cell_of_its_footprint() {
 #[cfg(feature = "tilesets")]
 #[test]
 fn multicell_span_covered_cells_fallback_sprite_does_not_paint_over_the_anchor() {
-    use retroglyph_core::Grid;
+    use retroglyph_core::grid::Grid;
     use retroglyph_window::tileset::{Codepage, TilesetOptions};
 
     let Some(ctx) = context_or_skip(
@@ -899,7 +899,7 @@ fn multicell_span_covered_cells_fallback_sprite_does_not_paint_over_the_anchor()
 #[cfg(feature = "tilesets")]
 #[test]
 fn matches_software_backend_for_multicell_spans() {
-    use retroglyph_core::Grid;
+    use retroglyph_core::grid::Grid;
     use retroglyph_window::tileset::{Codepage, SpriteAlign, TilesetOptions};
 
     let Some(ctx) = context_or_skip("matches_software_backend_for_multicell_spans") else {
@@ -964,7 +964,7 @@ fn matches_software_backend_for_multicell_spans() {
 /// already agree.
 #[test]
 fn matches_software_backend_for_a_span_covered_cells_default_background() {
-    use retroglyph_core::Grid;
+    use retroglyph_core::grid::Grid;
 
     let Some(ctx) =
         context_or_skip("matches_software_backend_for_a_span_covered_cells_default_background")

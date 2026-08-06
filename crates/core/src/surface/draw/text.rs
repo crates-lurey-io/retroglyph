@@ -21,7 +21,8 @@ impl Surface<'_> {
     ///
     /// ```
     /// use retroglyph_core::backend::Headless;
-    /// use retroglyph_core::{Style, Terminal};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::terminal::Terminal;
     ///
     /// let mut term = Terminal::new(Headless::new(6, 3));
     /// term.draw(|s| s.print((0, 0), "hello wrapped world", Style::default()))
@@ -49,14 +50,7 @@ impl Surface<'_> {
         use unicode_segmentation::UnicodeSegmentation;
         use unicode_width::UnicodeWidthStr;
 
-        // `cx` is in the same (possibly translated) space as `pos.x` itself, since `shift()`
-        // subtracts `origin_offset` from incoming coordinates before checking them against the
-        // area (see `shift`'s doc). The wrap threshold has to live in that same space too, or a
-        // translated surface (any `Camera::surface`, or a plain `translate`) wraps early by
-        // exactly the offset: fold `origin_offset.0` back in alongside translating
-        // `clip.right()` out of absolute grid space.
-        let right = i64::from(self.clip.right()) - i64::from(self.area.left())
-            + i64::from(self.origin_offset.0);
+        let right = self.wrap_right();
         let mut cx = pos.x;
         let mut cy = pos.y;
         for grapheme in text.graphemes(true) {
@@ -84,14 +78,7 @@ impl Surface<'_> {
     /// [`print`](Self::print) implementation used when `egc` is disabled: splits on `char`.
     #[cfg(not(feature = "egc"))]
     fn print_chars(&mut self, pos: Pos, text: &str, style: Style) {
-        // `cx` is in the same (possibly translated) space as `pos.x` itself, since `shift()`
-        // subtracts `origin_offset` from incoming coordinates before checking them against the
-        // area (see `shift`'s doc). The wrap threshold has to live in that same space too, or a
-        // translated surface (any `Camera::surface`, or a plain `translate`) wraps early by
-        // exactly the offset: fold `origin_offset.0` back in alongside translating
-        // `clip.right()` out of absolute grid space.
-        let right = i64::from(self.clip.right()) - i64::from(self.area.left())
-            + i64::from(self.origin_offset.0);
+        let right = self.wrap_right();
         let mut cx = pos.x;
         let mut cy = pos.y;
         for ch in text.chars() {
@@ -124,7 +111,7 @@ impl Surface<'_> {
     /// ```
     /// use retroglyph_core::backend::Headless;
     /// use retroglyph_core::text::{Line, Span};
-    /// use retroglyph_core::Terminal;
+    /// use retroglyph_core::terminal::Terminal;
     ///
     /// let mut term = Terminal::new(Headless::new(5, 2));
     /// let line = Line::from(vec![Span::raw("hello"), Span::raw("world")]);
@@ -139,14 +126,7 @@ impl Surface<'_> {
         use unicode_width::UnicodeWidthStr;
 
         let pos = pos.into();
-        // `cx` is in the same (possibly translated) space as `pos.x` itself, since `shift()`
-        // subtracts `origin_offset` from incoming coordinates before checking them against the
-        // area (see `shift`'s doc). The span-skip threshold has to live in that same space too,
-        // or a translated surface (any `Camera::surface`, or a plain `translate`) skips every
-        // span immediately: fold `origin_offset.0` back in alongside translating `clip.right()`
-        // out of absolute grid space.
-        let right = i64::from(self.clip.right()) - i64::from(self.area.left())
-            + i64::from(self.origin_offset.0);
+        let right = self.wrap_right();
         let mut cx = pos.x;
         for span in &line.spans {
             if i64::from(cx) >= right {
@@ -184,14 +164,16 @@ impl Surface<'_> {
     ///
     /// Not gated behind the `egc` feature: unlike `TextLayout`, this needs nothing from it, so
     /// it's reachable from any crate that only measures with `unicode-width`, including
-    /// `retroglyph-widgets` without opting into `egc`.
+    /// `retroglyph-ui` without opting into `egc`.
     ///
     /// # Examples
     ///
     /// ```
     /// use retroglyph_core::backend::Headless;
     /// use retroglyph_core::layout::HAlign;
-    /// use retroglyph_core::{Rect, Style, Terminal};
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::Rect;
+    /// use retroglyph_core::terminal::Terminal;
     ///
     /// let mut term = Terminal::new(Headless::new(6, 1));
     /// term.draw(|s| {

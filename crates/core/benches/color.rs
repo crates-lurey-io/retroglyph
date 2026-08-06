@@ -14,7 +14,8 @@
 #![allow(missing_docs)]
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
-use retroglyph_core::{Color, Style, Tile};
+use retroglyph_core::color::{Color, Style};
+use retroglyph_core::tile::Tile;
 use std::hint::black_box;
 
 /// Number of colors quantized/blended per `b.iter()` call, batched so the RNG/vec setup below is
@@ -75,7 +76,7 @@ fn lerp(c: &mut Criterion) {
 /// `SAMPLES` calls per iteration; see this file's module doc for why `blit_alpha` (rather than
 /// `blend_color` directly) is the entry point used.
 fn blend_modes(c: &mut Criterion) {
-    use retroglyph_core::{BlendMode, Grid};
+    use retroglyph_core::grid::{BlendMode, Grid};
 
     let mut group = c.benchmark_group("color/blend_color");
     group.throughput(Throughput::Elements(SAMPLES as u64));
@@ -101,7 +102,7 @@ fn blend_modes(c: &mut Criterion) {
                     dst.blit_alpha(
                         0,
                         &src,
-                        retroglyph_core::Rect::new(0, 0, 1, 1),
+                        retroglyph_core::grid::Rect::new(0, 0, 1, 1),
                         0,
                         0,
                         mode,

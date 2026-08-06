@@ -49,7 +49,7 @@ impl<B: Backend> Terminal<B> {
     /// of calling this directly.
     ///
     /// When the backend requires a full frame (see
-    /// [`crate::Output::needs_full_frame`]), all cells from every allocated layer are
+    /// [`crate::backend::Output::needs_full_frame`]), all cells from every allocated layer are
     /// sent rather than just the diff, so pixel-based backends can clear and
     /// redraw to avoid orphaned pixels from sub-cell offsets.
     ///
@@ -69,10 +69,17 @@ impl<B: Backend> Terminal<B> {
     ///
     /// [ratatui]: https://docs.rs/ratatui
     ///
+    /// # Panics
+    ///
+    /// Never panics in practice: `retained_layers` and `dropped_layers` are indexed by u8 layer
+    /// id and grown only up to `idx + 1` for `idx = usize::from(layer_id)` in
+    /// [`retain_layer`](Self::retain_layer)/[`drop_layer`](Self::drop_layer), so their length is
+    /// always at most 256 and every index encountered here fits in u8.
+    ///
     /// # Errors
     ///
-    /// Propagates errors from the backend's [`draw_layers`](crate::Output::draw_layers) or
-    /// [`flush`](crate::Output::flush) operations. Either failure returns before the
+    /// Propagates errors from the backend's [`draw_layers`](crate::backend::Output::draw_layers) or
+    /// [`flush`](crate::backend::Output::flush) operations. Either failure returns before the
     /// current/previous buffers are swapped, so the cells from the failed frame stay marked
     /// dirty in `previous` and are resent the next time `present` succeeds. `current` is still
     /// cleared, same as on success, so the caller doesn't need to redraw anything to recover:
@@ -98,8 +105,11 @@ impl<B: Backend> Terminal<B> {
             // frame (retroglyph#955, retroglyph#956).
             for (id, &retained) in self.retained_layers.iter().enumerate() {
                 if retained {
-                    #[allow(clippy::cast_possible_truncation)]
-                    let id = id as u8;
+                    // `retained_layers` is indexed by u8 layer id: `retain_layer` only ever grows
+                    // it to `idx + 1` for `idx = usize::from(layer_id)`, so its length is at most
+                    // 256 and every index here fits in u8. `expect` makes that a checked invariant
+                    // instead of a silently-truncating `as`.
+                    let id = u8::try_from(id).expect("layer table is indexed by u8 layer ids");
                     self.current.copy_layer_from(id, &self.previous);
                 }
             }
@@ -183,8 +193,7 @@ impl<B: Backend> Terminal<B> {
         if self.dropped_layers.iter().any(|&dropped| dropped) {
             for (id, &dropped) in self.dropped_layers.iter().enumerate() {
                 if dropped {
-                    #[allow(clippy::cast_possible_truncation)]
-                    let id = id as u8;
+                    let id = u8::try_from(id).expect("layer table is indexed by u8 layer ids");
                     // If the app drew to `layer` again after calling `drop_layer` but before
                     // this present, that write is a live redraw the app clearly wants kept, not
                     // stale content: cancel the drop instead of discarding it.

@@ -1,4 +1,4 @@
-//! `Grid`'s trait impls for layer 0: [`Index`]/[`IndexMut`] by [`Pos`], and its
+//! `Grid`'s trait impls for layer 0: [`Index`]/[`IndexMut`] by [`Pos`](crate::grid::Pos), and its
 //! [`Display`](fmt::Display)/[`Debug`](fmt::Debug) implementations.
 
 use super::{Grid, Pos, to_grixy_pos};
@@ -83,13 +83,13 @@ mod tests {
 
     #[test]
     #[should_panic(expected = "index out of bounds")]
-    fn test_grid_index_panics_out_of_bounds() {
+    fn index_panics_out_of_bounds() {
         let grid = Grid::new(10, 10);
         let _ = &grid[Pos::new(0, 10)];
     }
 
     #[test]
-    fn test_index_position() {
+    fn index_by_pos_reads_back_the_written_glyph() {
         let mut grid = Grid::new(5, 5);
         let pos = Pos::new(2, 3);
         grid[pos] = Tile::default().with_glyph('Z');
@@ -97,7 +97,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_display() {
+    fn display_renders_glyphs_row_major_with_a_middle_dot_for_empty_cells() {
         let mut grid = Grid::new(3, 2);
         grid.put_tile(0, (0, 0), Tile::default().with_glyph('A'));
 
@@ -107,7 +107,7 @@ mod tests {
 
     #[cfg(feature = "egc")]
     #[test]
-    fn test_grid_display_wide_char_spacer() {
+    fn display_wide_char_spacer_renders_as_a_plain_space() {
         // A wide char's right-half spacer cell prints as a plain space, not the wide
         // char's own glyph repeated.
         let mut grid = Grid::new(3, 1);
@@ -118,7 +118,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_debug_reports_layer_and_span_state() {
+    fn debug_reports_layer_and_span_state() {
         let mut grid = Grid::new(3, 2);
         grid.put_tile(2, (0, 0), Tile::default().with_glyph('A'));
         grid.write_span(0, 0, 0, &["hi"], Style::default());

@@ -3,7 +3,7 @@
 //! # Architecture
 //!
 //! [`retroglyph_core::backend::Input`] and [`retroglyph_core::backend::Output`] are two
-//! independent facets of [`Backend`](retroglyph_core::Backend), which fits a terminal process
+//! independent facets of [`Backend`](retroglyph_core::backend::Backend), which fits a terminal process
 //! (one type implements both) but not a window: there, an event loop owns input and a renderer
 //! owns output separately. This crate keeps that split ([`Presenter`] is an `Output` supertrait,
 //! [`WindowBackend`] owns its own `Input` event queue) and reassembles both into one `Backend`:
@@ -123,7 +123,7 @@
 //!
 //! The windowed drivers (`winit::run_windowed`, `winit::run_app`, and their `_with_proxy`
 //! variants) are single-threaded: the event loop, every [`Presenter`] call, and the app
-//! closure/[`App`](retroglyph_core::App) callback all run on the one thread that calls
+//! closure/[`App`](retroglyph_core::app::App) callback all run on the one thread that calls
 //! `run_windowed`/`run_app`: the main thread, on platforms (e.g. macOS) that require it for
 //! windowing. Neither [`Presenter`] nor [`WindowBackend`] carries a `Send`/`Sync` bound
 //! anywhere in this crate, and a presenter is free to hold thread-affine state accordingly
@@ -139,7 +139,12 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-/// The generic [`Backend`](retroglyph_core::Backend) for windowed presenters.
+pub mod atlas;
+// clippy::too_long_first_doc_paragraph is a known-noisy nursery lint (rust-lang/rust-clippy#13441):
+// it mis-attributes its span across this outer doc comment plus `backend`'s own inner module doc,
+// which grew past the threshold once its intra-doc links became fully qualified (retroglyph#1035).
+#[allow(clippy::too_long_first_doc_paragraph)]
+/// The generic [`Backend`](retroglyph_core::backend::Backend) for windowed presenters.
 pub mod backend;
 /// System clipboard read/write ([`Clipboard`], [`SystemClipboard`] on native targets).
 pub mod clipboard;

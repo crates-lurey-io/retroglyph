@@ -42,7 +42,7 @@
 #![allow(clippy::future_not_send)]
 
 use crate::GlBackendBuilder;
-use retroglyph_core::DrawCell;
+use retroglyph_core::backend::DrawCell;
 use retroglyph_core::backend::Output as _;
 use retroglyph_core::color::Color;
 use retroglyph_core::color::Style;
