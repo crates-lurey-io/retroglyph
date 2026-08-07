@@ -227,8 +227,7 @@ guard against the workflow ever running from a non-`main` ref.
 Publishing uses [crates.io trusted publishing](https://crates.io/docs/trusted-publishing); there is
 no `CARGO_REGISTRY_TOKEN` secret in this repo. release-plz performs the OIDC token exchange itself,
 so the publish job only needs `id-token: write`. Trusted publishing is configured per crate on
-crates.io (Settings -> Trusted Publishing -> GitHub) for all seven publishable crates, each pointing
-at:
+crates.io (Settings -> Trusted Publishing -> GitHub) for every publishable crate, each pointing at:
 
 - Repository owner: `crates-lurey-io`
 - Repository name: `retroglyph`
@@ -237,6 +236,13 @@ at:
 
 Trusted publishing can't perform a crate's _first_ publish (crates.io requires a real token for
 that); moot here since every crate was hand-published at `0.1.0`.
+
+**Adding a new crate to the workspace? Register it on crates.io before its first automated
+release.** A crate missing from that list fails with
+`403 Forbidden: The provided access token is not valid for crate <name>` and aborts the whole run,
+so any crate later in the publish order stays unpublished too. Adding the `retroglyph` facade hit
+this: the facade 403'd and took `retroglyph-terminal-wasm` down with it, leaving eight of ten crates
+released.
 
 ## First-release checklist (already satisfied, kept for reference)
 

@@ -48,7 +48,12 @@ jobs:
       contents: write
       # Trusted publishing: release-plz exchanges this OIDC token for a short-lived crates.io token
       # itself, so there is no CARGO_REGISTRY_TOKEN secret. Configured per-crate on crates.io
-      # (Settings -> Trusted Publishing) for all eight publishable crates (retroglyph-gl included).
+      # (Settings -> Trusted Publishing), and it has to be done for *every* publishable crate: a
+      # crate missing from that list fails with `403 Forbidden: The provided access token is not
+      # valid for crate <name>` and aborts the run, leaving any crate later in the publish order
+      # unpublished too. That is not hypothetical: adding the `retroglyph` facade as a tenth crate
+      # without registering it did exactly that, and took `retroglyph-terminal-wasm` down with it.
+      # Register a new crate on crates.io before its first release.
       id-token: write
     steps:
       - uses: actions/checkout@v7
