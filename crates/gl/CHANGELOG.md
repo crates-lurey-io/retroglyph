@@ -11,22 +11,15 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 ### Features
 
-- [ff66904](
-https://github.com/crates-lurey-io/retroglyph/commit/ff669041fa6a5d496e6563f24cdc9faa2b27f831) *(window)* Add PresenterBuilder over the three windowed builders by `@crates-lurey-io-agent[bot]` in [#1196](
-https://github.com/crates-lurey-io/retroglyph/pull/1196)
+- [ff66904](https://github.com/crates-lurey-io/retroglyph/commit/ff669041fa6a5d496e6563f24cdc9faa2b27f831) _(window)_ Add PresenterBuilder over the three windowed builders by `@crates-lurey-io-agent[bot]` in [#1196](https://github.com/crates-lurey-io/retroglyph/pull/1196)
 
 ### Documentation
 
-- [9c49f63](
-https://github.com/crates-lurey-io/retroglyph/commit/9c49f63a207ed8ce18908c1f4e1a9983b34d71e5) *(workspace)* Remove references to docs/testing.md and docs/ROADMAP.md, which do not exist by `@crates-lurey-io-agent[bot]` in [#1210](
-https://github.com/crates-lurey-io/retroglyph/pull/1210)
+- [9c49f63](https://github.com/crates-lurey-io/retroglyph/commit/9c49f63a207ed8ce18908c1f4e1a9983b34d71e5) _(workspace)_ Remove references to docs/testing.md and docs/ROADMAP.md, which do not exist by `@crates-lurey-io-agent[bot]` in [#1210](https://github.com/crates-lurey-io/retroglyph/pull/1210)
 
-- [f6c17c7](
-https://github.com/crates-lurey-io/retroglyph/commit/f6c17c715a52af7faba7e4ccf042a9159bf335f0) *(workspace)* Add pseudographic project logo/favicon by `@crates-lurey-io-agent[bot]` in [#1200](
-https://github.com/crates-lurey-io/retroglyph/pull/1200)
+- [f6c17c7](https://github.com/crates-lurey-io/retroglyph/commit/f6c17c715a52af7faba7e4ccf042a9159bf335f0) _(workspace)_ Add pseudographic project logo/favicon by `@crates-lurey-io-agent[bot]` in [#1200](https://github.com/crates-lurey-io/retroglyph/pull/1200)
 
 **Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-gl-v0.3.0...retroglyph-gl-v0.3.1
-
 
 ## [0.3.0+retroglyph-gl](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-gl-v0.2.1...retroglyph-gl-v0.3.0) - 2026-08-05
 

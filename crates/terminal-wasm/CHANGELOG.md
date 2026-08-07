@@ -11,18 +11,13 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 ### Bug Fixes
 
-- [29398ac](
-https://github.com/crates-lurey-io/retroglyph/commit/29398ac784015db59fd1fb84ca77b759986e5b2b) *(terminal)* Move_cursor_to resets only tracked cursor, not color state by `@crates-lurey-io-agent[bot]` in [#1190](
-https://github.com/crates-lurey-io/retroglyph/pull/1190)
+- [29398ac](https://github.com/crates-lurey-io/retroglyph/commit/29398ac784015db59fd1fb84ca77b759986e5b2b) _(terminal)_ Move_cursor_to resets only tracked cursor, not color state by `@crates-lurey-io-agent[bot]` in [#1190](https://github.com/crates-lurey-io/retroglyph/pull/1190)
 
 ### Documentation
 
-- [f6c17c7](
-https://github.com/crates-lurey-io/retroglyph/commit/f6c17c715a52af7faba7e4ccf042a9159bf335f0) *(workspace)* Add pseudographic project logo/favicon by `@crates-lurey-io-agent[bot]` in [#1200](
-https://github.com/crates-lurey-io/retroglyph/pull/1200)
+- [f6c17c7](https://github.com/crates-lurey-io/retroglyph/commit/f6c17c715a52af7faba7e4ccf042a9159bf335f0) _(workspace)_ Add pseudographic project logo/favicon by `@crates-lurey-io-agent[bot]` in [#1200](https://github.com/crates-lurey-io/retroglyph/pull/1200)
 
 **Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v0.3.0...retroglyph-terminal-wasm-v0.3.1
-
 
 ## [0.3.0+retroglyph-terminal-wasm](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v0.2.1...retroglyph-terminal-wasm-v0.3.0) - 2026-08-05
 

@@ -11,22 +11,15 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 ### Refactor
 
-- [6b7a086](
-https://github.com/crates-lurey-io/retroglyph/commit/6b7a08625aee81941b052a79ddebd2aa7da7269e) *(core)* Rename run_blocking to run_on by `@crates-lurey-io-agent[bot]` in [#1205](
-https://github.com/crates-lurey-io/retroglyph/pull/1205)
+- [6b7a086](https://github.com/crates-lurey-io/retroglyph/commit/6b7a08625aee81941b052a79ddebd2aa7da7269e) _(core)_ Rename run_blocking to run_on by `@crates-lurey-io-agent[bot]` in [#1205](https://github.com/crates-lurey-io/retroglyph/pull/1205)
 
 ### Documentation
 
-- [9c49f63](
-https://github.com/crates-lurey-io/retroglyph/commit/9c49f63a207ed8ce18908c1f4e1a9983b34d71e5) *(workspace)* Remove references to docs/testing.md and docs/ROADMAP.md, which do not exist by `@crates-lurey-io-agent[bot]` in [#1210](
-https://github.com/crates-lurey-io/retroglyph/pull/1210)
+- [9c49f63](https://github.com/crates-lurey-io/retroglyph/commit/9c49f63a207ed8ce18908c1f4e1a9983b34d71e5) _(workspace)_ Remove references to docs/testing.md and docs/ROADMAP.md, which do not exist by `@crates-lurey-io-agent[bot]` in [#1210](https://github.com/crates-lurey-io/retroglyph/pull/1210)
 
-- [f6c17c7](
-https://github.com/crates-lurey-io/retroglyph/commit/f6c17c715a52af7faba7e4ccf042a9159bf335f0) *(workspace)* Add pseudographic project logo/favicon by `@crates-lurey-io-agent[bot]` in [#1200](
-https://github.com/crates-lurey-io/retroglyph/pull/1200)
+- [f6c17c7](https://github.com/crates-lurey-io/retroglyph/commit/f6c17c715a52af7faba7e4ccf042a9159bf335f0) _(workspace)_ Add pseudographic project logo/favicon by `@crates-lurey-io-agent[bot]` in [#1200](https://github.com/crates-lurey-io/retroglyph/pull/1200)
 
 **Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-ui-v0.4.1...retroglyph-ui-v0.4.2
-
 
 ## [0.4.1+retroglyph-ui](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-ui-v0.0.0-reserved...retroglyph-ui-v0.4.1) - 2026-08-05
 

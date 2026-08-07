@@ -11,18 +11,13 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 ### Features
 
-- [ff66904](
-https://github.com/crates-lurey-io/retroglyph/commit/ff669041fa6a5d496e6563f24cdc9faa2b27f831) *(window)* Add PresenterBuilder over the three windowed builders by `@crates-lurey-io-agent[bot]` in [#1196](
-https://github.com/crates-lurey-io/retroglyph/pull/1196)
+- [ff66904](https://github.com/crates-lurey-io/retroglyph/commit/ff669041fa6a5d496e6563f24cdc9faa2b27f831) _(window)_ Add PresenterBuilder over the three windowed builders by `@crates-lurey-io-agent[bot]` in [#1196](https://github.com/crates-lurey-io/retroglyph/pull/1196)
 
 ### Documentation
 
-- [f6c17c7](
-https://github.com/crates-lurey-io/retroglyph/commit/f6c17c715a52af7faba7e4ccf042a9159bf335f0) *(workspace)* Add pseudographic project logo/favicon by `@crates-lurey-io-agent[bot]` in [#1200](
-https://github.com/crates-lurey-io/retroglyph/pull/1200)
+- [f6c17c7](https://github.com/crates-lurey-io/retroglyph/commit/f6c17c715a52af7faba7e4ccf042a9159bf335f0) _(workspace)_ Add pseudographic project logo/favicon by `@crates-lurey-io-agent[bot]` in [#1200](https://github.com/crates-lurey-io/retroglyph/pull/1200)
 
 **Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-wgpu-v0.1.0...retroglyph-wgpu-v0.1.1
-
 
 ## [0.1.0+retroglyph-wgpu](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-wgpu-v0.0.0-reserved...retroglyph-wgpu-v0.1.0) - 2026-08-05
 
