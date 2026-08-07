@@ -112,16 +112,13 @@
 )]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-// Compile the code blocks in both this crate's own README and the workspace root README as
-// doctests so the quick-start examples are type-checked on every test run and cannot silently
-// rot. The `cfg(doctest)` gate keeps these out of the rendered crate documentation.
+// Compile the code blocks in this crate's own README as doctests so its quick start is
+// type-checked on every test run and cannot silently rot. The `cfg(doctest)` gate keeps this out
+// of the rendered crate documentation. The workspace root README's own quick start is doctested
+// from `retroglyph` (the facade crate) instead, since that's what it demonstrates now.
 #[cfg(doctest)]
 #[doc = include_str!("../README.md")]
 struct ReadmeDoctests;
-
-#[cfg(doctest)]
-#[doc = include_str!("../../../README.md")]
-struct WorkspaceReadmeDoctests;
 
 use core::time::Duration;
 use retroglyph_core::backend::DrawCell;

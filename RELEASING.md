@@ -21,9 +21,14 @@ If a push to `main` has nothing releasable, there's no Release PR and nothing ha
 
 **Per-crate, independent versions.** Each publishable crate (`retroglyph-core`,
 `retroglyph-terminal`, `retroglyph-crossterm`, `retroglyph-terminal-wasm`, `retroglyph-software`,
-`retroglyph-window`, `retroglyph-ui`) carries and bumps its own version. release-plz bumps only the
-crates that actually changed. `retroglyph-examples` and `tools/cargo-bin` are `publish = false` and
-never ship.
+`retroglyph-window`, `retroglyph-ui`, `retroglyph`) carries and bumps its own version. release-plz
+bumps only the crates that actually changed. `retroglyph-examples` and `tools/cargo-bin` are
+`publish = false` and never ship.
+
+`retroglyph` (the consumer-facing facade, `crates/retroglyph`) is the one exception to the "crate
+name mirrors directory" naming above: it publishes under its own bare name, not
+`retroglyph-retroglyph`, since that's the single dependency a user actually adds. Its version is a
+statement about the project's public API maturity, not about `core`'s internals -- see #426.
 
 **Cascade is expected, not lockstep.** Every crate path-depends on `retroglyph-core`, so a bump to
 `core` updates each dependent's `retroglyph-core = { version = ... }` requirement, which bumps those
@@ -200,11 +205,13 @@ release-plz computes and follows this order automatically; it's documented here 
 re-run is needed:
 
 ```text
-core  ->  terminal, window, ui, terminal-wasm  ->  crossterm, software
+core  ->  terminal, window, ui, terminal-wasm  ->  crossterm, software  ->  retroglyph
 ```
 
 `core` has no workspace dependencies. `terminal`, `window`, `ui`, and `terminal-wasm` depend only on
 `core`. `crossterm` depends on `terminal` + `core`; `software` depends on `window` + `core`.
+`retroglyph`, the facade, depends on `core` plus whichever of the above its own default/opt-in
+features pull in, so it publishes last.
 
 ### Approval gate
 

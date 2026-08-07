@@ -30,22 +30,25 @@ the `Backend` type parameter and nothing else changes. See
 
 ## Crates
 
-`retroglyph-core` is the only required dependency; everything else is an optional backend or drawing
-helper you pull in as needed. Each crate versions independently (see
-[RELEASING.md](RELEASING.md#versioning)): a `core` change commonly cascades a bump to its
-dependents, but a leaf-crate change bumps only that crate.
+[`retroglyph`](crates/retroglyph) is the one dependency most consumers add: a curated facade over
+`retroglyph-core` plus the `crossterm` and `ui` backends (on by default), with
+`software`/`gl`/`wgpu` behind opt-in features. The crates below are what it's built from; reach for
+one directly only if you need finer-grained control than the facade curates. Each crate versions
+independently (see [RELEASING.md](RELEASING.md#versioning)): a `core` change commonly cascades a
+bump to its dependents, but a leaf-crate change bumps only that crate.
 
-| Crate                                    | Description                                                                 | Version                                                                                                                                       |
-| ---------------------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`-core`](crates/core)                   | `no_std`-compatible foundation: grid, tile, style, color, `Backend` trait   | [![retroglyph-core version](https://img.shields.io/crates/v/retroglyph-core.svg)](https://docs.rs/retroglyph-core)                            |
-| [`-terminal`](crates/terminal)           | Shared ANSI/SGR cell-diff renderer for the terminal-family backends         | [![retroglyph-terminal version](https://img.shields.io/crates/v/retroglyph-terminal.svg)](https://docs.rs/retroglyph-terminal)                |
-| [`-crossterm`](crates/crossterm)         | Terminal backend via [`crossterm`](https://crates.io/crates/crossterm)      | [![retroglyph-crossterm version](https://img.shields.io/crates/v/retroglyph-crossterm.svg)](https://docs.rs/retroglyph-crossterm)             |
-| [`-terminal-wasm`](crates/terminal-wasm) | Browser terminal backend (e.g. xterm.js) over pushed/pulled ANSI I/O        | [![retroglyph-terminal-wasm version](https://img.shields.io/crates/v/retroglyph-terminal-wasm.svg)](https://docs.rs/retroglyph-terminal-wasm) |
-| [`-window`](crates/window)               | Shared `winit` windowing layer for windowed backends                        | [![retroglyph-window version](https://img.shields.io/crates/v/retroglyph-window.svg)](https://docs.rs/retroglyph-window)                      |
-| [`-software`](crates/software)           | Pixel backend via `softbuffer`: native window or browser canvas             | [![retroglyph-software version](https://img.shields.io/crates/v/retroglyph-software.svg)](https://docs.rs/retroglyph-software)                |
-| [`-gl`](crates/gl)                       | GPU backend via `glow`: OpenGL 3.3 (native) and WebGL2 (wasm)               | [![retroglyph-gl version](https://img.shields.io/crates/v/retroglyph-gl.svg)](https://docs.rs/retroglyph-gl)                                  |
-| [`-wgpu`](crates/wgpu)                   | GPU backend via `wgpu`: Vulkan, Metal, and D3D12 (native)                   | [![retroglyph-wgpu version](https://img.shields.io/crates/v/retroglyph-wgpu.svg)](https://docs.rs/retroglyph-wgpu)                            |
-| [`-ui`](crates/ui)                       | Immediate-mode UI toolkit: widgets, layout, input/focus, theming, animation | [![retroglyph-ui version](https://img.shields.io/crates/v/retroglyph-ui.svg)](https://docs.rs/retroglyph-ui)                                  |
+| Crate                                    | Description                                                                    | Version                                                                                                                                       |
+| ---------------------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`retroglyph`](crates/retroglyph)        | Consumer-facing facade: one dependency, curated re-exports of the crates below | [![retroglyph version](https://img.shields.io/crates/v/retroglyph.svg)](https://docs.rs/retroglyph)                                           |
+| [`-core`](crates/core)                   | `no_std`-compatible foundation: grid, tile, style, color, `Backend` trait      | [![retroglyph-core version](https://img.shields.io/crates/v/retroglyph-core.svg)](https://docs.rs/retroglyph-core)                            |
+| [`-terminal`](crates/terminal)           | Shared ANSI/SGR cell-diff renderer for the terminal-family backends            | [![retroglyph-terminal version](https://img.shields.io/crates/v/retroglyph-terminal.svg)](https://docs.rs/retroglyph-terminal)                |
+| [`-crossterm`](crates/crossterm)         | Terminal backend via [`crossterm`](https://crates.io/crates/crossterm)         | [![retroglyph-crossterm version](https://img.shields.io/crates/v/retroglyph-crossterm.svg)](https://docs.rs/retroglyph-crossterm)             |
+| [`-terminal-wasm`](crates/terminal-wasm) | Browser terminal backend (e.g. xterm.js) over pushed/pulled ANSI I/O           | [![retroglyph-terminal-wasm version](https://img.shields.io/crates/v/retroglyph-terminal-wasm.svg)](https://docs.rs/retroglyph-terminal-wasm) |
+| [`-window`](crates/window)               | Shared `winit` windowing layer for windowed backends                           | [![retroglyph-window version](https://img.shields.io/crates/v/retroglyph-window.svg)](https://docs.rs/retroglyph-window)                      |
+| [`-software`](crates/software)           | Pixel backend via `softbuffer`: native window or browser canvas                | [![retroglyph-software version](https://img.shields.io/crates/v/retroglyph-software.svg)](https://docs.rs/retroglyph-software)                |
+| [`-gl`](crates/gl)                       | GPU backend via `glow`: OpenGL 3.3 (native) and WebGL2 (wasm)                  | [![retroglyph-gl version](https://img.shields.io/crates/v/retroglyph-gl.svg)](https://docs.rs/retroglyph-gl)                                  |
+| [`-wgpu`](crates/wgpu)                   | GPU backend via `wgpu`: Vulkan, Metal, and D3D12 (native)                      | [![retroglyph-wgpu version](https://img.shields.io/crates/v/retroglyph-wgpu.svg)](https://docs.rs/retroglyph-wgpu)                            |
+| [`-ui`](crates/ui)                       | Immediate-mode UI toolkit: widgets, layout, input/focus, theming, animation    | [![retroglyph-ui version](https://img.shields.io/crates/v/retroglyph-ui.svg)](https://docs.rs/retroglyph-ui)                                  |
 
 See [`crates/core`](crates/core) for the Grid API, double buffering, stateful drawing, text
 layout/word wrapping, scrolling camera/map loading, input handling, and `no_std` support, and
@@ -57,40 +60,43 @@ feature flags.
 
 ## Quick start
 
-The library is split into a `no_std` core plus per-backend crates. For a terminal app you need the
-core and the crossterm backend:
+`retroglyph` bundles the core and the crossterm/ui backends behind one dependency:
 
 ```sh
-cargo add retroglyph-core retroglyph-crossterm
+cargo add retroglyph
 ```
 
 ```rust,no_run
-use retroglyph_core::color::{Color, Style};
-use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::terminal::Terminal;
-use retroglyph_crossterm::Crossterm;
+use retroglyph::crossterm::Crossterm;
+use retroglyph::prelude::*;
 
-fn main() -> std::io::Result<()> {
-    let mut term = Terminal::new(Crossterm::new()?);
-    loop {
-        term.draw(|s| s.put((5, 5), '@', Style::new().fg(Color::GREEN)))?;
+struct Game;
+
+impl App<Crossterm> for Game {
+    fn update(&mut self, term: &mut Terminal<Crossterm>, _frame: &Frame) -> Flow {
+        term.surface().put((5, 5), '@', Style::new().fg(Color::GREEN));
 
         if let Some(Event::Key(k)) = term.poll(std::time::Duration::from_secs(1)) {
             if k.code == KeyCode::Char('q') {
-                break;
+                return Flow::Exit;
             }
         }
+        Flow::Continue
     }
-    Ok(())
+}
+
+fn main() -> std::io::Result<()> {
+    retroglyph::app::run(Crossterm::new()?, Game)
 }
 ```
 
 This exact snippet is compiled and run as a doctest on every `cargo test` (see
-`crates/crossterm/src/lib.rs`), so it can't silently drift out of date.
+`crates/retroglyph/src/lib.rs`), so it can't silently drift out of date.
 
-Want a native window or a browser tab instead of a real terminal? See
-[`retroglyph-software`](crates/software)'s quick start (same `Terminal`/`Backend` API, a different
-`Backend` type). Every crate in the [table above](#crates) has its own tested quick start.
+Want a native window or a browser tab instead of a real terminal? Enable `retroglyph`'s `software`,
+`gl`, or `wgpu` feature instead (same `Terminal`/`App` contract, a different `Backend` type). Every
+crate in the [table above](#crates) also has its own tested quick start, for finer-grained control
+than the facade curates.
 
 ## Examples
 
