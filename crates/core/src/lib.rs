@@ -118,6 +118,12 @@
 //! headless`) for the smallest possible use of [`Headless`](crate::backend::Headless), depending on
 //! nothing but this crate.
 #![cfg_attr(not(feature = "std"), no_std)]
+#![doc(
+    html_logo_url = "https://raw.githubusercontent.com/crates-lurey-io/retroglyph/main/docs/public/assets/logo.svg"
+)]
+#![doc(
+    html_favicon_url = "https://raw.githubusercontent.com/crates-lurey-io/retroglyph/main/docs/public/assets/logo.svg"
+)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 // A `pub mod` line's own outer doc comment and its target module's inner `//!` doc concatenate
 // into one rendered page, but intra-doc links in that combined block resolve against the scope

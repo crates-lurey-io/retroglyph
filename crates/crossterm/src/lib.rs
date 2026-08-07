@@ -104,6 +104,12 @@
 //! real process stdout regardless of `W`: see [`CrosstermOptions::build_with_writer`]'s docs
 //! for the exact split.
 
+#![doc(
+    html_logo_url = "https://raw.githubusercontent.com/crates-lurey-io/retroglyph/main/docs/public/assets/logo.svg"
+)]
+#![doc(
+    html_favicon_url = "https://raw.githubusercontent.com/crates-lurey-io/retroglyph/main/docs/public/assets/logo.svg"
+)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 // Compile the code blocks in both this crate's own README and the workspace root README as

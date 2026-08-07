@@ -101,6 +101,12 @@
 //! [`ColorSupport::None`] (which forces [`Color::Default`] regardless of the requested color) and
 //! have no ambiguity across terminal color depths.
 
+#![doc(
+    html_logo_url = "https://raw.githubusercontent.com/crates-lurey-io/retroglyph/main/docs/public/assets/logo.svg"
+)]
+#![doc(
+    html_favicon_url = "https://raw.githubusercontent.com/crates-lurey-io/retroglyph/main/docs/public/assets/logo.svg"
+)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 // Compile the code blocks in this crate's own README as doctests so its quick start is

@@ -74,6 +74,12 @@
 //! Forwards to `retroglyph-window`'s shared tileset decode.
 //! <!-- gen-features:end -->
 
+#![doc(
+    html_logo_url = "https://raw.githubusercontent.com/crates-lurey-io/retroglyph/main/docs/public/assets/logo.svg"
+)]
+#![doc(
+    html_favicon_url = "https://raw.githubusercontent.com/crates-lurey-io/retroglyph/main/docs/public/assets/logo.svg"
+)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 pub mod config;
