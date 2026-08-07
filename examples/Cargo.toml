@@ -130,8 +130,27 @@ retroglyph-core = { path = "../crates/core", features = ["testing"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 # PTY + vt100 SVG snapshots of the crossterm backend's ANSI output.
 portable-pty = "0.9"
-vt100 = "0.15"
+vt100 = "0.16"
 
 [[example]]
 name = "01_hello_world"
 path = "examples/01_hello_world.rs"
+
+# `examples/tutorial/*.rs`: the book's tutorial (docs/src/tutorial/), not the docs-gallery/
+# snapshot-suite examples above. Cargo's default example autodiscovery only covers
+# `examples/examples/*.rs` (this crate's default `examples/` dir), so each tutorial chapter
+# needs its own `[[example]]` entry to build at all. Deliberately outside
+# `tools/build-wasm-examples.sh`'s directory scan and `examples/tests/support`'s 3-snapshot
+# harness (see `examples/AGENTS.md`) -- these exist to compile and run headless for the book's
+# `{{#include}}` anchors, not to join the WASM gallery.
+[[example]]
+name = "01_hello"
+path = "tutorial/01_hello.rs"
+
+[[example]]
+name = "02_input"
+path = "tutorial/02_input.rs"
+
+[[example]]
+name = "03_a_map"
+path = "tutorial/03_a_map.rs"

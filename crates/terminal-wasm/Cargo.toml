@@ -61,7 +61,7 @@ fastrand = "2"
 # Benchmarking harness for benches/take_output.rs and benches/event_throughput.rs. Same version as
 # retroglyph-core's own criterion dev-dependency. Host-only: `[[bench]]` targets aren't built by
 # `just test-wasm`'s wasm-pack invocation, only by `cargo bench`, which never targets wasm32 here.
-criterion = "0.5"
+criterion = "0.8"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # Version pinned to match the wasm-bindgen dev-dependency in

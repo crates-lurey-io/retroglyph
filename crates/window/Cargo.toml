@@ -94,7 +94,7 @@ web-sys = { version = "0.3", features = ["Window", "EventTarget", "Document", "E
 # Used by the pixel_to_cell/key_translate/cursor_moved criterion benches (benches/*.rs) for
 # deterministic, seeded pseudo-random input streams. Same version as retroglyph-core's and
 # retroglyph-software's own fastrand dev-dependency.
-criterion = "0.5"
+criterion = "0.8"
 fastrand = "2"
 # Cross-backend Input conformance harness (retroglyph#763): dev-only, matching crossterm/software's
 # own `testing` dev-dependency (see their Cargo.toml comments for why `default-features = false`

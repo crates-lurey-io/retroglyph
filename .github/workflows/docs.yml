@@ -17,13 +17,13 @@ jobs:
     permissions:
       pages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Ensures the repo's Pages site exists (source = GitHub Actions) before
       # we try to deploy to it. Without this, a Pages site that gets disabled
       # (e.g. after a repo transfer/settings reset) silently 404s forever even
       # though the workflow itself keeps reporting success.
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -94,4 +94,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
