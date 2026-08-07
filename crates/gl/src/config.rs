@@ -303,3 +303,29 @@ impl retroglyph_window::PresenterBuilder for GlBackendBuilder {
         self.build()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::GlBackendBuilder;
+
+    fn test_font() -> retroglyph_window::font::BitmapFont {
+        static DATA: [u8; 16] = [0; 16];
+        retroglyph_window::font::BitmapFont::new(&DATA, 8, 16, 1)
+    }
+
+    /// Exercises `PresenterBuilder`'s methods through the trait, not the inherent ones, so the
+    /// forwarding impl itself (not just the methods it forwards to) is under test.
+    #[test]
+    fn presenter_builder_impl_forwards_to_the_inherent_methods() {
+        fn build<B: retroglyph_window::PresenterBuilder>(
+            font: retroglyph_window::font::BitmapFont,
+        ) -> Result<B::Presenter, B::Error> {
+            B::new()
+                .grid_size(4, 2)
+                .scale(1)
+                .font(font)
+                .build_presenter()
+        }
+        assert!(build::<GlBackendBuilder>(test_font()).is_ok());
+    }
+}
