@@ -427,6 +427,7 @@ impl LayerBuf {
 /// assert_eq!(grid[Pos::new(2, 1)].glyph(), '@');
 /// ```
 #[derive(Clone)]
+#[doc(alias = "buffer")] // ratatui
 pub struct Grid {
     width: u16,
     height: u16,

@@ -41,6 +41,9 @@ mod retain;
 /// })
 /// .unwrap();
 /// ```
+#[doc(alias = "console")] // libtcod / bracket-lib
+#[doc(alias = "screen")] // tcell, blessed
+#[doc(alias = "buffer")] // ratatui
 pub struct Terminal<B: Backend> {
     current: Grid,
     previous: Grid,

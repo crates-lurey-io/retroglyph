@@ -69,6 +69,7 @@ impl<'a> Surface<'a> {
 
     /// A new surface over the same grid, area, and clip, but writing to `layer` instead.
     #[must_use]
+    #[doc(alias = "plane")] // notcurses calls layers planes
     pub const fn on_layer(&mut self, layer: u8) -> Surface<'_> {
         Surface {
             grid: self.grid,

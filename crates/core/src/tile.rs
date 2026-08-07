@@ -85,6 +85,8 @@ bitflags::bitflags! {
 /// assert_eq!(tile.style().foreground(), Color::GREEN);
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[doc(alias = "cell")] // ratatui, tcell
+#[doc(alias = "char")]
 pub struct Tile {
     /// Primary codepoint. For ASCII and most Unicode this is the whole story.
     pub(crate) glyph: char,

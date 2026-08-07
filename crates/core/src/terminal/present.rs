@@ -85,6 +85,8 @@ impl<B: Backend> Terminal<B> {
     /// cleared, same as on success, so the caller doesn't need to redraw anything to recover:
     /// just call `draw`/`present` again, and the next frame starts from an empty grid like any
     /// other.
+    #[doc(alias = "flush")]
+    #[doc(alias = "render")]
     pub fn present(&mut self) -> Result<(), <B as Output>::Error> {
         self.present_count = self.present_count.wrapping_add(1);
         if self.retained_layers.iter().any(|&retained| retained) {
