@@ -45,9 +45,9 @@ release flow. Commits inside your branch are unconstrained; only the PR title is
 `pr-title.yml`).
 
 **Scope** is the crate directory under `crates/*` your change touches: `core`, `terminal`,
-`crossterm`, `terminal-wasm`, `software`, `window`, `widgets`, `examples`. For changes that don't
-belong to one crate, use `workspace` (tooling, CI, docs, release config) or `deps` (dependency
-bumps). A scopeless title is accepted but `workspace` is preferred.
+`crossterm`, `terminal-wasm`, `software`, `window`, `widgets`, `retroglyph`, `examples`. For changes
+that don't belong to one crate, use `workspace` (tooling, CI, docs, release config) or `deps`
+(dependency bumps). A scopeless title is accepted but `workspace` is preferred.
 
 **Breaking changes:** don't add `!` for an ordinary API-breaking change (removing a public method,
 changing a signature, etc.): `cargo-semver-checks`, run automatically by release-plz, detects those
@@ -87,10 +87,12 @@ Other labels you may see or apply on a PR:
 | [`gl`](crates/gl)                       | GPU backend via `glow`: OpenGL 3.3 (native) and WebGL2 (wasm)                            |
 | [`wgpu`](crates/wgpu)                   | GPU backend via `wgpu`: Vulkan, Metal, and D3D12 (native)                                |
 | [`ui`](crates/ui)                       | Immediate-mode UI toolkit: widgets, layout, input/focus, theming, animation              |
+| [`retroglyph`](crates/retroglyph)       | Consumer-facing facade: one dependency, curated re-exports of the crates above           |
 
-Each crate publishes as `retroglyph-<name>` (e.g. `retroglyph-core`). Within `crates/core`,
-`backend/headless.rs` holds the in-memory `Headless` backend used for testing, and `terminal.rs`
-holds `Terminal<B>`, the stateful drawing API with double buffering.
+Each crate publishes as `retroglyph-<name>` (e.g. `retroglyph-core`), except `retroglyph` itself,
+which publishes under its own bare name. Within `crates/core`, `backend/headless.rs` holds the
+in-memory `Headless` backend used for testing, and `terminal.rs` holds `Terminal<B>`, the stateful
+drawing API with double buffering.
 
 ## Testing
 

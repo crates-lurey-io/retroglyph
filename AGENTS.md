@@ -4,11 +4,12 @@
 generic over a pluggable `Backend`, with styled cells, input events, and pluggable
 software/crossterm/WASM backends.
 
-Workspace: a Cargo workspace under `crates/*` (`retroglyph-core` plus backend and helper crates),
-plus `examples/` and `tools/cargo-bin`. There is no single-crate `src/` root and no `retroglyph`
-facade crate; consumers depend on `retroglyph-core` and whichever backend/helper crates they need.
-For the crate list and feature overview see `README.md`; for a machine-readable summary of each
-crate's public module and type surface see that crate's `llms.txt`, generated under
+Workspace: a Cargo workspace under `crates/*` (`retroglyph-core` plus backend and helper crates, and
+`retroglyph`, the consumer-facing facade), plus `examples/` and `tools/cargo-bin`. There is no
+single-crate `src/` root; consumers depend on `retroglyph` for the curated surface, or directly on
+`retroglyph-core` and whichever backend/helper crates they need for finer-grained control. For the
+crate list and feature overview see `README.md`; for a machine-readable summary of each crate's
+public module and type surface see that crate's `llms.txt`, generated under
 `target/doc/<crate>/llms.txt` by `just doc`.
 
 ## Correctness gate
@@ -84,10 +85,10 @@ harness) and `examples/AGENTS.md` for the per-example validation checklist.
 
 Conventional Commits, scoped to the crate directory under `crates/*` a change touches:
 `feat(widgets): ...`, `fix(software): ...`, `docs(core): ...`. Valid scopes: `core`, `terminal`,
-`crossterm`, `terminal-wasm`, `software`, `gl`, `wgpu`, `window`, `widgets`, `examples`. For changes
-that don't belong to a single crate, use a workspace-level scope: `workspace` (tooling, CI, root
-docs, release config) or `deps` (dependency bumps). A scopeless title is still accepted, but prefer
-`workspace` over omitting the scope.
+`crossterm`, `terminal-wasm`, `software`, `gl`, `wgpu`, `window`, `widgets`, `retroglyph`,
+`examples`. For changes that don't belong to a single crate, use a workspace-level scope:
+`workspace` (tooling, CI, root docs, release config) or `deps` (dependency bumps). A scopeless title
+is still accepted, but prefer `workspace` over omitting the scope.
 
 The convention is enforced on **PR titles**, not individual commits. The repo is squash-merge only,
 so the PR title becomes the single commit on `main`, and `.github/workflows/pr-title.yml`

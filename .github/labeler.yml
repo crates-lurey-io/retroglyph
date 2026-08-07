@@ -39,6 +39,10 @@
   - changed-files:
       - any-glob-to-any-file: 'crates/ui/**'
 
+'c:retroglyph':
+  - changed-files:
+      - any-glob-to-any-file: 'crates/retroglyph/**'
+
 'c:examples':
   - changed-files:
       - any-glob-to-any-file: 'examples/**'
