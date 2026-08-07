@@ -105,8 +105,8 @@ have its `!` applied to **both** crates, even though widgets' own API is untouch
 hypothetical: it happened on this exact repo (`retroglyph-ui` was incorrectly proposed for a
 `0.1.0 -> 0.2.0` bump from a `feat(core)!:` commit that happened to also touch a private function in
 `crates/ui/src/interact/pointer.rs`) and required rewriting an already-merged commit's message to
-fix, since `cliff.toml`/`release-plz.toml` config cannot intervene at the granularity needed -- the
-misattribution happens before either file's rules are ever read. See the reserved `!` case below for
+fix, since `release-plz.toml`'s `[changelog]` config cannot intervene at the granularity needed --
+the misattribution happens before its rules are ever read. See the reserved `!` case below for
 commits that unavoidably need to declare a real break; keep them scoped to the crate(s) actually
 breaking, and land any companion cross-crate fix as a **separate** commit/PR when practical, since
 that's the only thing that fully avoids this class of misattribution.
@@ -164,8 +164,9 @@ bump. Treat it as a search/filter aid, not a signal to act on by itself.
 
 Note on `skip-changelog`: git-cliff builds the changelog from commit messages, not GitHub labels, so
 label-based exclusion relies on release-plz's GitHub integration attaching PR metadata to each
-commit. `cliff.toml` also skips any commit whose body carries a `changelog: ignore` footer, which is
-the guaranteed fallback if the label ever doesn't take. Confirm the label works on its first use.
+commit. `release-plz.toml`'s `[changelog]` `commit_parsers` also skip any commit whose message
+carries a `changelog: ignore` footer, which is the guaranteed fallback if the label ever doesn't
+take. Confirm the label works on its first use.
 
 ## The Release PR
 
@@ -248,14 +249,13 @@ The `0.1.0` release was hand-published. These invariants must stay true for auto
 
 ## Files
 
-| File                                 | Role                                                       |
-| ------------------------------------ | ---------------------------------------------------------- |
-| `release-plz.toml`                   | release-plz config: per-crate changelogs, semver, bumping. |
-| `cliff.toml`                         | git-cliff changelog template and commit grouping.          |
-| `crates/*/CHANGELOG.md`              | Per-crate changelog, maintained by release-plz.            |
-| `.github/workflows/release-plz.yml`  | `release-pr` + `release` jobs.                             |
-| `.github/workflows/pr-title.yml`     | Conventional Commit PR-title enforcement.                  |
-| `.github/workflows/check-semver.yml` | Non-blocking PR-time `cargo-semver-checks` report.         |
+| File                                 | Role                                                             |
+| ------------------------------------ | ---------------------------------------------------------------- |
+| `release-plz.toml`                   | release-plz config: changelogs (`[changelog]`), semver, bumping. |
+| `crates/*/CHANGELOG.md`              | Per-crate changelog, maintained by release-plz.                  |
+| `.github/workflows/release-plz.yml`  | `release-pr` + `release` jobs.                                   |
+| `.github/workflows/pr-title.yml`     | Conventional Commit PR-title enforcement.                        |
+| `.github/workflows/check-semver.yml` | Non-blocking PR-time `cargo-semver-checks` report.               |
 
 ## Known gotcha: rewriting a commit `main` already has a Release PR built on
 
