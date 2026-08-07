@@ -368,6 +368,15 @@ where
 /// backend and wants one error type spanning all of them can wrap this trait; this crate, which
 /// only ever sees one backend's impl at a time, does not.
 ///
+/// Unlike [`run`](crate::app::run)/[`run_on`](crate::app::run_on) and their `_with` counterparts,
+/// this trait is not gated behind the `std` feature: the shape declared here (an associated
+/// `Backend`, an associated `Error`, and `launch`'s signature) uses nothing from `std`, only
+/// [`Backend`], [`App`], and [`RunOptions`], all of which are already available without it. Only
+/// the concrete impls need `std` in practice (`retroglyph-crossterm`'s and
+/// `retroglyph-window`'s both do, since they delegate to `run_on_with`/`run_app_on`), and each of
+/// those lives in its own backend crate, not here; nothing stops a future `no_std` backend from
+/// implementing `Launch` too.
+///
 /// # Examples
 ///
 /// ```no_run
@@ -419,7 +428,6 @@ where
 /// # Ok(())
 /// # }
 /// ```
-#[cfg(feature = "std")]
 pub trait Launch {
     /// The backend this impl launches [`App`](crate::app::App) on.
     type Backend: Backend;
