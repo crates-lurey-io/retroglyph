@@ -637,7 +637,7 @@ fn collect_runs(screen: &vt100::Screen, row: u16, cols: u16) -> Vec<Run> {
         let glyph = if contents.is_empty() {
             " ".to_owned()
         } else {
-            contents
+            contents.to_owned()
         };
 
         let extends_current = runs.last().is_some_and(|prev: &Run| {

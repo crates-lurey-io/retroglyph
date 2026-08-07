@@ -3,12 +3,19 @@ changelog_config = "cliff.toml"
 
 semver_check = true
 
-# Each tag here is a per-crate release, not a single project version, so GitHub's repo-wide
-# "Latest" badge (picked from whichever release has the newest date) is meaningless -- it just
-# ends up pinned to whatever crate happened to publish most recently. Don't let release-plz mark
-# any of them latest.
+# Per-crate releases (core, the backends, the helper crates) don't individually represent the
+# project's public version, so none of them should carry GitHub's repo-wide "Latest" badge. The
+# `retroglyph` facade is the exception -- see the [[package]] override below.
 git_release_latest = false
 
 git_release_body = """
 {{ changelog | replace(from=" by @", to=" by ") }}
 """
+
+# `retroglyph`'s version is the project's public version (see #426), so it's the one release that
+# should own the "Latest" badge; this restores release-plz's own default for this crate only.
+# Note: release-plz can't mark a draft or prerelease as latest, so this stops applying silently if
+# the facade ever ships a `-alpha`/`-rc` version.
+[[package]]
+name = "retroglyph"
+git_release_latest = true
