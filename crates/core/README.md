@@ -65,8 +65,9 @@ features below.
 ## Features
 
 <!-- gen-features:start -->
+<details>
 
-Default features: `egc`, `std`.
+<summary>Default features: `egc`, `std`.</summary>
 
 ### `dev`
 
@@ -123,4 +124,5 @@ synthetic input queuing and frame-settling helpers.
 Test-only surface, `no_std` + `alloc` compatible, off by default so it never ships in a release
 build by accident.
 
+</details>
 <!-- gen-features:end -->

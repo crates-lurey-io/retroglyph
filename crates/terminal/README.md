@@ -46,6 +46,9 @@ assert!(ansi.contains('@'));
 ## Features
 
 <!-- gen-features:start -->
+<details>
+
+<summary>Features: all optional, none enabled by default.</summary>
 
 This crate has no default features; every feature below is optional and off unless enabled.
 
@@ -64,6 +67,7 @@ Forwards to `retroglyph-core`'s `egc` feature.
 
 This crate has EGC-aware and non-EGC-aware code paths gated on the same flag name.
 
+</details>
 <!-- gen-features:end -->
 
 ## Plain mode for non-TTY output

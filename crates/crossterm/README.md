@@ -43,6 +43,9 @@ fn main() -> std::io::Result<()> {
 ## Features
 
 <!-- gen-features:start -->
+<details>
+
+<summary>Features: all optional, none enabled by default.</summary>
 
 This crate has no default features; every feature below is optional and off unless enabled.
 
@@ -72,6 +75,7 @@ Instruments `draw`, `flush`, and `poll_event` with `tracing` spans for profiling
 See where time is spent with any `tracing` subscriber (e.g. `tracing-subscriber`'s fmt layer, or a
 flamegraph via `tracing-flame`).
 
+</details>
 <!-- gen-features:end -->
 
 ## Rendering to a non-stdout sink
