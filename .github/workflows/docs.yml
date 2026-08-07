@@ -17,7 +17,7 @@ jobs:
     permissions:
       pages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Ensures the repo's Pages site exists (source = GitHub Actions) before
       # we try to deploy to it. Without this, a Pages site that gets disabled
