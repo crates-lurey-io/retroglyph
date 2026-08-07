@@ -11,12 +11,9 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 ### Documentation
 
-- [833e8b0](
-https://github.com/crates-lurey-io/retroglyph/commit/833e8b015626f6377ef96adc8b9a6aa593c5f300) *(workspace)* Collapse the generated Features section behind <details> in crate READMEs by `@crates-lurey-io-agent[bot]` in [#1254](
-https://github.com/crates-lurey-io/retroglyph/pull/1254)
+- [833e8b0](https://github.com/crates-lurey-io/retroglyph/commit/833e8b015626f6377ef96adc8b9a6aa593c5f300) _(workspace)_ Collapse the generated Features section behind <details> in crate READMEs by `@crates-lurey-io-agent[bot]` in [#1254](https://github.com/crates-lurey-io/retroglyph/pull/1254)
 
 **Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-ui-v0.4.2...retroglyph-ui-v0.4.3
-
 
 ## [0.4.2+retroglyph-ui](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-ui-v0.4.1...retroglyph-ui-v0.4.2) - 2026-08-07
 
