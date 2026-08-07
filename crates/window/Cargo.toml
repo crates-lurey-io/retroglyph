@@ -75,7 +75,10 @@ web-time = "1"
 # out of the `wasm32` target section below entirely rather than feature-gated, matching this
 # crate's existing native/wasm module-swap convention (see `crates/software/src/lib.rs`'s
 # `#[cfg(not(target_arch = "wasm32"))]`/`#[cfg(target_arch = "wasm32")]` `mod surface` split).
-arboard = "3"
+# `default-features = false` drops arboard's default `image-data` feature: `clipboard.rs` only
+# calls `get_text`/`set_text`, never arboard's image clipboard API, and `image-data` otherwise
+# pulls in `image` -> `tiff` -> `zune-jpeg`, which fails to build under current rustc (retroglyph#1253).
+arboard = { version = "3", default-features = false }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # Version pinned to match the wasm-bindgen dev-dependency in
