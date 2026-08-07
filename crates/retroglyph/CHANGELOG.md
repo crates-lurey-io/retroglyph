@@ -11,6 +11,19 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 ### Features
 
+- [21e08a7](
+https://github.com/crates-lurey-io/retroglyph/commit/21e08a774464938b580a5d5b6bd3121289b9dbb0) *(workspace)* Re-export Launch, Windowed, WindowedLaunchError from the facade by `@crates-lurey-io-agent[bot]` in [#1234](
+https://github.com/crates-lurey-io/retroglyph/pull/1234)
+
+- [e9bfd08](
+https://github.com/crates-lurey-io/retroglyph/commit/e9bfd080e45a9a08d5ed68b0bd1f17820cc87621) *(workspace)* Scaffold crates/retroglyph, the consumer-facing facade by `@crates-lurey-io-agent[bot]` in [#1212](
+https://github.com/crates-lurey-io/retroglyph/pull/1212)
+
+
+## [0.1.0+retroglyph](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-v0.0.0-reserved...retroglyph-v0.1.0) - 2026-08-07
+
+### Features
+
 - [21e08a7](https://github.com/crates-lurey-io/retroglyph/commit/21e08a774464938b580a5d5b6bd3121289b9dbb0) _(workspace)_ Re-export Launch, Windowed, WindowedLaunchError from the facade by `@crates-lurey-io-agent[bot]` in [#1234](https://github.com/crates-lurey-io/retroglyph/pull/1234)
 
 - [e9bfd08](https://github.com/crates-lurey-io/retroglyph/commit/e9bfd080e45a9a08d5ed68b0bd1f17820cc87621) _(workspace)_ Scaffold crates/retroglyph, the consumer-facing facade by `@crates-lurey-io-agent[bot]` in [#1212](https://github.com/crates-lurey-io/retroglyph/pull/1212)
