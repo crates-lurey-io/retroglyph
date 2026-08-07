@@ -478,6 +478,10 @@ impl WgpuRenderer {
     }
 
     /// The sprite atlas layer size in texels, or `(0, 0)` without a tileset.
+    #[cfg_attr(
+        not(feature = "tilesets"),
+        allow(clippy::unused_self, clippy::missing_const_for_fn)
+    )]
     fn sprite_tex_size(&self) -> (u32, u32) {
         #[cfg(feature = "tilesets")]
         {
