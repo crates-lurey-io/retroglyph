@@ -68,7 +68,7 @@
 //!
 //! Re-exports `retroglyph-gl` as [`gl`]: a GPU `Backend` via `glow` (OpenGL 3.3 native,
 //! WebGL2 wasm). Also pulls in the curated windowed re-exports (`WindowConfig`, `PresenterBuilder`,
-//! `run_app`, `run_app_on`).
+//! `Windowed`, `WindowedLaunchError`, `run_app`, `run_app_on`).
 //!
 //! ### `software`
 //!
@@ -76,7 +76,7 @@
 //!
 //! Re-exports `retroglyph-software` as [`software`]: a CPU pixel `Backend` via
 //! `softbuffer`. Also pulls in the curated windowed re-exports (`WindowConfig`, `PresenterBuilder`,
-//! `run_app`, `run_app_on`).
+//! `Windowed`, `WindowedLaunchError`, `run_app`, `run_app_on`).
 //!
 //! ### `testing`
 //!
@@ -104,7 +104,7 @@
 //!
 //! Re-exports `retroglyph-wgpu` as [`wgpu`]: a GPU `Backend` via `wgpu` (Vulkan,
 //! Metal, D3D12, WebGPU). Also pulls in the curated windowed re-exports (`WindowConfig`,
-//! `PresenterBuilder`, `run_app`, `run_app_on`).
+//! `PresenterBuilder`, `Windowed`, `WindowedLaunchError`, `run_app`, `run_app_on`).
 //! <!-- gen-features:end -->
 #![doc(
     html_logo_url = "https://raw.githubusercontent.com/crates-lurey-io/retroglyph/main/docs/public/assets/logo.svg"
@@ -130,6 +130,14 @@ struct WorkspaceReadmeDoctests;
 pub use retroglyph_core::{
     app, color, event, frames, grid, layout, surface, symbols, terminal, text, tile,
 };
+
+/// The trait a backend's own builder implements to be driven end to end by
+/// [`launch`](Launch::launch): the user names the backend (`CrosstermOptions`, `Windowed<B>`, ...)
+/// and gets back that backend's own unwrapped error, rather than a facade-wide one. See this
+/// trait's own docs for why there is no unified error here (`retroglyph::LaunchError`, tracked by
+/// #430, is only needed if the facade grows an entry point that can return either backend's
+/// error).
+pub use retroglyph_core::app::Launch;
 
 // `retroglyph_core::testing` also holds `conformance` (`Observable`, `assert_output_contract`,
 // ...), the harness a *new backend* uses to prove it satisfies the `Output`/`Input`/`Cursor`
@@ -179,4 +187,6 @@ pub use retroglyph_wgpu as wgpu;
 #[cfg(any(feature = "software", feature = "gl", feature = "wgpu"))]
 pub use retroglyph_window::PresenterBuilder;
 #[cfg(any(feature = "software", feature = "gl", feature = "wgpu"))]
-pub use retroglyph_window::winit::{WindowConfig, run_app, run_app_on};
+pub use retroglyph_window::winit::{
+    WindowConfig, Windowed, WindowedLaunchError, run_app, run_app_on,
+};

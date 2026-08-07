@@ -70,15 +70,16 @@ caller doesn't need to know which backend crate actually owns it.
 ⚪ Optional.
 
 Re-exports `retroglyph-gl` as `gl`: a GPU `Backend` via `glow` (OpenGL 3.3 native, WebGL2 wasm).
-Also pulls in the curated windowed re-exports (`WindowConfig`, `PresenterBuilder`, `run_app`,
-`run_app_on`).
+Also pulls in the curated windowed re-exports (`WindowConfig`, `PresenterBuilder`, `Windowed`,
+`WindowedLaunchError`, `run_app`, `run_app_on`).
 
 ### `software`
 
 ⚪ Optional.
 
 Re-exports `retroglyph-software` as `software`: a CPU pixel `Backend` via `softbuffer`. Also pulls
-in the curated windowed re-exports (`WindowConfig`, `PresenterBuilder`, `run_app`, `run_app_on`).
+in the curated windowed re-exports (`WindowConfig`, `PresenterBuilder`, `Windowed`,
+`WindowedLaunchError`, `run_app`, `run_app_on`).
 
 ### `testing`
 
@@ -105,8 +106,8 @@ Re-exports `retroglyph-ui` as `ui`: the immediate-mode widget/layout toolkit.
 ⚪ Optional.
 
 Re-exports `retroglyph-wgpu` as `wgpu`: a GPU `Backend` via `wgpu` (Vulkan, Metal, D3D12, WebGPU).
-Also pulls in the curated windowed re-exports (`WindowConfig`, `PresenterBuilder`, `run_app`,
-`run_app_on`).
+Also pulls in the curated windowed re-exports (`WindowConfig`, `PresenterBuilder`, `Windowed`,
+`WindowedLaunchError`, `run_app`, `run_app_on`).
 
 <!-- gen-features:end -->
 

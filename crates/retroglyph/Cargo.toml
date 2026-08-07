@@ -33,11 +33,11 @@ default-font = [
 ]
 # Re-exports `retroglyph-gl` as [`gl`]: a GPU `Backend` via `glow` (OpenGL 3.3 native,
 # WebGL2 wasm). Also pulls in the curated windowed re-exports (`WindowConfig`, `PresenterBuilder`,
-# `run_app`, `run_app_on`).
+# `Windowed`, `WindowedLaunchError`, `run_app`, `run_app_on`).
 gl = ["dep:retroglyph-gl", "dep:retroglyph-window"]
 # Re-exports `retroglyph-software` as [`software`]: a CPU pixel `Backend` via
 # `softbuffer`. Also pulls in the curated windowed re-exports (`WindowConfig`, `PresenterBuilder`,
-# `run_app`, `run_app_on`).
+# `Windowed`, `WindowedLaunchError`, `run_app`, `run_app_on`).
 software = ["dep:retroglyph-software", "dep:retroglyph-window"]
 # Enables [`TestHarness`] and its error, the published headless `App` driver for testing your own
 # `App`. Forwards to `retroglyph-core`'s own `testing` feature.
@@ -49,7 +49,7 @@ tracing = ["retroglyph-crossterm?/tracing"]
 ui = ["dep:retroglyph-ui"]
 # Re-exports `retroglyph-wgpu` as [`wgpu`]: a GPU `Backend` via `wgpu` (Vulkan,
 # Metal, D3D12, WebGPU). Also pulls in the curated windowed re-exports (`WindowConfig`,
-# `PresenterBuilder`, `run_app`, `run_app_on`).
+# `PresenterBuilder`, `Windowed`, `WindowedLaunchError`, `run_app`, `run_app_on`).
 wgpu = ["dep:retroglyph-wgpu", "dep:retroglyph-window"]
 
 [dependencies]
