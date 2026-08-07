@@ -214,9 +214,8 @@ impl RecoverableError for GenericSurfaceError {
 ///   two per cell would let a later cell's background overwrite an earlier neighbor's spilled
 ///   glyph, breaking spill in the right/down directions only.
 ///
-/// The offset *application* is not shared code: the GPU backends shift a quad's vertex position in
-/// their vertex shader, `retroglyph-software` shifts `origin_x`/`origin_y` in a CPU blit:
-/// irreducibly different mechanics that must nonetheless agree on the four points above.
+/// See <https://main.retroglyph.dev/book/explanation/coordinates.html> for why the offset
+/// *application* itself is not shared code across backends.
 ///
 /// # Examples
 ///

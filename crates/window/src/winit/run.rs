@@ -380,14 +380,8 @@ impl WindowConfig {
 /// every frame tick. Window close pushes [`Event::Close`] into the event
 /// queue rather than exiting: the game decides when to terminate.
 ///
-/// # Presenting is automatic
-///
-/// Unlike [`run_on`](retroglyph_core::app::run_on), this driver calls
-/// [`Terminal::present`] for you, once, right after `app_loop` returns each frame: you no longer
-/// need to (and, for a stale-content bug fixed by this behavior, should not rely on remembering
-/// to) call it yourself inside `app_loop`. Calling it yourself is still supported and has no ill
-/// effect (the driver detects it already ran and skips its own call), for example if you also want
-/// to call [`Terminal::present`] to observe its `Result` directly.
+/// Unlike [`run_on`](retroglyph_core::app::run_on), this driver presents automatically: see
+/// <https://main.retroglyph.dev/book/explanation/architecture.html#presenting-is-automatic>.
 ///
 /// # Errors
 ///
@@ -419,8 +413,8 @@ where
 /// needs to hand back a real payload (a loaded asset, a network response) instead of a
 /// correlation id into a side table.
 ///
-/// See [`run_windowed`]'s "Presenting is automatic" section: this function shares the same
-/// automatic-present behavior; `app_loop` no longer needs to call [`Terminal::present`] itself.
+/// See <https://main.retroglyph.dev/book/explanation/architecture.html#presenting-is-automatic>:
+/// this function shares the same automatic-present behavior.
 ///
 /// # Examples
 ///
@@ -499,8 +493,8 @@ where
 /// wants the result to affect the next frame just needs to record it in state the closures
 /// share, or push its own backend-agnostic event/marker for `app_loop` to notice.
 ///
-/// See [`run_windowed`]'s "Presenting is automatic" section: this function shares the same
-/// automatic-present behavior; `app_loop` no longer needs to call [`Terminal::present`] itself.
+/// See <https://main.retroglyph.dev/book/explanation/architecture.html#presenting-is-automatic>:
+/// this function shares the same automatic-present behavior.
 ///
 /// This delivery is a side channel, not a queued [`Event`]: `on_custom_event` runs as soon as
 /// winit dispatches the `user_event`, which can be before `app_loop` next drains earlier-queued
@@ -690,11 +684,9 @@ where
 /// `ActiveEventLoop::exit` by stopping its `requestAnimationFrame`-driven
 /// runner rather than leaving it a no-op.
 ///
-/// See [`run_windowed`]'s "Presenting is automatic" section: the app's
-/// [`update`](retroglyph_core::app::App::update) implementation no longer needs to call
-/// [`Terminal::present`] itself here either, this driver presents automatically after each call,
-/// except on [`Flow::Idle`](retroglyph_core::app::Flow::Idle), where the present is skipped entirely
-/// and the previous frame stays on screen.
+/// See <https://main.retroglyph.dev/book/explanation/architecture.html#presenting-is-automatic>:
+/// this driver presents automatically after each [`App::update`](retroglyph_core::app::App::update)
+/// call, except on [`Flow::Idle`](retroglyph_core::app::Flow::Idle).
 ///
 /// # Resizing is not automatic
 ///
@@ -734,8 +726,9 @@ where
 /// into its [`WindowBackend`]) before the loop starts, which is impossible through `run_app`
 /// alone.
 ///
-/// See [`run_app`]'s "Presenting is automatic", "Resizing is not automatic", and "Return contract
-/// differs on `wasm32`" sections: this function shares all three behaviors.
+/// See [`run_app`]'s "Resizing is not automatic" and "Return contract differs on `wasm32`"
+/// sections, and <https://main.retroglyph.dev/book/explanation/architecture.html#presenting-is-automatic>:
+/// this function shares all three behaviors.
 ///
 /// # Errors
 ///
@@ -766,8 +759,8 @@ where
 /// one. The injected payload is always a `u64`, delivered as [`Event::Custom`]; see
 /// [`run_app_with_typed_proxy`] for injecting any `T: Send + 'static`.
 ///
-/// See [`run_app`]'s "Presenting is automatic" section: this function shares the same
-/// automatic-present behavior.
+/// See <https://main.retroglyph.dev/book/explanation/architecture.html#presenting-is-automatic>:
+/// this function shares the same automatic-present behavior.
 ///
 /// # Errors
 ///
@@ -794,8 +787,8 @@ where
 /// driver, including why a non-`u64` payload bypasses [`retroglyph_core::event::Event`] entirely
 /// and goes straight to `on_custom_event`.
 ///
-/// See [`run_app`]'s "Presenting is automatic" section: this function shares the same
-/// automatic-present behavior.
+/// See <https://main.retroglyph.dev/book/explanation/architecture.html#presenting-is-automatic>:
+/// this function shares the same automatic-present behavior.
 ///
 /// # Errors
 ///
