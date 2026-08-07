@@ -14,6 +14,8 @@ name: Release-plz
 #     merged, duplicated #248's just-landed `## [0.2.0+retroglyph-software]` entries). This is a
 #     known release-plz footgun; see e.g.
 #     https://github.com/MarcoIeni/release-plz/issues/1542.
+#     That `needs:` orders the two jobs but deliberately does not gate on success (see the `if:`
+#     on release-plz-pr), so a failing publish can never stop the Release PR from regenerating.
 #
 # The developer never bumps a version or pushes a tag by hand: review PRs, then merge the Release PR.
 
@@ -68,6 +70,17 @@ jobs:
     # comment for why (avoids racing release-plz-release and duplicating a changelog entry for the
     # version it's in the middle of publishing).
     needs: release-plz-release
+    # ...but only *order* against it, don't inherit its failure. A bare `needs:` skips this job
+    # whenever the publish job fails, which deadlocks releases: the Release PR is the only thing
+    # that bumps versions, so a publish that fails *because* a version needs bumping can never be
+    # fixed automatically. That is not hypothetical -- it happened when the `retroglyph` facade was
+    # added: `retroglyph 0.1.0` was unpublished (so the publish job tried it) while it re-exported
+    # `Launch` from a `retroglyph-core` whose published 0.6.0 predated that API, so `cargo publish`
+    # verification failed against the registry copy on every push, and the Release PR that would
+    # have bumped core stopped regenerating. Ordering is preserved; only failure propagation is
+    # dropped. `!cancelled()` rather than `always()` so cancelling the workflow doesn't still
+    # rewrite the Release PR branch.
+    if: ${{ !cancelled() }}
     # Never run two PR updates concurrently, but don't cancel an in-flight one mid-write.
     concurrency:
       group: release-plz-pr-${{ github.ref }}
