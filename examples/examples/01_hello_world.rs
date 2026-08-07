@@ -58,9 +58,11 @@ impl HelloWorld {
     /// state.
     #[allow(clippy::unused_self)]
     fn draw<B: Backend>(&self, term: &mut Terminal<B>) {
+        // ANCHOR: draw
         let mut surface = term.surface();
         let row = Rect::new(0, 12, surface.width(), 1);
         surface.print_aligned(row, "Hello, world!", HAlign::Center, Style::default());
+        // ANCHOR_END: draw
     }
 }
 
