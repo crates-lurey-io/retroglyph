@@ -7,6 +7,26 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
+## [0.1.1+retroglyph-wgpu](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-wgpu-v0.1.0...retroglyph-wgpu-v0.1.1) - 2026-08-07
+
+### Features
+
+- [ff66904](https://github.com/crates-lurey-io/retroglyph/commit/ff669041fa6a5d496e6563f24cdc9faa2b27f831) _(window)_ Add PresenterBuilder over the three windowed builders by `@crates-lurey-io-agent[bot]` in [#1196](https://github.com/crates-lurey-io/retroglyph/pull/1196)
+
+### Bug Fixes
+
+- [7a2a4d8](https://github.com/crates-lurey-io/retroglyph/commit/7a2a4d88e8a231d5f451efb2d443fe2aff3c4535) _(wgpu)_ Implement Debug for WgpuRenderer so no-default-features tests compile by `@crates-lurey-io-agent[bot]` in [#1224](https://github.com/crates-lurey-io/retroglyph/pull/1224)
+
+- [3d3ae68](https://github.com/crates-lurey-io/retroglyph/commit/3d3ae6869d060a38183632f664881694be4e97ba) _(wgpu)_ Allow unused_mut in shaders.rs test without tilesets feature by `@crates-lurey-io-agent[bot]` in [#1221](https://github.com/crates-lurey-io/retroglyph/pull/1221)
+
+- [1105e5e](https://github.com/crates-lurey-io/retroglyph/commit/1105e5ec333e1ee86c11ba122736787ac0a521d3) _(wgpu)_ Silence clippy on `sprite_tex_size` with `tilesets` off by `@crates-lurey-io-agent[bot]` in [#1215](https://github.com/crates-lurey-io/retroglyph/pull/1215)
+
+### Documentation
+
+- [f6c17c7](https://github.com/crates-lurey-io/retroglyph/commit/f6c17c715a52af7faba7e4ccf042a9159bf335f0) _(workspace)_ Add pseudographic project logo/favicon by `@crates-lurey-io-agent[bot]` in [#1200](https://github.com/crates-lurey-io/retroglyph/pull/1200)
+
+**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-wgpu-v0.1.0...retroglyph-wgpu-v0.1.1
+
 ## [0.1.0+retroglyph-wgpu](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-wgpu-v0.0.0-reserved...retroglyph-wgpu-v0.1.0) - 2026-08-05
 
 ### Features

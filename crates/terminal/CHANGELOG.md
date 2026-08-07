@@ -7,6 +7,18 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
+## [0.1.8+retroglyph-terminal](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-v0.1.7...retroglyph-terminal-v0.1.8) - 2026-08-07
+
+### Bug Fixes
+
+- [29398ac](https://github.com/crates-lurey-io/retroglyph/commit/29398ac784015db59fd1fb84ca77b759986e5b2b) _(terminal)_ Move_cursor_to resets only tracked cursor, not color state by `@crates-lurey-io-agent[bot]` in [#1190](https://github.com/crates-lurey-io/retroglyph/pull/1190)
+
+### Documentation
+
+- [f6c17c7](https://github.com/crates-lurey-io/retroglyph/commit/f6c17c715a52af7faba7e4ccf042a9159bf335f0) _(workspace)_ Add pseudographic project logo/favicon by `@crates-lurey-io-agent[bot]` in [#1200](https://github.com/crates-lurey-io/retroglyph/pull/1200)
+
+**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-v0.1.7...retroglyph-terminal-v0.1.8
+
 ## [0.1.7+retroglyph-terminal](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-v0.1.6...retroglyph-terminal-v0.1.7) - 2026-08-05
 
 ### Features
