@@ -198,45 +198,83 @@ fn trailing_comment_block(prefix: &str) -> Vec<String> {
 }
 
 fn render(features: &[Feature], flavor: Flavor) -> String {
-    let mut out = String::new();
-
     let defaults: Vec<&str> = features
         .iter()
         .filter(|feature| feature.is_default)
         .map(|feature| feature.name.as_str())
         .collect();
-    if defaults.is_empty() {
-        out.push_str(
-            "This crate has no default features; every feature below is optional and off unless enabled.\n",
-        );
+
+    // `summary` is the always-visible line: short enough to sit inside a `<summary>` on
+    // `README.md`, and reused verbatim as the intro line on rustdoc, where there's no
+    // `<summary>` length constraint. `long_intro` is the fuller no-defaults sentence, too long
+    // for a `<summary>`; it stands alone on rustdoc and moves into the `<details>` body on
+    // `README.md`.
+    let (summary, long_intro) = if defaults.is_empty() {
+        (
+            "Features: all optional, none enabled by default.".to_string(),
+            Some(
+                "This crate has no default features; every feature below is optional and off unless enabled.\n"
+                    .to_string(),
+            ),
+        )
     } else {
         let labels: Vec<String> = defaults.iter().map(|name| format!("`{name}`")).collect();
-        out.push_str("Default features: ");
-        out.push_str(&labels.join(", "));
-        out.push_str(".\n");
-    }
+        (format!("Default features: {}.", labels.join(", ")), None)
+    };
 
+    let mut features_block = String::new();
     for feature in features {
-        out.push_str("\n### `");
-        out.push_str(&feature.name);
-        out.push_str("`\n\n");
-        out.push_str(if feature.is_default {
+        features_block.push_str("\n### `");
+        features_block.push_str(&feature.name);
+        features_block.push_str("`\n\n");
+        features_block.push_str(if feature.is_default {
             "🟢 Enabled by default.\n"
         } else {
             "⚪ Optional.\n"
         });
-        out.push('\n');
+        features_block.push('\n');
         for line in &feature.doc {
             let rendered = match flavor {
                 Flavor::Rustdoc => line.clone(),
                 Flavor::Readme => strip_doc_links(line),
             };
-            out.push_str(&rendered);
-            out.push('\n');
+            features_block.push_str(&rendered);
+            features_block.push('\n');
         }
     }
 
-    out
+    match flavor {
+        Flavor::Rustdoc => {
+            let mut out = String::new();
+            if let Some(intro) = &long_intro {
+                out.push_str(intro);
+            } else {
+                out.push_str(&summary);
+                out.push('\n');
+            }
+            out.push_str(&features_block);
+            out
+        }
+        // Wrapped in `<details>`/`<summary>` so the feature reference doesn't dominate the
+        // README a new user lands on (retroglyph#1251). The blank line after `<summary>...
+        // </summary>` and the one before `</details>` are load-bearing: per CommonMark, an HTML
+        // block only ends at a blank line, so without them the `###` headings inside render as
+        // literal text instead of Markdown. Matches the house style set by the root README's
+        // table-of-contents `<details>`.
+        Flavor::Readme => {
+            let mut out = String::new();
+            out.push_str("<details>\n\n<summary>");
+            out.push_str(&summary);
+            out.push_str("</summary>\n");
+            if let Some(intro) = &long_intro {
+                out.push('\n');
+                out.push_str(intro);
+            }
+            out.push_str(&features_block);
+            out.push_str("\n</details>\n");
+            out
+        }
+    }
 }
 
 /// Turns rustdoc intra-doc link markup into plain code spans: `` [`Foo::bar`](path) `` and the
@@ -403,6 +441,7 @@ thing = []
         assert!(rustdoc.contains("🟢 Enabled by default."));
         assert!(rustdoc.contains("### `b`"));
         assert!(rustdoc.contains("⚪ Optional."));
+        assert!(!rustdoc.contains("<details>"));
     }
 
     #[test]
@@ -412,8 +451,37 @@ thing = []
             is_default: false,
             doc: vec!["Does a.".into()],
         }];
-        let rendered = render(&features, Flavor::Readme);
+        let rendered = render(&features, Flavor::Rustdoc);
         assert!(rendered.starts_with("This crate has no default features"));
+        assert!(!rendered.contains("<details>"));
+    }
+
+    #[test]
+    fn readme_wraps_body_in_details_with_blank_lines() {
+        let features = vec![Feature {
+            name: "a".into(),
+            is_default: true,
+            doc: vec!["Does a.".into()],
+        }];
+        let readme = render(&features, Flavor::Readme);
+        assert!(readme.starts_with("<details>\n\n<summary>Default features: `a`.</summary>\n\n"));
+        assert!(readme.contains("</summary>\n\n### `a`"));
+        assert!(readme.trim_end().ends_with("</details>"));
+        assert!(readme.contains("Does a.\n\n</details>"));
+    }
+
+    #[test]
+    fn readme_no_defaults_uses_short_summary_and_keeps_long_intro_in_body() {
+        let features = vec![Feature {
+            name: "a".into(),
+            is_default: false,
+            doc: vec!["Does a.".into()],
+        }];
+        let readme = render(&features, Flavor::Readme);
+        assert!(readme.starts_with(
+            "<details>\n\n<summary>Features: all optional, none enabled by default.</summary>\n\n"
+        ));
+        assert!(readme.contains("This crate has no default features"));
     }
 
     #[test]

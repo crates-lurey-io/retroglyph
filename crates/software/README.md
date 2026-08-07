@@ -63,6 +63,9 @@ start.
 ## Features
 
 <!-- gen-features:start -->
+<details>
+
+<summary>Features: all optional, none enabled by default.</summary>
 
 This crate has no default features; every feature below is optional and off unless enabled.
 
@@ -89,6 +92,7 @@ PNG sprite sheet tilesets with alpha-blended CPU blit support.
 
 Adds `alpha-blend` and forwards to `retroglyph-window`'s `tilesets` feature for decode/config.
 
+</details>
 <!-- gen-features:end -->
 
 ## Frame rate and window title live on `WindowConfig`, not on this builder

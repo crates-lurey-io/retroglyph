@@ -119,8 +119,9 @@ interaction.frame(&mut Surface::new(&mut grid, Rect::new(0, 0, 20, 1), 0), |ui| 
 ## Features
 
 <!-- gen-features:start -->
+<details>
 
-Default features: `std`.
+<summary>Default features: `std`.</summary>
 
 ### `dev`
 
@@ -164,6 +165,7 @@ above for the `no_std` alternative).
 Disabling this feature (`--no-default-features`) builds this crate `no_std` (requires an allocator
 and one of `std`/`libm`; see the crate-level `compile_error!` in `src/lib.rs`).
 
+</details>
 <!-- gen-features:end -->
 
 See [docs.rs](https://docs.rs/retroglyph-ui) for the full API, or the

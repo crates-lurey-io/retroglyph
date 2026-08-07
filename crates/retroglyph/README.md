@@ -49,8 +49,9 @@ Want a native window or a browser tab instead of a real terminal? Enable the `so
 ## Features
 
 <!-- gen-features:start -->
+<details>
 
-Default features: `crossterm`, `ui`.
+<summary>Default features: `crossterm`, `ui`.</summary>
 
 ### `crossterm`
 
@@ -109,6 +110,7 @@ Re-exports `retroglyph-wgpu` as `wgpu`: a GPU `Backend` via `wgpu` (Vulkan, Meta
 Also pulls in the curated windowed re-exports (`WindowConfig`, `PresenterBuilder`, `Windowed`,
 `WindowedLaunchError`, `run_app`, `run_app_on`).
 
+</details>
 <!-- gen-features:end -->
 
 See [docs.rs](https://docs.rs/retroglyph) for the full API, or the

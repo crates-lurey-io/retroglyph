@@ -33,6 +33,9 @@ assert!(ansi.contains('@'));
 ## Features
 
 <!-- gen-features:start -->
+<details>
+
+<summary>Features: all optional, none enabled by default.</summary>
 
 This crate has no default features; every feature below is optional and off unless enabled.
 
@@ -50,6 +53,7 @@ would otherwise compile them out (see `retroglyph_core::dev`).
 Forwards to `retroglyph-terminal`'s (and `retroglyph-core`'s) `egc` feature for
 grapheme-cluster-aware cell diffing.
 
+</details>
 <!-- gen-features:end -->
 
 ## Usage from JS

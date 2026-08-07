@@ -32,8 +32,9 @@ cargo add retroglyph-window
 ## Features
 
 <!-- gen-features:start -->
+<details>
 
-Default features: `winit`.
+<summary>Default features: `winit`.</summary>
 
 ### `default-font`
 
@@ -84,6 +85,7 @@ Renderer crates that only implement `Presenter` can disable this and depend sole
 `raw-window-handle`; loops other than winit (SDL2, tao, custom) bring their own driver against
 `Presenter` + `WindowBackend`.
 
+</details>
 <!-- gen-features:end -->
 
 A game never implements [`Presenter`] itself (that's `retroglyph-software`'s job), but a new

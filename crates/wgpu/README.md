@@ -111,6 +111,9 @@ so needs no equivalent deferral.
 ## Features
 
 <!-- gen-features:start -->
+<details>
+
+<summary>Features: all optional, none enabled by default.</summary>
 
 This crate has no default features; every feature below is optional and off unless enabled.
 
@@ -146,6 +149,7 @@ tileset-gated item in this crate) would then be missing an item the trait requir
 outside a test build: `retroglyph-software` is dev-only, so this half of the forward is a no-op for
 a plain `cargo build`/`check`.
 
+</details>
 <!-- gen-features:end -->
 
 ## Status
