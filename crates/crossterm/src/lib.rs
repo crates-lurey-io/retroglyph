@@ -1129,6 +1129,16 @@ impl<W: std::io::Write> Input for Crossterm<W> {
     ///
     /// See the `pushed_events` field comment for why this backend implements this at all, when it
     /// has a perfectly good event source of its own.
+    ///
+    /// Deliberately does not coalesce consecutive `Mouse(Moved)` pushes the way
+    /// `retroglyph-window`'s `WindowBackend`, `retroglyph-software`'s `SoftwareRenderer`, and
+    /// `Headless` do; this backend is intentionally exempt from
+    /// `retroglyph_core::testing::conformance::assert_input_contract` (see that module's doc for
+    /// the coverage table). That coalescing exists to bound queue growth against a
+    /// device-polling-rate motion firehose (winit's `CursorMoved`, retroglyph#294/retroglyph#768);
+    /// `pushed_events` has no such source feeding it, it only ever receives events a test harness
+    /// or driver replays by hand, one at a time, so there is nothing to bound and coalescing would
+    /// just be dead code here.
     fn push_event(&mut self, event: Event) {
         self.pushed_events.push_back(event);
     }
