@@ -96,12 +96,9 @@ web-sys = { version = "0.3", features = ["Window", "EventTarget", "Document", "E
 # retroglyph-software's own fastrand dev-dependency.
 criterion = "0.5"
 fastrand = "2"
-# Cross-backend Input conformance harness (retroglyph#763): dev-only, so the `testing` feature's
-# assertion helpers never ship in a release build of this crate. `default-features = false`
-# matches the `[dependencies]` entry above, for the same reason crossterm/software's own
-# `testing` dev-dependency does (see their Cargo.toml comments). No `version` key: `WindowBackend`
-# is dev-only exercised against this feature, and a version-less dev-dependency is dropped from
-# the packaged manifest instead of needing `testing` live on crates.io to publish.
+# Cross-backend Input conformance harness (retroglyph#763): dev-only, matching crossterm/software's
+# own `testing` dev-dependency (see their Cargo.toml comments for why `default-features = false`
+# and no `version` key).
 retroglyph-core = { path = "../core", default-features = false, features = ["testing"] }
 # `run.rs`'s doc examples build a real `SoftwareRenderer` to hand to `run_windowed_with_proxy`/
 # `run_windowed_with_typed_proxy`. `retroglyph-software` depends on this crate, not the other way
