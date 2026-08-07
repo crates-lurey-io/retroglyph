@@ -137,8 +137,12 @@
 //! and goes straight to a caller-supplied handler, since `Event::Custom` itself stays fixed to
 //! `u64`.
 
-#![doc(html_logo_url = "https://raw.githubusercontent.com/crates-lurey-io/retroglyph/main/docs/public/assets/logo.svg")]
-#![doc(html_favicon_url = "https://raw.githubusercontent.com/crates-lurey-io/retroglyph/main/docs/public/assets/logo.svg")]
+#![doc(
+    html_logo_url = "https://raw.githubusercontent.com/crates-lurey-io/retroglyph/main/docs/public/assets/logo.svg"
+)]
+#![doc(
+    html_favicon_url = "https://raw.githubusercontent.com/crates-lurey-io/retroglyph/main/docs/public/assets/logo.svg"
+)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 pub mod atlas;
