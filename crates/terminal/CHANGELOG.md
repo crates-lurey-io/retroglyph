@@ -7,6 +7,17 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
+## [0.1.9+retroglyph-terminal](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-v0.1.8...retroglyph-terminal-v0.1.9) - 2026-08-07
+
+### Documentation
+
+- [833e8b0](
+https://github.com/crates-lurey-io/retroglyph/commit/833e8b015626f6377ef96adc8b9a6aa593c5f300) *(workspace)* Collapse the generated Features section behind <details> in crate READMEs by `@crates-lurey-io-agent[bot]` in [#1254](
+https://github.com/crates-lurey-io/retroglyph/pull/1254)
+
+**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-v0.1.8...retroglyph-terminal-v0.1.9
+
+
 ## [0.1.8+retroglyph-terminal](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-v0.1.7...retroglyph-terminal-v0.1.8) - 2026-08-07
 
 ### Bug Fixes
