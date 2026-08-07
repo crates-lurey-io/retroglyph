@@ -227,8 +227,8 @@ impl GlBackendBuilder {
             return Err(GlBackendError::MixedGlyphSizes);
         };
         // `CellGeometry::surface_size` multiplies as plain `u32`; check for overflow here, in
-        // `u64`, before it can happen there (`scale` is `u16` on this backend, unlike the
-        // software backend's `u8`, so the product is not overflow-free by construction).
+        // `u64`, before it can happen there (`scale` is `u16`, so the product is not
+        // overflow-free by construction).
         let cell_w = u64::from(glyph_size.0) * u64::from(self.scale);
         let cell_h = u64::from(glyph_size.1) * u64::from(self.scale);
         let surface_w = u64::from(self.cols) * cell_w;
@@ -271,5 +271,61 @@ impl GlBackendBuilder {
         {
             Err(GlBackendError::NoFont)
         }
+    }
+}
+
+impl retroglyph_window::PresenterBuilder for GlBackendBuilder {
+    type Presenter = GlRenderer;
+    type Error = GlBackendError;
+
+    fn new() -> Self {
+        Self::new()
+    }
+
+    fn grid_size(self, cols: u16, rows: u16) -> Self {
+        self.grid_size(cols, rows)
+    }
+
+    fn scale(self, scale: u16) -> Self {
+        self.scale(scale)
+    }
+
+    fn font(self, fonts: impl Into<FontChain<'static>>) -> Self {
+        self.font(fonts)
+    }
+
+    #[cfg(feature = "tilesets")]
+    fn tileset(self, opts: TilesetOptions) -> Self {
+        self.tileset(opts)
+    }
+
+    fn build_presenter(self) -> Result<Self::Presenter, Self::Error> {
+        self.build()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::GlBackendBuilder;
+
+    fn test_font() -> retroglyph_window::font::BitmapFont {
+        static DATA: [u8; 16] = [0; 16];
+        retroglyph_window::font::BitmapFont::new(&DATA, 8, 16, 1)
+    }
+
+    /// Exercises `PresenterBuilder`'s methods through the trait, not the inherent ones, so the
+    /// forwarding impl itself (not just the methods it forwards to) is under test.
+    #[test]
+    fn presenter_builder_impl_forwards_to_the_inherent_methods() {
+        fn build<B: retroglyph_window::PresenterBuilder>(
+            font: retroglyph_window::font::BitmapFont,
+        ) -> Result<B::Presenter, B::Error> {
+            B::new()
+                .grid_size(4, 2)
+                .scale(1)
+                .font(font)
+                .build_presenter()
+        }
+        assert!(build::<GlBackendBuilder>(test_font()).is_ok());
     }
 }

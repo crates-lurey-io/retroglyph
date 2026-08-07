@@ -205,11 +205,10 @@ fn renderer(cols: u16, rows: u16, scale: u16) -> WgpuRenderer {
 }
 
 /// A software renderer over the same grid, the CPU parity reference.
-#[allow(clippy::cast_possible_truncation)]
 fn software(cols: u16, rows: u16, scale: u16) -> retroglyph_software::SoftwareRenderer {
     retroglyph_software::SoftwareBackendBuilder::new()
         .grid_size(cols, rows)
-        .scale(scale as u8)
+        .scale(scale)
         .build()
         .expect("default-font builds")
         .into_renderer()
@@ -642,10 +641,9 @@ mod sprites {
             .tileset(opts())
             .build()
             .expect("tileset builds");
-        #[allow(clippy::cast_possible_truncation)]
         let cpu = retroglyph_software::SoftwareBackendBuilder::new()
             .grid_size(cols, rows)
-            .scale(scale as u8)
+            .scale(scale)
             .tileset(opts())
             .build()
             .expect("tileset builds")

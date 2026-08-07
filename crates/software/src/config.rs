@@ -161,7 +161,7 @@ pub struct SoftwareBackend {
     ///
     /// A scale of 2 renders each 1-bit font pixel as a 2×2 block, making
     /// the Unscii 16 font display at 16×32 pixels per cell. Default is 1.
-    pub scale: u8,
+    pub scale: u16,
     /// Registered tileset options, loaded at
     /// [`into_renderer`](SoftwareBackend::into_renderer) time.
     #[cfg(feature = "tilesets")]
@@ -249,7 +249,7 @@ impl SoftwareBackendBuilder {
     /// 8×16 font a scale of 2 gives 16×32 pixel cells, more readable
     /// on modern displays.
     #[must_use]
-    pub const fn scale(mut self, scale: u8) -> Self {
+    pub const fn scale(mut self, scale: u16) -> Self {
         self.options.scale = scale;
         self
     }
@@ -339,6 +339,36 @@ impl SoftwareBackendBuilder {
     }
 }
 
+impl retroglyph_window::PresenterBuilder for SoftwareBackendBuilder {
+    type Presenter = crate::SoftwareRenderer;
+    type Error = SoftwareBackendError;
+
+    fn new() -> Self {
+        Self::new()
+    }
+
+    fn grid_size(self, cols: u16, rows: u16) -> Self {
+        self.grid_size(cols, rows)
+    }
+
+    fn scale(self, scale: u16) -> Self {
+        self.scale(scale)
+    }
+
+    fn font(self, fonts: impl Into<FontChain<'static>>) -> Self {
+        self.font(fonts)
+    }
+
+    #[cfg(feature = "tilesets")]
+    fn tileset(self, opts: TilesetOptions) -> Self {
+        self.tileset(opts)
+    }
+
+    fn build_presenter(self) -> Result<Self::Presenter, Self::Error> {
+        self.build()?.into_renderer()
+    }
+}
+
 impl Default for SoftwareBackendBuilder {
     fn default() -> Self {
         Self::new()
@@ -391,5 +421,22 @@ mod tests {
             .font(FontChain::new(test_font(), &FALLBACKS))
             .build();
         assert!(matches!(result, Err(SoftwareBackendError::MixedGlyphSizes)));
+    }
+
+    /// Exercises `PresenterBuilder`'s methods through the trait, not the inherent ones
+    /// [`build_accepts_nonzero_scale`] already covers, so the forwarding impl itself (not just the
+    /// methods it forwards to) is under test.
+    #[test]
+    fn presenter_builder_impl_forwards_to_the_inherent_methods() {
+        fn build<B: retroglyph_window::PresenterBuilder>(
+            font: BitmapFont,
+        ) -> Result<B::Presenter, B::Error> {
+            B::new()
+                .grid_size(4, 2)
+                .scale(1)
+                .font(font)
+                .build_presenter()
+        }
+        assert!(build::<SoftwareBackendBuilder>(test_font()).is_ok());
     }
 }

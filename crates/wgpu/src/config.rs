@@ -269,9 +269,61 @@ impl WgpuBackendBuilder {
     }
 }
 
+impl retroglyph_window::PresenterBuilder for WgpuBackendBuilder {
+    type Presenter = WgpuRenderer;
+    type Error = WgpuBackendError;
+
+    fn new() -> Self {
+        Self::new()
+    }
+
+    fn grid_size(self, cols: u16, rows: u16) -> Self {
+        self.grid_size(cols, rows)
+    }
+
+    fn scale(self, scale: u16) -> Self {
+        self.scale(scale)
+    }
+
+    fn font(self, fonts: impl Into<FontChain<'static>>) -> Self {
+        self.font(fonts)
+    }
+
+    #[cfg(feature = "tilesets")]
+    fn tileset(self, opts: TilesetOptions) -> Self {
+        self.tileset(opts)
+    }
+
+    fn build_presenter(self) -> Result<Self::Presenter, Self::Error> {
+        self.build()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{WgpuBackendBuilder, WgpuBackendError};
+
+    fn test_font() -> retroglyph_window::font::BitmapFont {
+        static DATA: [u8; 16] = [0; 16];
+        retroglyph_window::font::BitmapFont::new(&DATA, 8, 16, 1)
+    }
+
+    /// Exercises `PresenterBuilder`'s methods through the trait, not the inherent ones the rest
+    /// of this module already covers, so the forwarding impl itself (not just the methods it
+    /// forwards to) is under test.
+    #[test]
+    fn presenter_builder_impl_forwards_to_the_inherent_methods() {
+        fn build<B: retroglyph_window::PresenterBuilder>(
+            font: retroglyph_window::font::BitmapFont,
+        ) -> Result<B::Presenter, B::Error> {
+            B::new()
+                .grid_size(4, 2)
+                .scale(1)
+                .font(font)
+                .build_presenter()
+        }
+        assert!(build::<WgpuBackendBuilder>(test_font()).is_ok());
+    }
 
     #[test]
     fn zero_scale_and_zero_grid_are_rejected_before_any_font_work() {

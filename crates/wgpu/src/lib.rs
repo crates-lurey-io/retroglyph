@@ -140,7 +140,15 @@
 //! PNG sprite/tileset support: decodes sprite sheets into an RGBA array-texture atlas and draws
 //! them in a third, source-over blended pass per grid layer.
 //!
-//! Forwards to `retroglyph-window`'s shared tileset decode.
+//! Forwards to `retroglyph-window`'s shared tileset decode, and (where it's a dependency at all) to
+//! the `retroglyph-software` dev-dependency's own `tilesets`, so the two stay in lockstep: without
+//! this, `cargo test -p retroglyph-wgpu` (this feature off) still pulls in
+//! `retroglyph-window/tilesets` transitively through that dev-dependency's forced-on `tilesets`
+//! below, and the `PresenterBuilder` impl's `tileset` method (gated on this crate's own `tilesets`
+//! feature, matching every other tileset-gated item in this crate) would then be missing an item
+//! the trait requires whenever `retroglyph-window/tilesets` is on, regardless of this crate's own
+//! flag (retroglyph#1192). Harmless outside a test build: `retroglyph-software` is dev-only, so
+//! this half of the forward is a no-op for a plain `cargo build`/`check`.
 //! <!-- gen-features:end -->
 
 #![doc(

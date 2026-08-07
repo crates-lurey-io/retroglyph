@@ -168,7 +168,7 @@ const PNG_COLS: u16 = 50;
 #[cfg(all(feature = "software", not(target_arch = "wasm32")))]
 const PNG_ROWS: u16 = 25;
 #[cfg(all(feature = "software", not(target_arch = "wasm32")))]
-const PNG_SCALE: u8 = 2;
+const PNG_SCALE: u16 = 2;
 /// Enough settled frames for `FrameStats`' 120-sample window to carry real (if synthetic, fixed
 /// per-frame delta) data, so `Full` mode's sparkline draws something instead of an empty row.
 #[cfg(all(feature = "software", not(target_arch = "wasm32")))]
