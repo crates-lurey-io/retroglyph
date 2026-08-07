@@ -129,6 +129,7 @@ use retroglyph_core::backend::{Cursor, CursorStyle, Input, Output};
 use retroglyph_core::event::Event;
 use retroglyph_core::grid::HasSize;
 use retroglyph_core::grid::{Pos, Size};
+use retroglyph_core::terminal::Terminal;
 use retroglyph_terminal::TerminalRenderer;
 use std::collections::VecDeque;
 use std::io::{BufWriter, IsTerminal, Stdout};
@@ -537,6 +538,53 @@ impl Default for CrosstermOptions {
             raw_mode: true,
             color_support: None,
         }
+    }
+}
+
+/// Builds a [`Crossterm`] backend rendering to stdout and drives `app` on it with
+/// [`retroglyph_core::app::run_on_with`], blocking until `app` returns
+/// [`Flow::Exit`](retroglyph_core::app::Flow::Exit).
+///
+/// The crossterm arm of [`Launch`](retroglyph_core::app::Launch): pairs with a windowed backend's
+/// `Windowed` (in `retroglyph-window`) to let both live in the same binary behind one shared
+/// [`App`](retroglyph_core::app::App) impl, without a cfg-dispatched `run()` silently picking a
+/// backend out from under an additive feature. See [`Launch`](retroglyph_core::app::Launch)'s own
+/// docs for why.
+///
+/// # Examples
+///
+/// ```no_run
+/// use retroglyph_core::app::{App, Flow, Frame, Launch, RunOptions};
+/// use retroglyph_core::backend::Backend;
+/// use retroglyph_core::terminal::Terminal;
+/// use retroglyph_crossterm::Crossterm;
+///
+/// struct MyGame;
+/// impl<B: Backend> App<B> for MyGame {
+///     fn update(&mut self, _term: &mut Terminal<B>, _frame: &Frame) -> Flow {
+///         Flow::Exit
+///     }
+/// }
+///
+/// // Requires a real controlling terminal, so this example is `no_run`.
+/// Crossterm::builder().launch(MyGame, RunOptions::default())?;
+/// # Ok::<(), std::io::Error>(())
+/// ```
+impl retroglyph_core::app::Launch for CrosstermOptions {
+    type Backend = Crossterm;
+    type Error = std::io::Error;
+
+    /// # Errors
+    ///
+    /// Same as [`CrosstermOptions::build`] if construction fails, or the same as
+    /// [`retroglyph_core::app::run_on_with`] if the loop's automatic `present()` call fails once
+    /// running.
+    fn launch<A>(self, app: A, options: retroglyph_core::app::RunOptions) -> Result<(), Self::Error>
+    where
+        A: retroglyph_core::app::App<Self::Backend> + 'static,
+    {
+        let backend = self.build()?;
+        retroglyph_core::app::run_on_with(Terminal::new(backend), app, options)
     }
 }
 
