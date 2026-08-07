@@ -15,6 +15,7 @@ use super::Color;
 /// assert_eq!(style.foreground(), Color::GREEN);
 /// assert_eq!(style.background(), Color::BLACK);
 /// ```
+#[doc(alias = "attr")] // curses-family attribute sets
 pub struct Style {
     /// Foreground color.
     ///
