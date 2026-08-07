@@ -36,7 +36,9 @@ jobs:
           # Allowed scopes. Crate scopes (the crate dir under crates/*) plus workspace-level scopes
           # for changes that don't belong to a single crate:
           #   workspace - workspace-wide changes (tooling, CI, root docs, release config)
-          #   deps      - dependency bumps (also what Dependabot uses)
+          #   deps      - production dependency bumps
+          #   deps-dev  - development dependency bumps (Dependabot's npm convention for
+          #               devDependencies, e.g. tools/package.json)
           # requireScope is false, so a scopeless title is still allowed (e.g. release-plz's own
           # Release PR); the workspace scope is the convention, not a hard requirement.
           scopes: |
@@ -52,6 +54,7 @@ jobs:
             examples
             workspace
             deps
+            deps-dev
           requireScope: false
           # A `!` before the colon (feat(core)!: ...) is the breaking-change signal; the action
           # accepts it as valid Conventional Commits grammar.
