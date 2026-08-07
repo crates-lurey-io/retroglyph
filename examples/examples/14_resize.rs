@@ -50,6 +50,7 @@ impl Resize {
     /// arrives mixed in with other events in the same drain, and `term.resize()` needs `&mut
     /// term` while [`Terminal::drain_events`]'s iterator still holds one -- so the requested
     /// size is recorded here and applied once the loop (and the borrow) ends.
+    // ANCHOR: handle_events
     fn handle_events<B: Backend>(term: &mut Terminal<B>) -> bool {
         let mut requested_size = None;
         let mut quit = false;
@@ -70,6 +71,7 @@ impl Resize {
         }
         !quit
     }
+    // ANCHOR_END: handle_events
 
     /// Draws a border and a centered size readout over the terminal's *current* area --
     /// `term.area()`, not a remembered or hardcoded one -- so the whole frame is always correct
