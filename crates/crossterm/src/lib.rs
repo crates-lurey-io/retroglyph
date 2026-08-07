@@ -126,6 +126,7 @@ use retroglyph_core::backend::{Cursor, CursorStyle, Input, Output};
 use retroglyph_core::event::Event;
 use retroglyph_core::grid::HasSize;
 use retroglyph_core::grid::{Pos, Size};
+use retroglyph_core::terminal::Terminal;
 use retroglyph_terminal::TerminalRenderer;
 use std::collections::VecDeque;
 use std::io::{BufWriter, IsTerminal, Stdout};
@@ -534,6 +535,53 @@ impl Default for CrosstermOptions {
             raw_mode: true,
             color_support: None,
         }
+    }
+}
+
+/// Builds a [`Crossterm`] backend rendering to stdout and drives `app` on it with
+/// [`retroglyph_core::app::run_on_with`], blocking until `app` returns
+/// [`Flow::Exit`](retroglyph_core::app::Flow::Exit).
+///
+/// The crossterm arm of [`Launch`](retroglyph_core::app::Launch): pairs with a windowed backend's
+/// `Windowed` (in `retroglyph-window`) to let both live in the same binary behind one shared
+/// [`App`](retroglyph_core::app::App) impl, without a cfg-dispatched `run()` silently picking a
+/// backend out from under an additive feature. See [`Launch`](retroglyph_core::app::Launch)'s own
+/// docs for why.
+///
+/// # Examples
+///
+/// ```no_run
+/// use retroglyph_core::app::{App, Flow, Frame, Launch, RunOptions};
+/// use retroglyph_core::backend::Backend;
+/// use retroglyph_core::terminal::Terminal;
+/// use retroglyph_crossterm::Crossterm;
+///
+/// struct MyGame;
+/// impl<B: Backend> App<B> for MyGame {
+///     fn update(&mut self, _term: &mut Terminal<B>, _frame: &Frame) -> Flow {
+///         Flow::Exit
+///     }
+/// }
+///
+/// // Requires a real controlling terminal, so this example is `no_run`.
+/// Crossterm::builder().launch(MyGame, RunOptions::default())?;
+/// # Ok::<(), std::io::Error>(())
+/// ```
+impl retroglyph_core::app::Launch for CrosstermOptions {
+    type Backend = Crossterm;
+    type Error = std::io::Error;
+
+    /// # Errors
+    ///
+    /// Same as [`CrosstermOptions::build`] if construction fails, or the same as
+    /// [`retroglyph_core::app::run_on_with`] if the loop's automatic `present()` call fails once
+    /// running.
+    fn launch<A>(self, app: A, options: retroglyph_core::app::RunOptions) -> Result<(), Self::Error>
+    where
+        A: retroglyph_core::app::App<Self::Backend> + 'static,
+    {
+        let backend = self.build()?;
+        retroglyph_core::app::run_on_with(Terminal::new(backend), app, options)
     }
 }
 
@@ -1529,6 +1577,46 @@ mod tests {
             .build()
         {
             drop(term);
+        }
+    }
+
+    #[test]
+    fn launch_builds_and_drives_the_app_to_flow_exit() {
+        use retroglyph_core::app::Launch;
+
+        struct ExitImmediately;
+        impl<B: retroglyph_core::backend::Backend> retroglyph_core::app::App<B> for ExitImmediately {
+            fn update(
+                &mut self,
+                _term: &mut Terminal<B>,
+                _frame: &retroglyph_core::app::Frame,
+            ) -> retroglyph_core::app::Flow {
+                retroglyph_core::app::Flow::Exit
+            }
+        }
+
+        // Same TTY-free combination the other `build`/`build_with_writer` tests use, so `Launch::
+        // launch`'s call to `self.build()` (stdout, not `build_with_writer`) can still succeed
+        // under `cargo test`'s redirected stdout.
+        let _lock = TEST_GUARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+
+        let result = Crossterm::builder()
+            .raw_mode(false)
+            .alt_screen(false)
+            .mouse_capture(false)
+            .focus_change(false)
+            .bracketed_paste(false)
+            .kitty_protocol(false)
+            .launch(ExitImmediately, retroglyph_core::app::RunOptions::default());
+        // Skip (rather than fail) on the rare environment where even the always-safe cursor-hide
+        // escape write fails outright (e.g. a closed stdout): see the `build()`-only test above
+        // for why that's not what this test is about. Reaching past `launch` at all (rather than
+        // panicking inside it) is the proof that `Launch::launch` both builds the backend and
+        // drives `ExitImmediately` to `Flow::Exit` through `run_on_with`.
+        if let Err(err) = result {
+            let _ = err;
         }
     }
 

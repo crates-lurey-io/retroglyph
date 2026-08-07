@@ -341,6 +341,127 @@ where
     run_on(Terminal::new(backend), app)
 }
 
+/// A backend's own entry point for driving an [`App`](crate::app::App), named at the call site
+/// rather than selected by which Cargo features happen to be enabled.
+///
+/// Each backend crate implements this on whichever type already gathers the configuration it
+/// needs to start: `CrosstermOptions` in `retroglyph-crossterm` (reachable via
+/// `Crossterm::builder()`), and a small `Windowed` wrapper around each windowed backend's
+/// `PresenterBuilder` in `retroglyph-window` (reachable via `retroglyph-software`,
+/// `retroglyph-gl`, and `retroglyph-wgpu`). Both shapes let two backends live in the same binary
+/// with no conflict, since Cargo features are additive: a `run()` dispatched by `#[cfg(feature =
+/// "crossterm")]` would silently change which backend a binary runs the moment any dependency
+/// anywhere in the graph turned that feature on for its own reasons, and `--all-features` would
+/// only ever type-check one arm of it. Naming the concrete backend in code, via `Launch::launch`,
+/// makes every additive feature harmless instead.
+///
+/// A single generic `fn run<A>(app: A) where A: for<B: Backend> App<B>` isn't expressible on
+/// stable Rust either way (no non-lifetime binders; see rust#108185), so there was never a way to
+/// accept "an app that runs on any backend" from one function signature. Each `Launch` impl names
+/// one concrete [`Backend`]; an app written as `impl<B: Backend> App<B> for MyGame` satisfies
+/// every one of them without change.
+///
+/// This trait intentionally has no unified error type spanning every backend: [`launch`](Self::launch)
+/// returns [`Self::Error`], whatever the implementing backend's own error is (`std::io::Error`
+/// for crossterm, a small enum spanning the presenter builder's error and winit's
+/// `EventLoopError` for the windowed backends). A facade crate that depends on more than one
+/// backend and wants one error type spanning all of them can wrap this trait; this crate, which
+/// only ever sees one backend's impl at a time, does not.
+///
+/// Unlike [`run`](crate::app::run)/[`run_on`](crate::app::run_on) and their `_with` counterparts,
+/// this trait is not gated behind the `std` feature: the shape declared here (an associated
+/// `Backend`, an associated `Error`, and `launch`'s signature) uses nothing from `std`, only
+/// [`Backend`], [`App`], and [`RunOptions`], all of which are already available without it. Only
+/// the concrete impls need `std` in practice (`retroglyph-crossterm`'s and
+/// `retroglyph-window`'s both do, since they delegate to `run_on_with`/`run_app_on`), and each of
+/// those lives in its own backend crate, not here; nothing stops a future `no_std` backend from
+/// implementing `Launch` too.
+///
+/// # Examples
+///
+/// ```no_run
+/// use retroglyph_core::app::{App, Flow, Frame, Launch, RunOptions};
+/// use retroglyph_core::backend::Backend;
+/// use retroglyph_core::terminal::Terminal;
+///
+/// // A game written once, generic over the backend, satisfies every `Launch` impl unchanged.
+/// struct MyGame;
+/// impl<B: Backend> App<B> for MyGame {
+///     fn update(&mut self, _term: &mut Terminal<B>, _frame: &Frame) -> Flow {
+///         Flow::Exit
+///     }
+/// }
+///
+/// // Stand-ins for two real backends' entry points: `retroglyph-crossterm`'s
+/// // `CrosstermOptions` (reachable via `Crossterm::builder()`) and `retroglyph-window`'s
+/// // `Windowed<B>` (reachable via `retroglyph-software`/`-gl`/`-wgpu`). Each names one concrete
+/// // `Backend`, so both can `launch(MyGame, ..)` unmodified -- see those crates' own docs for
+/// // the real impls this sketches. Written by hand here (rather than delegating to
+/// // `run_on_with`, which both real impls actually use) purely so this doctest itself stays
+/// // `std`-free, proving `Launch` doesn't need it -- the real impls' own docs are the proof they
+/// // work end to end.
+/// # use retroglyph_core::backend::Headless;
+/// fn drive_to_exit<A: App<Headless> + 'static>(mut app: A) -> Result<(), core::convert::Infallible> {
+///     let mut term = Terminal::new(Headless::new(80, 24));
+///     let mut frame_count = 0u64;
+///     loop {
+///         let frame = Frame { delta: core::time::Duration::ZERO, frame: frame_count };
+///         frame_count += 1;
+///         if app.update(&mut term, &frame) == Flow::Exit {
+///             return Ok(());
+///         }
+///     }
+/// }
+///
+/// struct TerminalOptions;
+/// impl Launch for TerminalOptions {
+///     type Backend = Headless;
+///     type Error = core::convert::Infallible;
+///     fn launch<A>(self, app: A, _options: RunOptions) -> Result<(), Self::Error>
+///     where
+///         A: App<Self::Backend> + 'static,
+///     {
+///         drive_to_exit(app)
+///     }
+/// }
+///
+/// struct WindowedOptions;
+/// impl Launch for WindowedOptions {
+///     type Backend = Headless;
+///     type Error = core::convert::Infallible;
+///     fn launch<A>(self, app: A, _options: RunOptions) -> Result<(), Self::Error>
+///     where
+///         A: App<Self::Backend> + 'static,
+///     {
+///         drive_to_exit(app)
+///     }
+/// }
+///
+/// # fn call_sites() -> Result<(), core::convert::Infallible> {
+/// TerminalOptions.launch(MyGame, RunOptions::default())?;
+/// WindowedOptions.launch(MyGame, RunOptions::animated(60))?;
+/// # Ok(())
+/// # }
+/// ```
+pub trait Launch {
+    /// The backend this impl launches [`App`](crate::app::App) on.
+    type Backend: Backend;
+    /// The error this impl's [`launch`](Self::launch) can fail with; each backend surfaces its
+    /// own, unwrapped (see this trait's docs for why there is no unified error here).
+    type Error;
+
+    /// Builds this backend and drives `app` on it with `options`, blocking until `app` returns
+    /// [`Flow::Exit`](crate::app::Flow::Exit).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Self::Error`] if this backend fails to build, or if driving `app` fails once
+    /// running; see the implementing type's own docs for the exact conditions.
+    fn launch<A>(self, app: A, options: RunOptions) -> Result<(), Self::Error>
+    where
+        A: App<Self::Backend> + 'static;
+}
+
 /// Builds a [`Terminal`](crate::terminal::Terminal) over `backend` and drives `app` with
 /// [`run_on_with`](crate::app::run_on_with), paced by `options`.
 ///
