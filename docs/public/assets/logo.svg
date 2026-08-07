@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100" role="img" aria-label="retroglyph logo: a pixel-grid letter R inside a box-drawing frame">
+  <title>retroglyph</title>
+  <rect x="2" y="2" width="96" height="96" rx="14" fill="#0d1117" stroke="#30363d" stroke-width="2"/>
+  <text x="6" y="13" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="10" fill="#484f58" textLength="88" lengthAdjust="spacingAndGlyphs">┌──────────────┐</text>
+  <text x="6" y="97" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="10" fill="#484f58" textLength="88" lengthAdjust="spacingAndGlyphs">└──────────────┘</text>
+  <!-- Pixel-grid "R", 5x7 glyph cells, 10px each, centered in the frame. -->
+  <g fill="#e6edf3">
+    <rect x="25" y="15" width="10" height="10"/>
+    <rect x="35" y="15" width="10" height="10"/>
+    <rect x="45" y="15" width="10" height="10"/>
+    <rect x="55" y="15" width="10" height="10"/>
+    <rect x="25" y="25" width="10" height="10"/>
+    <rect x="65" y="25" width="10" height="10"/>
+    <rect x="25" y="35" width="10" height="10"/>
+    <rect x="65" y="35" width="10" height="10"/>
+    <rect x="25" y="45" width="10" height="10"/>
+    <rect x="35" y="45" width="10" height="10"/>
+    <rect x="45" y="45" width="10" height="10"/>
+    <rect x="25" y="55" width="10" height="10"/>
+    <rect x="45" y="55" width="10" height="10"/>
+    <rect x="25" y="65" width="10" height="10"/>
+    <rect x="55" y="65" width="10" height="10"/>
+    <rect x="25" y="75" width="10" height="10"/>
+    <rect x="65" y="75" width="10" height="10"/>
+  </g>
+  <!-- Accent cell: the elbow of the R, styled like a terminal cursor block. -->
+  <rect x="55" y="45" width="10" height="10" fill="#3fb950"/>
+</svg>
