@@ -54,6 +54,10 @@ cargo-hack = { version = "0.6.45", locked = true }
 # binstall/quickinstall binaries, and cargo-run-bin's source-install fallback
 # is broken (https://github.com/dustinblackman/cargo-run-bin/issues/39).
 # It's installed to .bin/manual/ instead; see `setup-tools` in the Justfile.
+# Drives `just book`/`just book-serve` (retroglyph#487): builds the `docs/` mdBook site into
+# `target/doc/book`, alongside the rustdoc `just doc` already produces there. Pinned here like
+# every other CLI tool in this table rather than assuming a manually-installed `mdbook` on PATH.
+mdbook = { version = "0.5.4" }
 
 [workspace.package]
 edition = "2024"

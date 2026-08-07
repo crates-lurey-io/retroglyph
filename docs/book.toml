@@ -1,0 +1,9 @@
+[book]
+title = "retroglyph"
+description = "A 2D pseudographic terminal library for Rust"
+authors = ["retroglyph contributors"]
+src = "src"
+
+[output.html]
+git-repository-url = "https://github.com/crates-lurey-io/retroglyph"
+git-repository-icon = "fab-github"

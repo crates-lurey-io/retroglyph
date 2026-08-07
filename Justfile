@@ -140,6 +140,28 @@ doc: check-features
     @cp -r docs/public/. target/doc/ 2>/dev/null || true
     ./tools/gen-crates-index.sh target/doc
     @sed -i.bak "s/__GIT_SHA__/$(git rev-parse --short HEAD 2>/dev/null || echo unknown)/g" target/doc/index.html && rm -f target/doc/index.html.bak
+    just book
+
+# Builds the docs/ mdBook site (retroglyph#487) into target/doc/book, alongside the rustdoc `doc`
+# produces. Its `{{#include}}`s pull excerpts straight out of real, already-compiled source files
+# (see docs/src/), so a missing/renamed anchor fails this build -- that's what keeps tutorial code
+# from rotting out from under the prose, rather than merely looking checked.
+#
+# `-d` is relative to the invoking directory (repo root, where `just` runs recipes from), not to
+# `docs/`'s own root -- `target/doc/book` here, not `../target/doc/book` -- confirmed against
+# `mdbook build --help`; the latter lands one directory above the repo, not next to the rustdoc.
+#
+# `mdbook build` doesn't fail its own process on a broken `{{#include}}`: a missing file logs an
+# `ERROR` to stderr but still exits 0, and a missing anchor in an existing file logs nothing at
+# all -- confirmed against mdbook 0.5.4. `tools/check-book-anchors.sh` catches both explicitly;
+# see its header comment for why that script exists instead of trusting mdbook's own exit code.
+book:
+    ./tools/check-book-anchors.sh
+    cargo bin mdbook build docs -d target/doc/book
+
+# Live-reloading local preview of the book: rebuilds on save and opens a browser tab.
+book-serve:
+    cargo bin mdbook serve docs -d target/doc/book --open
 
 # Build docs the way docs.rs does, so feature-gated items pick up their "Available on `feature`
 # only" badges (requires nightly, since `doc_auto_cfg` is unstable). Verifies the docs.rs
@@ -290,6 +312,7 @@ check: build-pty-examples
     @cp -r docs/public/. target/doc/ 2>/dev/null || true
     ./tools/gen-crates-index.sh target/doc
     @sed -i.bak "s/__GIT_SHA__/$(git rev-parse --short HEAD 2>/dev/null || echo unknown)/g" target/doc/index.html && rm -f target/doc/index.html.bak
+    just book
 
 clean:
     cargo clean
