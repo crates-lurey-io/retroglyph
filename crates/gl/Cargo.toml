@@ -55,8 +55,16 @@ dev = ["retroglyph-core/dev"]
 # PNG sprite/tileset support (issue #366): decodes sprite sheets into an RGBA `TEXTURE_2D_ARRAY`
 # atlas and draws them in a second, source-over blended pass.
 #
-# Forwards to `retroglyph-window`'s shared tileset decode.
-tilesets = ["retroglyph-window/tilesets"]
+# Forwards to `retroglyph-window`'s shared tileset decode, and (Linux only, where it's a
+# dependency at all) to the `retroglyph-software` dev-dependency's own `tilesets`, so the two
+# stay in lockstep: without this, `cargo test -p retroglyph-gl` (this feature off) still pulls in
+# `retroglyph-window/tilesets` transitively through that dev-dependency's forced-on `tilesets`
+# below, and the `PresenterBuilder` impl's `tileset` method (gated on *this* feature, matching
+# every other tileset-gated item in this crate) would then be missing an item the trait requires
+# whenever `retroglyph-window/tilesets` is on -- regardless of this crate's own flag
+# (retroglyph#1192). Harmless outside a test build: `retroglyph-software` is dev-only, so this half
+# of the forward is a no-op for a plain `cargo build`/`check`.
+tilesets = ["retroglyph-window/tilesets", "retroglyph-software/tilesets"]
 
 [dependencies]
 retroglyph-core = { path = "../core", version = "0.6.0", default-features = false, features = ["std"] }
@@ -104,7 +112,9 @@ retroglyph-window = { path = "../window", version = "0.5.0", features = ["winit"
 # rasterizer (cross-backend parity). `retroglyph-software` is that reference rasterizer; both
 # backends share `retroglyph-window`'s font, so the comparison is a real pixel-identity check.
 [target.'cfg(target_os = "linux")'.dev-dependencies]
-# `tilesets` so the sprite/span parity tests can build the same tileset on both backends.
+# `default-font` only; `tilesets` is forwarded from this crate's own `tilesets` feature above
+# instead of forced on here, so a plain `cargo test -p retroglyph-gl` (that feature off) doesn't
+# drag `retroglyph-window/tilesets` in behind this crate's own flag's back (retroglyph#1192).
 # Deliberately no `version` key (see the equivalent dev-dependency in crates/window/Cargo.toml):
 # release-plz doesn't order publishing by dev-dependency edges, only real ones, so a version pin
 # here would make packaging this crate require `retroglyph-software` to already be on crates.io
@@ -112,7 +122,6 @@ retroglyph-window = { path = "../window", version = "0.5.0", features = ["winit"
 # published manifest instead of resolving it against the registry.
 retroglyph-software = { path = "../software", default-features = false, features = [
   "default-font",
-  "tilesets",
 ] }
 # Generates tiny in-memory PNG tilesets for the sprite render tests (issue #366).
 image = { version = "0.25", default-features = false, features = ["png"] }
