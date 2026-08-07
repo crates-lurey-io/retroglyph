@@ -283,6 +283,19 @@ struct Gpu {
     resources: GpuResources,
 }
 
+// `Gpu`'s wgpu handles (`Device`, `Queue`, ...) don't implement `Debug`, so this only reports the
+// CPU-side state; good enough for `Result::unwrap_err` in tests, the only place this is needed.
+impl std::fmt::Debug for WgpuRenderer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WgpuRenderer")
+            .field("cols", &self.cols)
+            .field("rows", &self.rows)
+            .field("surface_size", &self.surface_size)
+            .field("has_gpu", &self.gpu.is_some())
+            .finish_non_exhaustive()
+    }
+}
+
 impl WgpuRenderer {
     /// Builds a renderer for the given glyph atlas, grid size, and scale. Called by
     /// [`WgpuBackendBuilder::build`].
