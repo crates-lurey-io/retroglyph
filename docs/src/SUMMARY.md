@@ -13,3 +13,12 @@
 - [1. Hello](./tutorial/01-hello.md)
 - [2. Input](./tutorial/02-input.md)
 - [3. A Map](./tutorial/03-a-map.md)
+
+# How-To
+
+- [Choose a backend](./how-to/choose-a-backend.md)
+- [Test a game](./how-to/test-a-game.md)
+- [Handle resize](./how-to/handle-resize.md)
+- [Use a tileset](./how-to/use-a-tileset.md)
+- [Run in a browser](./how-to/run-in-a-browser.md)
+- [Write a backend](./how-to/write-a-backend.md)

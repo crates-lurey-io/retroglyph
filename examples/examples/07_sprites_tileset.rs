@@ -319,6 +319,7 @@ impl SpritesTileset {
 /// that covers the 4x2 cells [`CHEST_ART`] spans. Nothing in the tileset says how many cells a
 /// sprite occupies -- that is declared per draw call, by
 /// [`Surface::put_span`](retroglyph_core::surface::Surface::put_span).
+// ANCHOR: tilesets
 #[cfg(any(feature = "software", feature = "gl", feature = "wgpu"))]
 fn tilesets() -> [retroglyph_window::tileset::TilesetOptions; 2] {
     use retroglyph_window::tileset::{Codepage, TilesetOptions};
@@ -340,6 +341,7 @@ fn tilesets() -> [retroglyph_window::tileset::TilesetOptions; 2] {
             .expect("chest asset is a valid 32x32 PNG holding one tile"),
     ]
 }
+// ANCHOR_END: tilesets
 
 impl Example for SpritesTileset {
     const NAME: &'static str = "07_sprites_tileset";
