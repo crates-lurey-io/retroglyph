@@ -1,6 +1,6 @@
 [package]
 name = "retroglyph-wgpu"
-version = "0.1.0"
+version = "0.1.1"
 description = "GPU rendering backend for retroglyph: Vulkan, Metal, D3D12, and WebGPU via wgpu"
 readme = "README.md"
 edition.workspace = true
@@ -45,10 +45,10 @@ dev = ["retroglyph-core/dev"]
 tilesets = ["retroglyph-window/tilesets", "retroglyph-software/tilesets"]
 
 [dependencies]
-retroglyph-core = { path = "../core", version = "0.6.0", default-features = false, features = ["std"] }
+retroglyph-core = { path = "../core", version = "0.7.0", default-features = false, features = ["std"] }
 # The glyph source (BitmapFont + unscii16) lives in retroglyph-window's winit-free `font` module,
 # which this crate already depends on for `Presenter`. `default-font` forwards to window's feature.
-retroglyph-window = { path = "../window", version = "0.5.0", default-features = false }
+retroglyph-window = { path = "../window", version = "0.5.1", default-features = false }
 # `default-features = false` drops `gles`: OpenGL ES/WebGL2 is what `retroglyph-gl` already covers,
 # from a codebase that targets the GL feature floor directly; routing it through wgpu's translation
 # layer would add a second way to reach the same drivers without adding a platform. What is left is
@@ -118,7 +118,7 @@ retroglyph-core = { path = "../core", default-features = false, features = ["tes
 # The README quick start and `WgpuBackendBuilder`'s doc example call into `retroglyph_window::
 # winit`; this crate's own `[dependencies]` entry disables `winit` (a wgpu renderer needs only
 # `Presenter` and the font module), so doctests need it turned back on to compile those examples.
-retroglyph-window = { path = "../window", version = "0.5.0", features = ["winit"] }
+retroglyph-window = { path = "../window", version = "0.5.1", features = ["winit"] }
 # Offscreen render tests (src/headless.rs): they run the real pipeline into a texture and read the
 # pixels back to compare against the CPU rasterizer (cross-backend parity).
 # `retroglyph-software` is that reference rasterizer; both backends share `retroglyph-window`'s

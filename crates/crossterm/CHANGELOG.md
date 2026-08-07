@@ -7,6 +7,43 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
+## [0.4.0+retroglyph-crossterm](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.3.0...retroglyph-crossterm-v0.4.0) - 2026-08-07
+
+### Features
+
+- [0fc6f9e](
+https://github.com/crates-lurey-io/retroglyph/commit/0fc6f9e0ddb82747a6670db2dacacbe45781aaa1) *(core, crossterm)* Add app::run/run_with, delete Crossterm::run by `@crates-lurey-io-agent[bot]` in [#1194](
+https://github.com/crates-lurey-io/retroglyph/pull/1194)
+
+- [390a46c](
+https://github.com/crates-lurey-io/retroglyph/commit/390a46c2c0b5c6da03649269903f368ef5aca1c1) *(core, crossterm, window)* Launch trait in core with a per-backend impl by `@crates-lurey-io-agent[bot]` in [#1209](
+https://github.com/crates-lurey-io/retroglyph/pull/1209)
+
+- [e9bfd08](
+https://github.com/crates-lurey-io/retroglyph/commit/e9bfd080e45a9a08d5ed68b0bd1f17820cc87621) *(workspace)* Scaffold crates/retroglyph, the consumer-facing facade by `@crates-lurey-io-agent[bot]` in [#1212](
+https://github.com/crates-lurey-io/retroglyph/pull/1212)
+
+### Bug Fixes
+
+- [29398ac](
+https://github.com/crates-lurey-io/retroglyph/commit/29398ac784015db59fd1fb84ca77b759986e5b2b) *(terminal)* Move_cursor_to resets only tracked cursor, not color state by `@crates-lurey-io-agent[bot]` in [#1190](
+https://github.com/crates-lurey-io/retroglyph/pull/1190)
+
+### Documentation
+
+- [f6c17c7](
+https://github.com/crates-lurey-io/retroglyph/commit/f6c17c715a52af7faba7e4ccf042a9159bf335f0) *(workspace)* Add pseudographic project logo/favicon by `@crates-lurey-io-agent[bot]` in [#1200](
+https://github.com/crates-lurey-io/retroglyph/pull/1200)
+
+### Testing
+
+- [0571a2e](
+https://github.com/crates-lurey-io/retroglyph/commit/0571a2eb8246f8b239a7815ccc22baed0277bf4c) *(core, crossterm, software, window)* Wire assert_input_contract into every Input backend by `@crates-lurey-io-agent[bot]` in [#1199](
+https://github.com/crates-lurey-io/retroglyph/pull/1199)
+
+**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.3.0...retroglyph-crossterm-v0.4.0
+
+
 ## [0.3.0+retroglyph-crossterm](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.2.3...retroglyph-crossterm-v0.3.0) - 2026-08-05
 
 ### Features
