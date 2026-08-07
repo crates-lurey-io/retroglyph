@@ -4,14 +4,13 @@
 [![docs.rs](https://img.shields.io/docsrs/retroglyph)](https://docs.rs/retroglyph)
 [![license](https://img.shields.io/crates/l/retroglyph.svg)](https://github.com/crates-lurey-io/retroglyph/blob/main/LICENSE)
 
-The consumer-facing facade over [retroglyph](https://github.com/crates-lurey-io/retroglyph)'s
-`no_std` core and its backend/helper crates: one dependency, one `use`.
-[`retroglyph-core`](https://crates.io/crates/retroglyph-core) itself has no root re-exports by
-design, since it serves both game authors and backend authors; this crate re-exports only the
-game-author half of it at its own root -- `app`, `color`, `event`, `frames`, `grid`, `layout`,
-`surface`, `terminal`, `text`, `tile`, `symbols` -- plus a [prelude](#quick-start) and one
-feature-gated module per backend. Backend authors keep depending on `retroglyph-core` directly for
-its `backend` module (the `Output`/`Input`/`Cursor` traits a new backend implements).
+The one dependency you add for [retroglyph](https://github.com/crates-lurey-io/retroglyph): the
+double-buffered `Terminal`/`App` game loop, styled cells, text and layout helpers, and input events
+-- `app`, `color`, `event`, `frames`, `grid`, `layout`, `surface`, `terminal`, `text`, `tile`,
+`symbols` -- plus a [prelude](#quick-start) with the handful of names a program can't avoid, and one
+feature-gated module per backend (`crossterm`, `software`, `gl`, `wgpu`, `ui`). Writing a new
+backend instead of a game? Depend on [`retroglyph-core`](https://crates.io/crates/retroglyph-core)
+directly for its lower-level `backend`, `dev`, and `math` modules.
 
 ## Quick start
 

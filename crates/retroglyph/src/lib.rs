@@ -1,14 +1,12 @@
 //! `retroglyph`: a 2D pseudographic terminal library, one dependency and one `use`.
 //!
-//! This is the consumer-facing facade over [`retroglyph-core`](retroglyph_core) and its
-//! backend/helper crates. `retroglyph-core` itself has no root re-exports by design (see its own
-//! crate doc): it serves both game authors and backend authors, and splits its fifteen public
-//! modules between the two. This crate draws that line for you, re-exporting only the
-//! game-author half at its root -- `app`, `color`, `event`, `frames`, `grid`, `layout`,
-//! `surface`, `terminal`, `text`, `tile`, `symbols` -- plus the [`prelude`] and one
-//! feature-gated module per backend. `retroglyph_core::backend` (the `Output`/`Input`/`Cursor`
-//! traits a new backend implements), `dev`, and `math` stay reachable only through
-//! `retroglyph_core` directly, since a game never needs them.
+//! Add this crate and you get the double-buffered `Terminal`/`App` game loop, styled cells, text
+//! and layout helpers, and input events -- `app`, `color`, `event`, `frames`, `grid`, `layout`,
+//! `surface`, `terminal`, `text`, `tile`, `symbols` -- plus a [`prelude`] with the handful of
+//! names a program can't avoid, and one feature-gated module per backend (`crossterm`,
+//! `software`, `gl`, `wgpu`, `ui`). Writing a new backend instead of a game? Depend on
+//! [`retroglyph-core`](retroglyph_core) directly for its lower-level `backend`, `dev`, and `math`
+//! modules.
 //!
 //! # Quick start
 //!
