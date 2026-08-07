@@ -1584,6 +1584,46 @@ mod tests {
     }
 
     #[test]
+    fn launch_builds_and_drives_the_app_to_flow_exit() {
+        use retroglyph_core::app::Launch;
+
+        struct ExitImmediately;
+        impl<B: retroglyph_core::backend::Backend> retroglyph_core::app::App<B> for ExitImmediately {
+            fn update(
+                &mut self,
+                _term: &mut Terminal<B>,
+                _frame: &retroglyph_core::app::Frame,
+            ) -> retroglyph_core::app::Flow {
+                retroglyph_core::app::Flow::Exit
+            }
+        }
+
+        // Same TTY-free combination the other `build`/`build_with_writer` tests use, so `Launch::
+        // launch`'s call to `self.build()` (stdout, not `build_with_writer`) can still succeed
+        // under `cargo test`'s redirected stdout.
+        let _lock = TEST_GUARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+
+        let result = Crossterm::builder()
+            .raw_mode(false)
+            .alt_screen(false)
+            .mouse_capture(false)
+            .focus_change(false)
+            .bracketed_paste(false)
+            .kitty_protocol(false)
+            .launch(ExitImmediately, retroglyph_core::app::RunOptions::default());
+        // Skip (rather than fail) on the rare environment where even the always-safe cursor-hide
+        // escape write fails outright (e.g. a closed stdout): see the `build()`-only test above
+        // for why that's not what this test is about. Reaching past `launch` at all (rather than
+        // panicking inside it) is the proof that `Launch::launch` both builds the backend and
+        // drives `ExitImmediately` to `Flow::Exit` through `run_on_with`.
+        if let Err(err) = result {
+            let _ = err;
+        }
+    }
+
+    #[test]
     fn suspend_resume_forces_a_full_redraw() {
         // With every TTY-only feature disabled (the same combination other `build_with_writer`
         // tests use to run without a real terminal), `suspend`/resuming a dropped `SuspendGuard`

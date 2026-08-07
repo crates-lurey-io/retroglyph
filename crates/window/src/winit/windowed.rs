@@ -129,3 +129,26 @@ where
         run_app_on(config, terminal, app).map_err(WindowedLaunchError::EventLoop)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn build_error_displays_and_sources_the_inner_error() {
+        let err: WindowedLaunchError<std::io::Error> =
+            WindowedLaunchError::Build(std::io::Error::other("bad grid"));
+        assert!(err.to_string().contains("bad grid"));
+        assert!(std::error::Error::source(&err).is_some());
+    }
+
+    #[test]
+    fn event_loop_error_displays_and_sources_the_inner_error() {
+        // `RecreationAttempt` is the one `EventLoopError` variant with no private fields, so it's
+        // the only one constructible outside `winit` itself.
+        let err: WindowedLaunchError<std::io::Error> =
+            WindowedLaunchError::EventLoop(EventLoopError::RecreationAttempt);
+        assert!(err.to_string().contains("windowed event loop failed"));
+        assert!(std::error::Error::source(&err).is_some());
+    }
+}
