@@ -9,8 +9,9 @@
 //! everything between that and the assertion. Feature-gated
 //! (`testing`), no effect on release builds. Not a UI-testing framework: no assertions, no
 //! matchers, no fixtures, just the loop and the input synthesis that otherwise gets rewritten per
-//! consumer. See ["Driving an `App` with `TestHarness`"](https://github.com/crates-lurey-io/retroglyph/blob/main/docs/testing.md#driving-an-app-with-testharness)
-//! for the full workflow.
+//! consumer: push synthetic events onto `Headless` with `push_event`, drive them through an `App`
+//! with `TestHarness` until the loop settles, then assert on the resulting `Headless` frame
+//! directly.
 //!
 //! [`conformance`](crate::testing::conformance) is a different tool for a different job: it drives a backend directly (no
 //! `App`, no `Terminal`) through the obligations [`Output`](crate::backend::Output),

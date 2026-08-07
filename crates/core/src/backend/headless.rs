@@ -1,9 +1,9 @@
 //! In-memory backend for testing. Stores presented content and allows injecting synthetic events.
 //!
 //! [`Headless::format_view`](crate::backend::Headless::format_view) renders the current frame for snapshot testing (e.g. with `insta`)
-//! and [`Headless::push_event`](crate::backend::Headless::push_event) queues synthetic input; see ["Driving `Headless` with synthetic
-//! events"](https://github.com/crates-lurey-io/retroglyph/blob/main/docs/testing.md#driving-headless-with-synthetic-events)
-//! for the full workflow.
+//! and [`Headless::push_event`](crate::backend::Headless::push_event) queues synthetic input for a
+//! test to drive directly, or to feed through [`TestHarness`](crate::testing::TestHarness) when a
+//! full `App` loop is involved.
 //!
 //! The styled-snapshot encoders ([`Headless::format_styled`], `sgr_color`) emit Select Graphic
 //! Rendition (SGR) parameters per ECMA-48 5th ed. section 8.3.117: 30-37/40-47 for the standard

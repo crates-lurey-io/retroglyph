@@ -35,7 +35,7 @@ use crate::text::truncate as truncate_to_cols;
 ///
 /// This widget draws one field, nothing more: which field is focused (and therefore routed
 /// input), what Enter does, validation, and layout are all the app's job. IME/text composition
-/// and multi-line editing are out of scope for this crate entirely; see `docs/ROADMAP.md`.
+/// and multi-line editing are out of scope for this crate entirely.
 ///
 /// # Examples
 ///

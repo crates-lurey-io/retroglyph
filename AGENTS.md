@@ -76,9 +76,8 @@ assuming a green local run covered it.
 ## Testing
 
 `cargo test --workspace --all-features` (or `just test`) runs everything. Snapshot review:
-`just insta` (blesses unconditionally, no review step of its own). See `docs/testing.md` for the
-full testing architecture (unit tests, insta snapshots, the examples crate's three-way snapshot
-harness) and `examples/AGENTS.md` for the per-example validation checklist.
+`just insta` (blesses unconditionally, no review step of its own). See `examples/AGENTS.md` for the
+per-example validation checklist.
 
 ## Commit messages
 
@@ -137,8 +136,6 @@ bump. There is no `semver-override` label; see `RELEASING.md` for why.
 
 - `README.md`: project overview, features, crate list, quick start.
 - `STYLE_GUIDE.md`: Rust API and code style conventions.
-- `docs/testing.md`: testing architecture and commands.
-- `docs/ROADMAP.md`: ideas considered and their adopt/defer/reject verdicts.
 - `RELEASING.md`: the crates.io publish process.
 - `llms.txt` / `llms-full.txt`: generated machine-readable per-crate API summaries. `just doc`
   generates a pair under `target/doc/<crate>/` for each publishable crate; the full version includes

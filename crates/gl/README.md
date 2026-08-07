@@ -112,8 +112,7 @@ tests.
 Beyond the CPU-side units (atlas byte layout, shader-string generation), `src/headless.rs` runs the
 real GL pipeline into an offscreen framebuffer and reads it back, asserting property checks and
 pixel-for-pixel parity with the `retroglyph-software` CPU rasterizer. Those tests are
-`cfg(target_os = "linux")` and run in CI on Mesa's llvmpipe software rasterizer (no GPU needed); see
-`docs/testing.md` for details.
+`cfg(target_os = "linux")` and run in CI on Mesa's llvmpipe software rasterizer (no GPU needed).
 
 ## License
 

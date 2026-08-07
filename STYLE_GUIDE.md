@@ -125,9 +125,8 @@ story: hand-rolled error enums, not a derive-macro crate.
 
 ## Testing
 
-See `docs/testing.md` for the full testing architecture (unit tests, insta snapshots, the examples
-crate's three-way snapshot harness). Commands: `cargo insta test` / `cargo insta accept` for
-reviewing snapshots, `cargo test --workspace --all-features` (or `just test`) for everything.
+Commands: `cargo insta test` / `cargo insta accept` for reviewing snapshots,
+`cargo test --workspace --all-features` (or `just test`) for everything.
 
 ## External resources
 
