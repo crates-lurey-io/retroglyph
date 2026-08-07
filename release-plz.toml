@@ -20,13 +20,16 @@ git_release_body = """
 # dropped; none of them are exercised by this repo's history (PR-title CI already forces every
 # commit on main to be conventional, and there are no alpha/beta/rc tags).
 [changelog]
-header = """
-# Changelog
-
-All notable changes to this project will be documented in this file.
-<!-- ignore lint rules that are often triggered by content generated from commits / git-cliff -->
-<!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
-"""
+# Deliberately empty: every crate's CHANGELOG.md already carries a hand-written header (see e.g.
+# crates/gl/CHANGELOG.md) written at crate-scaffolding time, and release-plz has no way to detect
+# that an equivalent header already exists in the file it's prepending to. When `header` lived in
+# the now-deprecated external `changelog_config = "cliff.toml"` pointer, release-plz silently never
+# applied it, so this was a no-op in practice. Once `header` moved into release-plz's own native
+# `[changelog]` schema (see the comment above `[changelog]`), it started being honored for real,
+# and release-plz began prepending this boilerplate a second time above the existing hand-written
+# header on regenerate-without-new-content runs, producing duplicate `# Changelog` H1s that trip
+# markdownlint's MD024/MD025 and can't be auto-fixed (retroglyph#1256). Leaving `header` unset
+# keeps release-plz from ever writing its own, restoring the pre-migration behavior.
 
 body = """
 {%- if not version %}
