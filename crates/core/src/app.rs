@@ -396,17 +396,32 @@ where
 /// // `CrosstermOptions` (reachable via `Crossterm::builder()`) and `retroglyph-window`'s
 /// // `Windowed<B>` (reachable via `retroglyph-software`/`-gl`/`-wgpu`). Each names one concrete
 /// // `Backend`, so both can `launch(MyGame, ..)` unmodified -- see those crates' own docs for
-/// // the real impls this sketches.
+/// // the real impls this sketches. Written by hand here (rather than delegating to
+/// // `run_on_with`, which both real impls actually use) purely so this doctest itself stays
+/// // `std`-free, proving `Launch` doesn't need it -- the real impls' own docs are the proof they
+/// // work end to end.
 /// # use retroglyph_core::backend::Headless;
+/// fn drive_to_exit<A: App<Headless> + 'static>(mut app: A) -> Result<(), core::convert::Infallible> {
+///     let mut term = Terminal::new(Headless::new(80, 24));
+///     let mut frame_count = 0u64;
+///     loop {
+///         let frame = Frame { delta: core::time::Duration::ZERO, frame: frame_count };
+///         frame_count += 1;
+///         if app.update(&mut term, &frame) == Flow::Exit {
+///             return Ok(());
+///         }
+///     }
+/// }
+///
 /// struct TerminalOptions;
 /// impl Launch for TerminalOptions {
 ///     type Backend = Headless;
 ///     type Error = core::convert::Infallible;
-///     fn launch<A>(self, app: A, options: RunOptions) -> Result<(), Self::Error>
+///     fn launch<A>(self, app: A, _options: RunOptions) -> Result<(), Self::Error>
 ///     where
 ///         A: App<Self::Backend> + 'static,
 ///     {
-///         retroglyph_core::app::run_on_with(Terminal::new(Headless::new(80, 24)), app, options)
+///         drive_to_exit(app)
 ///     }
 /// }
 ///
@@ -414,11 +429,11 @@ where
 /// impl Launch for WindowedOptions {
 ///     type Backend = Headless;
 ///     type Error = core::convert::Infallible;
-///     fn launch<A>(self, app: A, options: RunOptions) -> Result<(), Self::Error>
+///     fn launch<A>(self, app: A, _options: RunOptions) -> Result<(), Self::Error>
 ///     where
 ///         A: App<Self::Backend> + 'static,
 ///     {
-///         retroglyph_core::app::run_on_with(Terminal::new(Headless::new(80, 24)), app, options)
+///         drive_to_exit(app)
 ///     }
 /// }
 ///
