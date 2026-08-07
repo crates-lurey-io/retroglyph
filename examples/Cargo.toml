@@ -130,7 +130,7 @@ retroglyph-core = { path = "../crates/core", features = ["testing"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 # PTY + vt100 SVG snapshots of the crossterm backend's ANSI output.
 portable-pty = "0.9"
-vt100 = "0.15"
+vt100 = "0.16"
 
 [[example]]
 name = "01_hello_world"

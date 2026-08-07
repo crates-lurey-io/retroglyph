@@ -31,7 +31,7 @@ egc = ["retroglyph-core/egc"]
 retroglyph-core = { path = "../core", version = "0.6.0", default-features = false, features = ["std"] }
 
 [dev-dependencies]
-criterion = "0.5"
+criterion = "0.8"
 fastrand = "2"
 
 [[bench]]

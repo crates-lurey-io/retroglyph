@@ -55,7 +55,7 @@ ixy = "0.8.0"
 serde = { version = "1", default-features = false, features = ["derive"], optional = true }
 
 [dev-dependencies]
-criterion = "0.5"
+criterion = "0.8"
 fastrand = "2"
 # `Theme`/`Density`'s `#[cfg(feature = "serde")]` round-trip tests. See retroglyph-core's
 # Cargo.toml for why this is unconditional despite only being used behind that feature.
