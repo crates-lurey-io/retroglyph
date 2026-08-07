@@ -113,7 +113,7 @@ unicode-segmentation = { version = "1.13", default-features = false, optional = 
 unicode-width = "0.2"
 insta = { version = "1.34", features = ["yaml"] }
 proptest = "1"
-criterion = "0.5"
+criterion = "0.8"
 fastrand = "2"
 # `Color`'s `#[cfg(feature = "serde")]` round-trip tests in color.rs. A plain dev-dependency (not
 # gated on the `serde` feature) is fine: dev-dependencies never reach the published dependency

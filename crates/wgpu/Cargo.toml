@@ -77,7 +77,7 @@ raw-window-handle = "0.6"
 # `pollster::block_on` panics if a future actually yields, which is exactly what a browser main
 # thread's futures do (see the `wasm32` target section below), so this is native-only.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-pollster = "0.4"
+pollster = "1.0"
 
 # `Presenter::init_surface` is synchronous, but `request_adapter`/`request_device` are `async` on
 # every target, and a browser main thread has no way to block on a future the way `pollster` does
