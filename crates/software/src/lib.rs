@@ -129,7 +129,7 @@ use grixy::buf::GridBuf;
 use grixy::ops::GridWrite;
 use grixy::ops::layout::{LinearLayout, RowMajor};
 use retroglyph_core::color::Tint;
-use retroglyph_core::event::Event;
+use retroglyph_core::event::{Event, coalesces_with};
 use retroglyph_core::grid::HasSize;
 use retroglyph_core::grid::{Pos, Size};
 use retroglyph_core::tile::Tile;
@@ -301,7 +301,21 @@ impl SoftwareRenderer {
 
     /// Pushes an event into the internal buffer, to be drained by
     /// [`Input::poll_event`].
+    ///
+    /// Coalesces consecutive `Mouse(Moved)` or same-button `Mouse(Drag)` events: winit can
+    /// deliver `CursorMoved`/drag motion at device polling rate (hundreds/sec) though only the
+    /// latest position matters once the next frame polls the queue, so this replaces the queue's
+    /// tail in place instead of growing it unbounded (retroglyph#294, retroglyph#768), matching
+    /// `retroglyph-window`'s `WindowBackend::push_event`. Every other event kind (clicks,
+    /// scrolls, keys, resize, ...) still pushes in O(1) as before; only a back-to-back `Moved` or
+    /// same-button `Drag` run collapses. See [`coalesces_with`] for the shared rule.
     pub fn push_event(&mut self, event: Event) {
+        if let Some(back) = self.ctx.event_buffer.back_mut()
+            && coalesces_with(&event, back)
+        {
+            *back = event;
+            return;
+        }
         self.ctx.event_buffer.push_back(event);
     }
 
@@ -2397,6 +2411,13 @@ mod tests {
         // this backend real cursor tracking is checked against the same contract as the terminal
         // backends are.
         retroglyph_core::testing::conformance::assert_cursor_contract(SoftwareObserver::new);
+    }
+
+    #[test]
+    fn satisfies_the_input_contract() {
+        retroglyph_core::testing::conformance::assert_input_contract(|| {
+            conformance_renderer(Size::new(10, 10))
+        });
     }
 
     /// `expand_dirty_spans` reads a shadow buffer that can lag a resize by a frame (see its doc

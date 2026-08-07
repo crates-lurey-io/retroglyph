@@ -332,4 +332,11 @@ mod tests {
         ));
         assert_eq!(backend.poll_event(Duration::ZERO), Some(moved(3)));
     }
+
+    #[test]
+    fn satisfies_the_input_contract() {
+        retroglyph_core::testing::conformance::assert_input_contract(|| {
+            WindowBackend::new(NullPresenter)
+        });
+    }
 }

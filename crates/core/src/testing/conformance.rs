@@ -1,6 +1,6 @@
 //! Cross-backend conformance tests for [`Output`](crate::backend::Output), [`Cursor`](crate::backend::Cursor), and [`Input`](crate::backend::Input) (retroglyph#763).
 //!
-//! Each of the five backends in this workspace answers the same handful of obligations
+//! Each backend in this workspace answers the same handful of obligations
 //! ([`Output::clear`](crate::backend::Output::clear)/[`Output::resize`](crate::backend::Output::resize) resetting internal state, out-of-range [`DrawCell`](crate::backend::DrawCell)
 //! positions, cursor tracking staying in sync with external writes, [`Input::push_event`](crate::backend::Input::push_event)
 //! coalescing consecutive `Mouse(Moved)` events) independently. This module is what holds
@@ -40,6 +40,29 @@
 //! easiest to add via a small test-only wrapper around the real backend rather than on the
 //! backend type itself; see the `tests` module below for a worked example over
 //! [`Headless`](crate::backend::Headless).
+//!
+//! # Coverage
+//!
+//! Not every backend wires every entry point: [`assert_output_contract`]/[`assert_cursor_contract`]
+//! need [`Observable`], which some backends have no test-only reason to implement, and
+//! [`assert_input_contract`] binds only backends where [`Input::push_event`](crate::backend::Input::push_event)'s coalescing
+//! obligation actually applies (see that method's docs for when it doesn't). As of retroglyph#997:
+//!
+//! | Backend | Output | Cursor | Input |
+//! | --- | --- | --- | --- |
+//! | `Headless` (core) | yes | yes | yes |
+//! | `Crossterm<W>` (crossterm) | yes | yes | exempt (see below) |
+//! | `SoftwareRenderer` (software) | yes | yes | yes |
+//! | `GlRenderer` (gl) | yes | n/a (no `Cursor` impl) | n/a (no `Input` impl) |
+//! | `WindowBackend<P>` (window) | not wired | not wired | yes |
+//! | `TerminalWasm` (terminal-wasm) | yes | yes | yes |
+//!
+//! `Crossterm`'s `pushed_events` queue is deliberately exempt from the coalescing obligation
+//! [`assert_input_contract`] checks: unlike the windowed backends' motion events, which can
+//! arrive at device-polling rate, `pushed_events` is only ever fed one event at a time by a test
+//! harness or a driver replaying an event it already read off the real terminal, so there is no
+//! unbounded-growth failure mode to guard against there (retroglyph#294/retroglyph#768 motivated
+//! the obligation itself). See `Crossterm::push_event`'s doc for the same note closer to the code.
 //!
 //! # What this does not cover
 //!

@@ -335,7 +335,15 @@ pub trait Input {
     ///
     /// - Windowed backends: called by `ApplicationHandler` on each event.
     /// - Headless: called by tests to inject synthetic events.
-    /// - Crossterm: reads from its own event stream; no-op here.
+    /// - Crossterm: also queues events pushed here (a test harness injecting synthetic input, or
+    ///   a driver handing back an event it already read off the real terminal); its own
+    ///   `poll_event` still reads the real terminal's stream separately.
+    ///
+    /// Coalescing a burst of consecutive `Event::Mouse(MouseEventKind::Moved)` pushes down to the
+    /// latest one is not required of every implementation, only of backends whose events can
+    /// arrive at device-polling rate from an external source (a windowed backend's motion events,
+    /// for example); see `retroglyph_core::testing::conformance::assert_input_contract` for the
+    /// harness that pins it, and that module's doc for which backends it binds.
     fn push_event(&mut self, _event: Event) {}
 }
 
