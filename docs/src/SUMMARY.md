@@ -22,3 +22,8 @@
 - [Use a tileset](./how-to/use-a-tileset.md)
 - [Run in a browser](./how-to/run-in-a-browser.md)
 - [Write a backend](./how-to/write-a-backend.md)
+
+# Explanation
+
+- [Architecture](./explanation/architecture.md)
+- [Coordinates](./explanation/coordinates.md)

@@ -15,24 +15,14 @@ use std::time::Duration;
 /// one type: some event loop owns input, while a per-renderer surface owns output.
 /// `WindowBackend` reunites the two (implementing `Output` by delegating to `P`, `Input` via
 /// its own event queue, and the no-op default `Cursor`), so [`Terminal`](retroglyph_core::terminal::Terminal)
-/// gets the full `Backend` it needs, while renderer crates implement only [`Presenter`]. See the
-/// crate-level [Architecture](crate#architecture) section for the data-flow diagram.
+/// gets the full `Backend` it needs, while renderer crates implement only [`Presenter`].
 ///
 /// Because `WindowBackend` owns input, a [`Presenter`] should **not** implement [`Input`] or
-/// [`Cursor`] itself for windowed use: those impls would be dead (the event loop pushes to
-/// *this* queue, not the presenter's) and would silently miss the `Mouse(Moved)` coalescing that
-/// [`push_event`](WindowBackend::push_event) applies. A presenter that also wants a direct
-/// headless `Terminal<Self>` input path (as `retroglyph-software` does for pixel tests) may still
-/// implement `Input` for that path, accepting that a bare queue does not coalesce; a presenter
-/// with no such path (as `retroglyph-gl`) implements only `Presenter`.
-///
-/// With the `winit` feature enabled, `winit::run_windowed` and `winit::run_app` own the event
-/// loop, call `push_event` as winit events are translated, and call [`Presenter::present`] once
-/// per frame; callers never touch `WindowBackend` directly. With `winit` disabled,
-/// `retroglyph-window` exports no event loop at all: a caller driving its own loop (SDL2, tao, a
-/// custom driver) constructs `WindowBackend::new(presenter)` itself, calls `push_event` for each
-/// translated input event, and calls `Terminal::present` (which drives `Presenter::flush`) plus
-/// `presenter_mut().present()` once per frame.
+/// [`Cursor`] itself for windowed use: those impls would be dead code, silently missing the
+/// `Mouse(Moved)` coalescing that [`push_event`](WindowBackend::push_event) applies. See
+/// <https://main.retroglyph.dev/book/explanation/architecture.html> for the full data-flow
+/// diagram, why the input/output split exists, and when a `Presenter` may still implement
+/// `Input` directly (as `retroglyph-software` does for headless pixel tests).
 ///
 /// # Examples
 ///

@@ -74,45 +74,13 @@
 //! # Architecture
 //!
 //! [`Terminal<B>`](crate::terminal::Terminal) owns a double-buffered [`Grid`](crate::grid::Grid) and the
-//! [`Backend`](crate::backend::Backend) lifecycle (resize, present, events). Drawing itself goes entirely
-//! through [`Surface`](crate::surface::Surface), handed out by
-//! [`Terminal::draw`](crate::terminal::Terminal::draw)/[`Terminal::surface`](crate::terminal::Terminal::surface):
-//! a game calls `term.draw(|s| { s.put(...); ... })`
-//! once per frame, and [`present`](crate::terminal::Terminal::present) diffs the current frame against the
-//! previous one, sending only changed cells to the [`Backend`](crate::backend::Backend). `B` is the only thing that
-//! changes between a headless test and a real window or terminal:
-//!
-//! ```text
-//!               ┌───────────────────────────┐
-//!               │      App::update(...)      │  game logic, once, generic over B
-//!               └──────────────┬─────────────┘
-//!                              │ term.draw(|s| ...): writes through Surface
-//!                              ▼
-//!               ┌───────────────────────────┐
-//!               │       Terminal<B>          │  double-buffered Grid, cell diff
-//!               └──────────────┬─────────────┘
-//!                              │ draw / draw_layers / poll_event
-//!                              ▼
-//!               ┌───────────────────────────┐
-//!               │  B: Output + Input + Cursor │  the only piece that swaps out
-//!               └──────────────┬─────────────┘
-//!                              │
-//!        ┌─────────────────────┼─────────────────────┐
-//!        ▼                     ▼                      ▼
-//!  Headless (here)      Crossterm                SoftwareRenderer
-//!  in-memory grid,      (retroglyph-crossterm)   (retroglyph-software)
-//!  synthetic events     real TTY, ANSI output    winit window, pixels
-//! ```
-//!
-//! [`Headless`](crate::backend::Headless) stores presented content in memory and lets tests inject
-//! synthetic [`Event`](crate::event::Event)s with [`Headless::push_event`](crate::backend::Headless::push_event);
-//! nothing here talks to a real terminal or window. Swapping `Headless` for
-//! `Crossterm` or `SoftwareRenderer` changes only the `B` type parameter --
-//! `App` implementations, [`Terminal`](crate::terminal::Terminal) calls, and game logic are unchanged.
-//! `run_on` drives `Terminal<Headless>` and `Terminal<Crossterm>`
-//! identically; the software backend's windowed loop drives `Terminal<SoftwareRenderer>`
-//! through the same [`App`](crate::app::App) contract, inverted because winit owns the
-//! event loop instead of handing control back to a driver function.
+//! [`Backend`](crate::backend::Backend) lifecycle (resize, present, events), diffing each frame drawn through
+//! [`Surface`](crate::surface::Surface) against the previous one so only changed cells reach the
+//! [`Backend`](crate::backend::Backend). `B` is the only thing that changes between a headless test and a real
+//! window or terminal: [`Headless`](crate::backend::Headless) here, `Crossterm` (retroglyph-crossterm) for a
+//! real TTY, `SoftwareRenderer`/`GlRenderer`/`WgpuRenderer` for a window or browser tab. See
+//! <https://main.retroglyph.dev/book/explanation/architecture.html> for the full data-flow diagram
+//! and how those backends compare.
 //!
 //! See `examples/headless.rs` (`cargo run -p retroglyph-core --example
 //! headless`) for the smallest possible use of [`Headless`](crate::backend::Headless), depending on
