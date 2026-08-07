@@ -23,6 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       wasm: ${{ steps.filter.outputs.wasm }}
+      rust: ${{ steps.filter.outputs.rust }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -37,6 +38,14 @@ jobs:
               - 'Cargo.lock'
               - '.cargo/**'
               - 'Justfile'
+              - '.github/workflows/ci.yml'
+            rust:
+              - 'crates/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - '.cargo/**'
+              - 'Justfile'
+              - 'codecov.yml'
               - '.github/workflows/ci.yml'
 
   format:
@@ -401,6 +410,12 @@ jobs:
       - run: just test-wasm
 
   coverage:
+    needs: changes
+    # Coverage needs CODECOV_TOKEN, which GitHub withholds from Dependabot-triggered PR runs
+    # (treated like a fork PR). Gating on Rust-path changes means npm-only tooling bumps (e.g.
+    # tools/package.json) skip cleanly instead of failing on a missing token; `required` already
+    # tolerates a `skipped` result the same way it does for test-wasm.
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

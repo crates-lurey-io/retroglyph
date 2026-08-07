@@ -1,0 +1,45 @@
+version: 2
+updates:
+  # Workspace crate dependencies. Grouped into one PR per week so routine patch/minor bumps
+  # don't spam the PR list; each PR still runs the full compile/test/lint/coverage matrix.
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      cargo-dependencies:
+        patterns:
+          - '*'
+    commit-message:
+      prefix: chore(deps)
+    labels:
+      - dependencies
+
+  # markdownlint/markdown-it tooling under tools/. Security-only updates already land here
+  # today (via GitHub's default Dependabot alerts) without this file; this adds routine
+  # version updates on the same schedule and keeps commit messages consistent with the
+  # `deps`/`deps-dev` scopes pr-title.yml enforces.
+  - package-ecosystem: npm
+    directory: /tools
+    schedule:
+      interval: weekly
+    groups:
+      npm-dependencies:
+        patterns:
+          - '*'
+    commit-message:
+      prefix: chore(deps)
+      prefix-development: chore(deps-dev)
+    labels:
+      - dependencies
+
+  # Action versions pinned in workflow files.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore(deps)
+    labels:
+      - dependencies
+      - c:workspace
