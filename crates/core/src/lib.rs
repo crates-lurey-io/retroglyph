@@ -109,7 +109,7 @@
 //! nothing here talks to a real terminal or window. Swapping `Headless` for
 //! `Crossterm` or `SoftwareRenderer` changes only the `B` type parameter --
 //! `App` implementations, [`Terminal`](crate::terminal::Terminal) calls, and game logic are unchanged.
-//! `run_blocking` drives `Terminal<Headless>` and `Terminal<Crossterm>`
+//! `run_on` drives `Terminal<Headless>` and `Terminal<Crossterm>`
 //! identically; the software backend's windowed loop drives `Terminal<SoftwareRenderer>`
 //! through the same [`App`](crate::app::App) contract, inverted because winit owns the
 //! event loop instead of handing control back to a driver function.

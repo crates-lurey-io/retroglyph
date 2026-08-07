@@ -4,7 +4,7 @@
 //! [`run_app`] drives an [`App`](retroglyph_core::app::App). This is the inverted
 //! driver: winit owns the loop and calls back into the app on each redraw,
 //! so it cannot be core's generic
-//! [`run_blocking`](retroglyph_core::app::run_blocking), which owns its own
+//! [`run_on`](retroglyph_core::app::run_on), which owns its own
 //! `while` loop.
 
 use super::translate::{
@@ -244,7 +244,7 @@ impl WindowConfig {
     /// `options`' own [`target_fps`](retroglyph_core::app::RunOptions::target_fps) and
     /// [`is_event_driven`](retroglyph_core::app::RunOptions::is_event_driven), so pacing can be
     /// configured the same way as the blocking driver's
-    /// [`run_blocking_with`](retroglyph_core::app::run_blocking_with).
+    /// [`run_on_with`](retroglyph_core::app::run_on_with).
     ///
     /// Like any other builder call, applying this after [`fit`](Self::fit)/[`animated`](Self::animated)
     /// makes `options` win over whatever those constructors set; call it last if both a `target_fps`/
@@ -382,7 +382,7 @@ impl WindowConfig {
 ///
 /// # Presenting is automatic
 ///
-/// Unlike [`run_blocking`](retroglyph_core::app::run_blocking), this driver calls
+/// Unlike [`run_on`](retroglyph_core::app::run_on), this driver calls
 /// [`Terminal::present`] for you, once, right after `app_loop` returns each frame: you no longer
 /// need to (and, for a stale-content bug fixed by this behavior, should not rely on remembering
 /// to) call it yourself inside `app_loop`. Calling it yourself is still supported and has no ill
@@ -708,7 +708,7 @@ where
 /// [`Flow::Exit`](retroglyph_core::app::Flow::Exit). On `wasm32` it returns `Ok(())` immediately
 /// after handing the app to the browser's `requestAnimationFrame`-driven runner: the app keeps
 /// running after this call returns, so code that follows it executes concurrently with a live
-/// app rather than after it exits. [`retroglyph_core::app::run_blocking_with`] has no such split;
+/// app rather than after it exits. [`retroglyph_core::app::run_on_with`] has no such split;
 /// it always blocks until the app exits, on every target.
 ///
 /// # Errors
@@ -3591,7 +3591,7 @@ mod tests {
     fn with_run_options_wins_when_applied_after_fit() {
         // Builder call order decides precedence: `with_run_options` applied last overrides
         // whatever `fit`'s positional `target_fps`/`event_driven` set, giving `RunOptions` the
-        // final say the same way it does for `run_blocking_with`.
+        // final say the same way it does for `run_on_with`.
         let presenter = MockPresenter::default();
         let config = WindowConfig::fit(&presenter, "test", Some(60), false)
             .with_run_options(retroglyph_core::app::RunOptions::default());

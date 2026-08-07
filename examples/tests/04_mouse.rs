@@ -88,7 +88,7 @@ fn png_snapshot() {
 #[test]
 fn svg_snapshot() {
     // The crossterm binary's event loop is a tight spin (no fixed frame rate, no
-    // blocking read -- see `run_blocking`), so it blows past `MOTION_GRACE_TICKS`
+    // blocking read -- see `run_on`), so it blows past `MOTION_GRACE_TICKS`
     // in well under a second with no synthetic clock to pin an exact frame. Waiting
     // on the fallback note itself (rather than the always-present header text) is
     // the only ready_marker that captures a stable, non-racy frame: the "waiting for

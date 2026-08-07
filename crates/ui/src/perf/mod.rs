@@ -6,7 +6,7 @@
 //! ```
 //! # #[cfg(feature = "std")]
 //! # {
-//! use retroglyph_core::app::run_blocking;
+//! use retroglyph_core::app::run_on;
 //! use retroglyph_core::backend::{Backend, Headless};
 //! use retroglyph_core::terminal::Terminal;
 //! # use retroglyph_core::app::{App, Flow, Frame};
@@ -20,8 +20,8 @@
 //!
 //! let term = Terminal::new(Headless::new(40, 10));
 //! let app = PerfOverlayApp::new(MyGame, "headless");
-//! run_blocking(term, app).expect("run_blocking");
-//! # } // `run_blocking` is `std`-only; a no-op under `--no-default-features`.
+//! run_on(term, app).expect("run_on");
+//! # } // `run_on` is `std`-only; a no-op under `--no-default-features`.
 //! ```
 //!
 //! # What's generic and what's backend-specific

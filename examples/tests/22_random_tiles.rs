@@ -53,7 +53,7 @@ fn svg_snapshot() {
     // cell for as long as it runs, with no settled state to park at. Unlike the headless/PNG
     // snapshots above (which drive a fixed, known number of `tick`s and so land on a
     // reproducible frame), the crossterm binary here is a real unthrottled spin loop (see
-    // `run_blocking`), so the exact frame this capture lands on -- and therefore its exact
+    // `run_on`), so the exact frame this capture lands on -- and therefore its exact
     // glyphs and colors -- is real-wall-clock dependent and not reproducible byte-for-byte.
     // Assert on the shape of the output instead: a full grid of individually, truly-colored
     // cells, which is what this example actually proves.

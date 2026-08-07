@@ -7,7 +7,7 @@
 //!
 //! - the contract ([`App`](crate::app::App), [`Flow`](crate::app::Flow), [`Frame`](crate::app::Frame)), here in the core;
 //! - the generic blocking driver ([`run`](crate::app::run)/[`run_with`](crate::app::run_with), and the
-//!   `Terminal`-taking [`run_blocking`](crate::app::run_blocking)/[`run_blocking_with`](crate::app::run_blocking_with)
+//!   `Terminal`-taking [`run_on`](crate::app::run_on)/[`run_on_with`](crate::app::run_on_with)
 //!   they're built on, `std` only), which covers `Crossterm` (in `retroglyph-crossterm`) and
 //!   [`Headless`](crate::backend::Headless);
 //! - the inverted driver in the windowing layer (the software backend's
@@ -23,7 +23,7 @@
 //!                                     |
 //!               +---------------------+---------------------+
 //!               |                                           |
-//!   run_blocking / run_blocking_with              windowing layer's run_app
+//!   run_on / run_on_with              windowing layer's run_app
 //!   (std only; owns the loop)                     (winit owns the loop instead)
 //!               |                                           |
 //!      crossterm, headless                           software backend
@@ -92,12 +92,12 @@ pub trait App<B: Backend> {
     ///
     /// Draw via [`term.surface()`](crate::terminal::Terminal::surface) or [`term.draw()`](crate::terminal::Terminal::draw) (though
     /// `draw` presents itself, which usually conflicts with the driver's own automatic present
-    /// below; prefer `surface()` inside `update`). Every driver ([`run_blocking`](crate::app::run_blocking) and
+    /// below; prefer `surface()` inside `update`). Every driver ([`run_on`](crate::app::run_on) and
     /// `retroglyph-window`'s windowed drivers) presents the frame automatically right after this
     /// method returns, unless it returned [`Flow::Idle`](crate::app::Flow::Idle), in which case the driver skips
     /// [`present`](crate::terminal::Terminal::present) entirely. Calling `present` yourself inside `update` remains
     /// fine (the driver detects it already ran via [`present_count`](crate::terminal::Terminal::present_count) and
-    /// skips its own call) but is never required. [`run_blocking`](crate::app::run_blocking) and [`run_blocking_with`](crate::app::run_blocking_with) link
+    /// skips its own call) but is never required. [`run_on`](crate::app::run_on) and [`run_on_with`](crate::app::run_on_with) link
     /// back here rather than restating this contract.
     fn update(&mut self, term: &mut Terminal<B>, frame: &Frame) -> Flow;
 }
@@ -113,9 +113,9 @@ pub trait App<B: Backend> {
 /// (for example crossterm's terminal restore) runs on the way out.
 ///
 /// See [`App::update`](crate::app::App::update) for the present/idle contract this and every other driver follows.
-/// Equivalent to `run_blocking_with(term, app, RunOptions::default())`: on [`Flow::Idle`](crate::app::Flow::Idle), blocks
+/// Equivalent to `run_on_with(term, app, RunOptions::default())`: on [`Flow::Idle`](crate::app::Flow::Idle), blocks
 /// on input rather than calling `update` again immediately, so a turn-based app that's idle most
-/// of the time costs approximately nothing. Use [`run_blocking_with`](crate::app::run_blocking_with) with [`RunOptions::animated`](crate::app::RunOptions::animated)
+/// of the time costs approximately nothing. Use [`run_on_with`](crate::app::run_on_with) with [`RunOptions::animated`](crate::app::RunOptions::animated)
 /// for a continuously-rendering app instead.
 ///
 /// # Errors
@@ -123,15 +123,15 @@ pub trait App<B: Backend> {
 /// Returns the backend's error if the automatic `present()` call fails. The loop stops and the
 /// terminal is dropped (running backend teardown) before the error is returned.
 #[cfg(feature = "std")]
-pub fn run_blocking<B, A>(term: Terminal<B>, app: A) -> Result<(), B::Error>
+pub fn run_on<B, A>(term: Terminal<B>, app: A) -> Result<(), B::Error>
 where
     B: Backend,
     A: App<B>,
 {
-    run_blocking_with(term, app, RunOptions::default())
+    run_on_with(term, app, RunOptions::default())
 }
 
-/// Options controlling [`run_blocking_with`](crate::app::run_blocking_with)'s pacing and idle behavior.
+/// Options controlling [`run_on_with`](crate::app::run_on_with)'s pacing and idle behavior.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct RunOptions {
@@ -149,7 +149,7 @@ impl RunOptions {
     /// called every tick regardless of input.
     ///
     /// `target_fps` becomes [`RunOptions::target_fps`](crate::app::RunOptions::target_fps) verbatim, including `0`: passing `0` here
-    /// builds without panicking, but [`run_blocking_with`](crate::app::run_blocking_with) panics once it constructs the
+    /// builds without panicking, but [`run_on_with`](crate::app::run_on_with) panics once it constructs the
     /// [`FrameClock`](crate::frames::FrameClock) that paces it (see that function's
     /// `# Panics` section).
     #[must_use]
@@ -220,7 +220,7 @@ impl RunOptions {
 }
 
 impl Default for RunOptions {
-    /// Event-driven, uncapped, blocks indefinitely on [`Flow::Idle`](crate::app::Flow::Idle): see [`run_blocking`](crate::app::run_blocking).
+    /// Event-driven, uncapped, blocks indefinitely on [`Flow::Idle`](crate::app::Flow::Idle): see [`run_on`](crate::app::run_on).
     fn default() -> Self {
         Self {
             target_fps: None,
@@ -232,7 +232,7 @@ impl Default for RunOptions {
 
 /// Drive an [`App`](crate::app::App) with a blocking loop until it returns [`Flow::Exit`](crate::app::Flow::Exit), paced by `options`.
 ///
-/// The zero-config [`run_blocking`](crate::app::run_blocking) is equivalent to `run_blocking_with(term, app,
+/// The zero-config [`run_on`](crate::app::run_on) is equivalent to `run_on_with(term, app,
 /// RunOptions::default())`. Pass [`RunOptions::animated`](crate::app::RunOptions::animated) for a continuously-rendering loop
 /// capped at a fixed rate instead, using a [`FrameClock`](crate::frames::FrameClock)
 /// internally so `update` is called at even intervals rather than however fast the host can
@@ -255,7 +255,7 @@ impl Default for RunOptions {
 /// Panics if `options.target_fps` is `Some(0)`: pacing at a `FrameClock` internally, which
 /// requires a non-zero rate (see [`FrameClock::new`](crate::frames::FrameClock::new)).
 #[cfg(feature = "std")]
-pub fn run_blocking_with<B, A>(
+pub fn run_on_with<B, A>(
     mut term: Terminal<B>,
     mut app: A,
     options: RunOptions,
@@ -318,7 +318,7 @@ where
 }
 
 /// Builds a [`Terminal`](crate::terminal::Terminal) over `backend` and drives `app` with
-/// [`run_blocking`](crate::app::run_blocking).
+/// [`run_on`](crate::app::run_on).
 ///
 /// The canonical entry point for a blocking-loop backend (`Crossterm` in
 /// `retroglyph-crossterm`, [`Headless`](crate::backend::Headless), and any future backend with a
@@ -331,18 +331,18 @@ where
 ///
 /// Returns `backend`'s error if it fails to build a [`Terminal`](crate::terminal::Terminal) over
 /// itself, or if the automatic `present()` call fails while `app` is running. See
-/// [`run_blocking`](crate::app::run_blocking) for the exact loop behavior.
+/// [`run_on`](crate::app::run_on) for the exact loop behavior.
 #[cfg(feature = "std")]
 pub fn run<B, A>(backend: B, app: A) -> Result<(), B::Error>
 where
     B: Backend,
     A: App<B>,
 {
-    run_blocking(Terminal::new(backend), app)
+    run_on(Terminal::new(backend), app)
 }
 
 /// Builds a [`Terminal`](crate::terminal::Terminal) over `backend` and drives `app` with
-/// [`run_blocking_with`](crate::app::run_blocking_with), paced by `options`.
+/// [`run_on_with`](crate::app::run_on_with), paced by `options`.
 ///
 /// The `options`-taking counterpart to [`run`](crate::app::run); see that function for which
 /// backends this suits, and [`RunOptions`](crate::app::RunOptions) for the available pacing and
@@ -352,18 +352,18 @@ where
 ///
 /// Returns `backend`'s error if it fails to build a [`Terminal`](crate::terminal::Terminal) over
 /// itself, or if the automatic `present()` call fails while `app` is running. See
-/// [`run_blocking_with`](crate::app::run_blocking_with) for the exact loop behavior.
+/// [`run_on_with`](crate::app::run_on_with) for the exact loop behavior.
 ///
 /// # Panics
 ///
-/// Panics if `options.target_fps` is `Some(0)`; see [`run_blocking_with`](crate::app::run_blocking_with).
+/// Panics if `options.target_fps` is `Some(0)`; see [`run_on_with`](crate::app::run_on_with).
 #[cfg(feature = "std")]
 pub fn run_with<B, A>(backend: B, app: A, options: RunOptions) -> Result<(), B::Error>
 where
     B: Backend,
     A: App<B>,
 {
-    run_blocking_with(Terminal::new(backend), app, options)
+    run_on_with(Terminal::new(backend), app, options)
 }
 
 #[cfg(test)]
@@ -393,7 +393,7 @@ mod tests {
 
     #[cfg(feature = "std")]
     #[test]
-    fn run_blocking_exits_on_flow_exit() {
+    fn run_on_exits_on_flow_exit() {
         let mut backend = Headless::new(4, 1);
         backend.push_event(Event::Key(KeyEvent::new(
             KeyCode::Char('q'),
@@ -403,11 +403,11 @@ mod tests {
         let app = Counter { frames: 0 };
         // Runs until the queued key is observed. Reaching the next line proves
         // the loop terminated on Flow::Exit rather than spinning forever.
-        run_blocking(term, app).expect("run_blocking");
+        run_on(term, app).expect("run_on");
     }
 
     /// An app that never draws and always returns `Idle` except on the last frame: proves
-    /// `run_blocking` skips `present()` for `Idle` frames rather than erasing an untouched grid.
+    /// `run_on` skips `present()` for `Idle` frames rather than erasing an untouched grid.
     struct AlwaysIdle {
         frames: u64,
     }
@@ -425,13 +425,13 @@ mod tests {
 
     #[cfg(feature = "std")]
     #[test]
-    fn run_blocking_skips_present_on_idle() {
+    fn run_on_skips_present_on_idle() {
         let term = Terminal::new(Headless::new(2, 1));
         let app = AlwaysIdle { frames: 0 };
         // `update` never draws or presents; if the driver called `present()` on an `Idle` frame
         // anyway it would be harmless here (nothing to erase), so this mainly documents intent --
-        // the presenting behavior itself is covered by `run_blocking_with_options_presents_frames`.
-        run_blocking(term, app).expect("run_blocking");
+        // the presenting behavior itself is covered by `run_on_with_options_presents_frames`.
+        run_on(term, app).expect("run_on");
     }
 
     /// An app that draws a distinct glyph per frame and never presents itself, so successfully
@@ -456,32 +456,32 @@ mod tests {
 
     #[cfg(feature = "std")]
     #[test]
-    fn run_blocking_presents_automatically() {
+    fn run_on_presents_automatically() {
         let term = Terminal::new(Headless::new(2, 1));
         let app = DrawsAndExits {
             frames: 0,
             exit_at: 0,
         };
-        run_blocking(term, app).expect("run_blocking");
-        // No assertion on backend content is possible here: `term` is consumed by `run_blocking`.
+        run_on(term, app).expect("run_on");
+        // No assertion on backend content is possible here: `term` is consumed by `run_on`.
         // Coverage that the automatic present actually reaches the backend lives in
         // `retroglyph-window`'s own driver tests, which retain the terminal after the loop.
     }
 
     #[cfg(feature = "std")]
     #[test]
-    fn run_blocking_with_default_options_matches_run_blocking() {
+    fn run_on_with_default_options_matches_run_on() {
         let term = Terminal::new(Headless::new(2, 1));
         let app = DrawsAndExits {
             frames: 0,
             exit_at: 2,
         };
-        run_blocking_with(term, app, RunOptions::default()).expect("run_blocking_with");
+        run_on_with(term, app, RunOptions::default()).expect("run_on_with");
     }
 
     #[cfg(feature = "std")]
     #[test]
-    fn run_blocking_with_animated_options_runs_to_completion() {
+    fn run_on_with_animated_options_runs_to_completion() {
         let term = Terminal::new(Headless::new(2, 1));
         let app = DrawsAndExits {
             frames: 0,
@@ -489,7 +489,7 @@ mod tests {
         };
         // A high cap keeps this test fast; the point is that a paced loop still terminates on
         // `Flow::Exit` and delivers the same number of updates as an uncapped loop would.
-        run_blocking_with(term, app, RunOptions::animated(1000)).expect("run_blocking_with");
+        run_on_with(term, app, RunOptions::animated(1000)).expect("run_on_with");
     }
 
     #[cfg(feature = "std")]
@@ -501,7 +501,7 @@ mod tests {
             KeyModifiers::NONE,
         )));
         let app = Counter { frames: 0 };
-        // `run` takes the bare backend rather than a `Terminal`, unlike `run_blocking`; reaching
+        // `run` takes the bare backend rather than a `Terminal`, unlike `run_on`; reaching
         // the next line proves it still builds one and drives the loop to `Flow::Exit`.
         run(backend, app).expect("run");
     }
@@ -514,7 +514,7 @@ mod tests {
             frames: 0,
             exit_at: 2,
         };
-        // Same proof as `run_blocking_with_animated_options_runs_to_completion`, but starting
+        // Same proof as `run_on_with_animated_options_runs_to_completion`, but starting
         // from a bare backend to cover `run_with`'s own `Terminal::new` call.
         run_with(backend, app, RunOptions::animated(1000)).expect("run_with");
     }
@@ -568,7 +568,7 @@ mod tests {
 
     #[cfg(feature = "std")]
     #[test]
-    fn run_blocking_with_non_event_driven_options_does_not_block_on_idle() {
+    fn run_on_with_non_event_driven_options_does_not_block_on_idle() {
         let term = Terminal::new(Headless::new(2, 1));
         let app = IdleThenExit { frames: 0 };
         let options = RunOptions {
@@ -576,7 +576,7 @@ mod tests {
             event_driven: false,
             idle_wake: None,
         };
-        run_blocking_with(term, app, options).expect("run_blocking_with");
+        run_on_with(term, app, options).expect("run_on_with");
     }
 
     /// Proves the driver's idle wait doesn't swallow the event it woke up for: `update` is only
@@ -599,7 +599,7 @@ mod tests {
     }
 
     #[test]
-    fn run_blocking_event_driven_idle_wait_does_not_consume_the_waking_event() {
+    fn run_on_event_driven_idle_wait_does_not_consume_the_waking_event() {
         let mut backend = Headless::new(2, 1);
         backend.push_event(Event::Key(KeyEvent::new(
             KeyCode::Char('x'),
@@ -610,8 +610,8 @@ mod tests {
             frames: 0,
             saw_input_after_idle: false,
         };
-        // Can't recover `app` through `run_blocking` (it takes the app by value and drops it with
-        // the terminal), so drive the loop by hand via `step`, mirroring what `run_blocking_with`
+        // Can't recover `app` through `run_on` (it takes the app by value and drops it with
+        // the terminal), so drive the loop by hand via `step`, mirroring what `run_on_with`
         // does around the `Flow::Idle` branch.
         let mut term = term;
         let frame0 = Frame {
@@ -619,7 +619,7 @@ mod tests {
             frame: 0,
         };
         assert_eq!(app.update(&mut term, &frame0), Flow::Idle);
-        // This is the exact call `run_blocking_with` makes on `Flow::Idle` when `event_driven` is
+        // This is the exact call `run_on_with` makes on `Flow::Idle` when `event_driven` is
         // `true`: it must buffer the event, not return/consume it, so `update`'s own `has_input`
         // still finds it below.
         assert!(term.wait_for_input(Duration::MAX));
