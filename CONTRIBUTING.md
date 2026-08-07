@@ -76,19 +76,21 @@ Other labels you may see or apply on a PR:
 
 ## Crate layout
 
-```text
-src/
-  backend/
-    mod.rs          Backend trait
-    headless.rs     In-memory backend (testing)
-    crossterm.rs    Crossterm backend (feature-gated)
-  cell.rs           Cell: a glyph + Style
-  color.rs          Color enum (Default / ANSI / Indexed / RGB)
-  grid.rs           Grid: 2-D cell buffer, diff iterator
-  style.rs          Style
-  event.rs          Event, KeyEvent, MouseEvent
-  terminal.rs       Terminal<B>: stateful drawing API, double buffering
-```
+| Crate                                   | What it is                                                                               |
+| --------------------------------------- | ---------------------------------------------------------------------------------------- |
+| [`core`](crates/core)                   | `no_std`-compatible foundation: grid, tile, style, color, `Backend` trait, `Terminal<B>` |
+| [`terminal`](crates/terminal)           | Shared ANSI/SGR cell-diff renderer for the terminal-family backends                      |
+| [`crossterm`](crates/crossterm)         | Terminal backend via [`crossterm`](https://crates.io/crates/crossterm)                   |
+| [`terminal-wasm`](crates/terminal-wasm) | Browser terminal backend (e.g. xterm.js) over pushed/pulled ANSI I/O                     |
+| [`window`](crates/window)               | Shared `winit` windowing layer for windowed backends                                     |
+| [`software`](crates/software)           | Pixel backend via `softbuffer`: native window or browser canvas                          |
+| [`gl`](crates/gl)                       | GPU backend via `glow`: OpenGL 3.3 (native) and WebGL2 (wasm)                            |
+| [`wgpu`](crates/wgpu)                   | GPU backend via `wgpu`: Vulkan, Metal, and D3D12 (native)                                |
+| [`ui`](crates/ui)                       | Immediate-mode UI toolkit: widgets, layout, input/focus, theming, animation              |
+
+Each crate publishes as `retroglyph-<name>` (e.g. `retroglyph-core`). Within `crates/core`,
+`backend/headless.rs` holds the in-memory `Headless` backend used for testing, and `terminal.rs`
+holds `Terminal<B>`, the stateful drawing API with double buffering.
 
 ## Testing
 
@@ -100,8 +102,9 @@ just test-v        # with stdout (useful for snapshot review)
 cargo test --lib   # unit tests only
 ```
 
-Unit tests live alongside their modules. The integration suite in `tests/e2e.rs` drives
-`Terminal<Headless>` through game-logic scenarios and asserts on the grid state directly.
+Unit tests live alongside their modules (`#[cfg(test)] mod tests` in the same file, e.g.
+`crates/core/src/backend/headless.rs`). A few crates also have `tests/*.rs` integration suites for
+cross-module invariants (e.g. `crates/core/tests/no_drift.rs`).
 
 ### Snapshot tests (`insta`)
 
@@ -109,12 +112,15 @@ Unit tests live alongside their modules. The integration suite in `tests/e2e.rs`
 `·`. Pair it with `insta::assert_snapshot!` for deterministic layout assertions:
 
 ```rust
-use retroglyph::{Terminal, backend::Headless};
+use retroglyph_core::backend::Headless;
+use retroglyph_core::color::Style;
+use retroglyph_core::terminal::Terminal;
 
 let backend = Headless::new(20, 5);
 let mut term = Terminal::new(backend);
-term.put((2, 2), 'X');
-term.present();
+term.draw(|s| s.put((2, 2), 'X', Style::default()))
+    .expect("draw failed");
+term.present().expect("present failed");
 insta::assert_snapshot!(term.backend().format_view());
 ```
 
@@ -126,38 +132,26 @@ cargo insta test            # run tests and open the review UI
 cargo insta accept          # accept all pending snapshots
 ```
 
-Snapshot files live in `tests/snapshots/` and are committed to version control. A failing snapshot
-test means visible output changed: review the diff before accepting.
+Snapshot files are committed to version control, next to the tests that produce them (e.g.
+`crates/core/src/snapshots/`, `examples/tests/snapshots/`). A failing snapshot test means visible
+output changed: review the diff before accepting.
 
-### E2E visual snapshots (crossterm backend)
+### Per-example snapshot suite (`examples/tests/`)
 
-`tests/e2e_snapshots.rs` spawns the compiled `demo` binary (built with `--features crossterm`) in a
-real pseudo-terminal using `portable-pty`, feeds it key input, then parses the raw ANSI byte stream
-with a VT100 emulator (`vt100` crate) to reconstruct the final screen state. The screen is rendered
-to SVG and snapshotted with `insta`.
-
-```sh
-# The demo binary must be built first
-
-cargo build --example demo --features crossterm
-
-cargo test --test e2e_snapshots --all-features
-```
-
-Two files are written to `tests/snapshots/` on each run:
-
-| File                                | Purpose                                                |
-| ----------------------------------- | ------------------------------------------------------ |
-| `e2e_snapshots__demo_snapshot.snap` | Insta snapshot (authoritative, diffed by CI)           |
-| `demo.svg`                          | Rendered SVG: open directly in a browser or Quick Look |
-
-GitHub renders `.svg` files, so PR diffs show a visual before/after when the snapshot changes.
-
-To view the current snapshot locally:
+Each `examples/examples/NN_name.rs` example has a sibling `examples/tests/NN_name.rs` that includes
+the example's own source via `#[path]` and drives it through three snapshots: a headless text
+snapshot (`insta::assert_snapshot!` on `Headless::format_view()`), a software-backend PNG
+(`insta::assert_binary_snapshot!`), and a crossterm SVG captured by spawning the compiled example in
+a real pseudo-terminal (`portable-pty`) and rendering the ANSI byte stream through a VT100 emulator
+(`vt100` crate). See `examples/AGENTS.md` for the full per-example validation gates.
 
 ```sh
-open tests/snapshots/demo.svg
+cargo test -p retroglyph-examples --all-features
 ```
+
+GitHub renders `.svg` files, so PR diffs show a visual before/after when an SVG snapshot changes.
+Open a committed `.svg` under `examples/tests/snapshots/` directly in a browser or Quick Look to
+view it locally.
 
 ## Benchmarking
 
