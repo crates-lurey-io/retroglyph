@@ -14,7 +14,26 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      rust: ${{ steps.filter.outputs.rust }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            rust:
+              - 'crates/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - '.cargo/**'
+              - 'Justfile'
+              - '.github/workflows/bench.yml'
+
   bench:
+    needs: changes
     runs-on: ubuntu-latest
     permissions:
       checks: write
@@ -22,7 +41,13 @@ jobs:
     # `types: [labeled]` fires on *any* label being added, not just "benchmark" -- without this
     # guard, automated labelers (path-labels, title-labels) applying unrelated labels like
     # `dependencies` or `c:workspace` re-trigger this job on every PR that gets auto-labeled.
-    if: github.event_name == 'push' || github.event.label.name == 'benchmark'
+    # On `push` to main, additionally skip when nothing under the Rust filter changed (e.g. a
+    # workflow/docs/tooling-only merge) -- there's nothing to benchmark. A manually applied
+    # `benchmark` label always runs regardless of path, so the label still gets removed even if
+    # someone adds it to a non-Rust PR by mistake.
+    if:
+      (github.event_name == 'push' && needs.changes.outputs.rust == 'true') ||
+      github.event.label.name == 'benchmark'
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
