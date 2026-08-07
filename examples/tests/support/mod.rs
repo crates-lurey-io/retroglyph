@@ -119,7 +119,7 @@ pub fn encode_png(width: u32, height: u32, rgb: &[u8]) -> Vec<u8> {
 /// A build directory dedicated to [`build_crossterm_example`]'s output, isolated from the
 /// workspace's normal `target/` dir.
 ///
-/// `cargo test --workspace --all-features` (see this crate's `AGENTS.md`/`docs/testing.md`)
+/// `cargo test --workspace --all-features` (see this crate's `AGENTS.md`)
 /// compiles every `[[example]]` -- including with the `software` feature, which
 /// [`build_crossterm_example`]'s own doc comment already explains is unusable in a PTY -- into
 /// the ordinary `target/debug/examples/` directory *before* any `#[test]` runs. Building the
