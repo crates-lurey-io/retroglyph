@@ -46,11 +46,16 @@ def flag_for_suite(suite_name: str) -> str | None:
 
     Binary ids look like `retroglyph-core` (the crate's own lib/unit tests) or
     `retroglyph-crossterm::non_tty` (a secondary `[[test]]` binary in that same crate) --
-    strip the `retroglyph-` prefix and any `::binary` suffix, then match against FLAGS.
+    strip the `retroglyph-` prefix and any `::binary` suffix, then match against FLAGS. The
+    facade crate (`crates/retroglyph`) has no prefix of its own, so its binary id is exactly
+    `retroglyph` (or `retroglyph::binary`) with nothing to strip -- match that case directly.
     """
-    if not suite_name.startswith("retroglyph-"):
+    if suite_name == "retroglyph" or suite_name.startswith("retroglyph::"):
+        crate = "retroglyph"
+    elif suite_name.startswith("retroglyph-"):
+        crate = suite_name.removeprefix("retroglyph-").split("::", 1)[0]
+    else:
         return None
-    crate = suite_name.removeprefix("retroglyph-").split("::", 1)[0]
     return crate if crate in FLAGS else None
 
 
