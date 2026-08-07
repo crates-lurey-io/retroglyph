@@ -58,6 +58,7 @@ mod tests {
     fn every_module_carries_the_shared_declarations() {
         // A body that declared its own `Uniforms` would compile and then read the wrong offsets;
         // the point of the prelude is that there is exactly one declaration.
+        #[cfg_attr(not(feature = "tilesets"), allow(unused_mut))]
         let mut shaders = vec![Shader::Cells];
         #[cfg(feature = "tilesets")]
         shaders.push(Shader::Sprites);
