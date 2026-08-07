@@ -11,50 +11,31 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 ### Features
 
-- [0fc6f9e](
-https://github.com/crates-lurey-io/retroglyph/commit/0fc6f9e0ddb82747a6670db2dacacbe45781aaa1) *(core, crossterm)* Add app::run/run_with, delete Crossterm::run by `@crates-lurey-io-agent[bot]` in [#1194](
-https://github.com/crates-lurey-io/retroglyph/pull/1194)
+- [0fc6f9e](https://github.com/crates-lurey-io/retroglyph/commit/0fc6f9e0ddb82747a6670db2dacacbe45781aaa1) _(core, crossterm)_ Add app::run/run_with, delete Crossterm::run by `@crates-lurey-io-agent[bot]` in [#1194](https://github.com/crates-lurey-io/retroglyph/pull/1194)
 
-- [390a46c](
-https://github.com/crates-lurey-io/retroglyph/commit/390a46c2c0b5c6da03649269903f368ef5aca1c1) *(core, crossterm, window)* Launch trait in core with a per-backend impl by `@crates-lurey-io-agent[bot]` in [#1209](
-https://github.com/crates-lurey-io/retroglyph/pull/1209)
+- [390a46c](https://github.com/crates-lurey-io/retroglyph/commit/390a46c2c0b5c6da03649269903f368ef5aca1c1) _(core, crossterm, window)_ Launch trait in core with a per-backend impl by `@crates-lurey-io-agent[bot]` in [#1209](https://github.com/crates-lurey-io/retroglyph/pull/1209)
 
 ### Refactor
 
-- [6b7a086](
-https://github.com/crates-lurey-io/retroglyph/commit/6b7a08625aee81941b052a79ddebd2aa7da7269e) *(core)* Rename run_blocking to run_on by `@crates-lurey-io-agent[bot]` in [#1205](
-https://github.com/crates-lurey-io/retroglyph/pull/1205)
+- [6b7a086](https://github.com/crates-lurey-io/retroglyph/commit/6b7a08625aee81941b052a79ddebd2aa7da7269e) _(core)_ Rename run_blocking to run_on by `@crates-lurey-io-agent[bot]` in [#1205](https://github.com/crates-lurey-io/retroglyph/pull/1205)
 
 ### Documentation
 
-- [cc93bb8](
-https://github.com/crates-lurey-io/retroglyph/commit/cc93bb8509f4b3ab25a1b3a2abb85aeaaad4d7a2) *(core)* Add #[doc(alias)] on core types for cross-library discoverability by `@crates-lurey-io-agent[bot]` in [#1198](
-https://github.com/crates-lurey-io/retroglyph/pull/1198)
+- [cc93bb8](https://github.com/crates-lurey-io/retroglyph/commit/cc93bb8509f4b3ab25a1b3a2abb85aeaaad4d7a2) _(core)_ Add #[doc(alias)] on core types for cross-library discoverability by `@crates-lurey-io-agent[bot]` in [#1198](https://github.com/crates-lurey-io/retroglyph/pull/1198)
 
-- [b877649](
-https://github.com/crates-lurey-io/retroglyph/commit/b877649357ad459584347e28b45dc194319a71eb) *(core, window)* Relocate oversized doc comments into explanation/ pages by `@crates-lurey-io-agent[bot]` in [#1240](
-https://github.com/crates-lurey-io/retroglyph/pull/1240)
+- [b877649](https://github.com/crates-lurey-io/retroglyph/commit/b877649357ad459584347e28b45dc194319a71eb) _(core, window)_ Relocate oversized doc comments into explanation/ pages by `@crates-lurey-io-agent[bot]` in [#1240](https://github.com/crates-lurey-io/retroglyph/pull/1240)
 
-- [9c49f63](
-https://github.com/crates-lurey-io/retroglyph/commit/9c49f63a207ed8ce18908c1f4e1a9983b34d71e5) *(workspace)* Remove references to docs/testing.md and docs/ROADMAP.md, which do not exist by `@crates-lurey-io-agent[bot]` in [#1210](
-https://github.com/crates-lurey-io/retroglyph/pull/1210)
+- [9c49f63](https://github.com/crates-lurey-io/retroglyph/commit/9c49f63a207ed8ce18908c1f4e1a9983b34d71e5) _(workspace)_ Remove references to docs/testing.md and docs/ROADMAP.md, which do not exist by `@crates-lurey-io-agent[bot]` in [#1210](https://github.com/crates-lurey-io/retroglyph/pull/1210)
 
-- [f6c17c7](
-https://github.com/crates-lurey-io/retroglyph/commit/f6c17c715a52af7faba7e4ccf042a9159bf335f0) *(workspace)* Add pseudographic project logo/favicon by `@crates-lurey-io-agent[bot]` in [#1200](
-https://github.com/crates-lurey-io/retroglyph/pull/1200)
+- [f6c17c7](https://github.com/crates-lurey-io/retroglyph/commit/f6c17c715a52af7faba7e4ccf042a9159bf335f0) _(workspace)_ Add pseudographic project logo/favicon by `@crates-lurey-io-agent[bot]` in [#1200](https://github.com/crates-lurey-io/retroglyph/pull/1200)
 
 ### Testing
 
-- [0571a2e](
-https://github.com/crates-lurey-io/retroglyph/commit/0571a2eb8246f8b239a7815ccc22baed0277bf4c) *(core, crossterm, software, window)* Wire assert_input_contract into every Input backend by `@crates-lurey-io-agent[bot]` in [#1199](
-https://github.com/crates-lurey-io/retroglyph/pull/1199)
+- [0571a2e](https://github.com/crates-lurey-io/retroglyph/commit/0571a2eb8246f8b239a7815ccc22baed0277bf4c) _(core, crossterm, software, window)_ Wire assert_input_contract into every Input backend by `@crates-lurey-io-agent[bot]` in [#1199](https://github.com/crates-lurey-io/retroglyph/pull/1199)
 
-- [830fd0c](
-https://github.com/crates-lurey-io/retroglyph/commit/830fd0cc70e0a42833f5e4c2ce01e97d5b192501) *(examples)* Drive examples/tests through TestHarness instead of hand-rolled loops by `@crates-lurey-io-agent[bot]` in [#1188](
-https://github.com/crates-lurey-io/retroglyph/pull/1188)
+- [830fd0c](https://github.com/crates-lurey-io/retroglyph/commit/830fd0cc70e0a42833f5e4c2ce01e97d5b192501) _(examples)_ Drive examples/tests through TestHarness instead of hand-rolled loops by `@crates-lurey-io-agent[bot]` in [#1188](https://github.com/crates-lurey-io/retroglyph/pull/1188)
 
 **Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.6.0...retroglyph-core-v0.7.0
-
 
 ## [0.6.0+retroglyph-core](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.5.0...retroglyph-core-v0.6.0) - 2026-08-05
 

@@ -11,30 +11,21 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 ### Features
 
-- [ff66904](
-https://github.com/crates-lurey-io/retroglyph/commit/ff669041fa6a5d496e6563f24cdc9faa2b27f831) *(window)* Add PresenterBuilder over the three windowed builders by `@crates-lurey-io-agent[bot]` in [#1196](
-https://github.com/crates-lurey-io/retroglyph/pull/1196)
+- [ff66904](https://github.com/crates-lurey-io/retroglyph/commit/ff669041fa6a5d496e6563f24cdc9faa2b27f831) _(window)_ Add PresenterBuilder over the three windowed builders by `@crates-lurey-io-agent[bot]` in [#1196](https://github.com/crates-lurey-io/retroglyph/pull/1196)
 
 ### Bug Fixes
 
-- [a82edcd](
-https://github.com/crates-lurey-io/retroglyph/commit/a82edcd9310a17cb5f2d4435bbccff9e662e7cf8) *(workspace)* Lint the tilesets-off `has_sprite` stub the clippy gate never builds by `@crates-lurey-io-agent[bot]` in [#1189](
-https://github.com/crates-lurey-io/retroglyph/pull/1189)
+- [a82edcd](https://github.com/crates-lurey-io/retroglyph/commit/a82edcd9310a17cb5f2d4435bbccff9e662e7cf8) _(workspace)_ Lint the tilesets-off `has_sprite` stub the clippy gate never builds by `@crates-lurey-io-agent[bot]` in [#1189](https://github.com/crates-lurey-io/retroglyph/pull/1189)
 
 ### Documentation
 
-- [f6c17c7](
-https://github.com/crates-lurey-io/retroglyph/commit/f6c17c715a52af7faba7e4ccf042a9159bf335f0) *(workspace)* Add pseudographic project logo/favicon by `@crates-lurey-io-agent[bot]` in [#1200](
-https://github.com/crates-lurey-io/retroglyph/pull/1200)
+- [f6c17c7](https://github.com/crates-lurey-io/retroglyph/commit/f6c17c715a52af7faba7e4ccf042a9159bf335f0) _(workspace)_ Add pseudographic project logo/favicon by `@crates-lurey-io-agent[bot]` in [#1200](https://github.com/crates-lurey-io/retroglyph/pull/1200)
 
 ### Testing
 
-- [0571a2e](
-https://github.com/crates-lurey-io/retroglyph/commit/0571a2eb8246f8b239a7815ccc22baed0277bf4c) *(core, crossterm, software, window)* Wire assert_input_contract into every Input backend by `@crates-lurey-io-agent[bot]` in [#1199](
-https://github.com/crates-lurey-io/retroglyph/pull/1199)
+- [0571a2e](https://github.com/crates-lurey-io/retroglyph/commit/0571a2eb8246f8b239a7815ccc22baed0277bf4c) _(core, crossterm, software, window)_ Wire assert_input_contract into every Input backend by `@crates-lurey-io-agent[bot]` in [#1199](https://github.com/crates-lurey-io/retroglyph/pull/1199)
 
 **Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-software-v0.6.0...retroglyph-software-v0.6.1
-
 
 ## [0.6.0+retroglyph-software](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-software-v0.5.1...retroglyph-software-v0.6.0) - 2026-08-05
 

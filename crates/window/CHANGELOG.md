@@ -11,50 +11,31 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 ### Features
 
-- [390a46c](
-https://github.com/crates-lurey-io/retroglyph/commit/390a46c2c0b5c6da03649269903f368ef5aca1c1) *(core, crossterm, window)* Launch trait in core with a per-backend impl by `@crates-lurey-io-agent[bot]` in [#1209](
-https://github.com/crates-lurey-io/retroglyph/pull/1209)
+- [390a46c](https://github.com/crates-lurey-io/retroglyph/commit/390a46c2c0b5c6da03649269903f368ef5aca1c1) _(core, crossterm, window)_ Launch trait in core with a per-backend impl by `@crates-lurey-io-agent[bot]` in [#1209](https://github.com/crates-lurey-io/retroglyph/pull/1209)
 
-- [51e8d40](
-https://github.com/crates-lurey-io/retroglyph/commit/51e8d40b94102ed3c59c0773809fb00356712fd6) *(window)* Re-export EventLoopError so downstream can name the driver error by `@crates-lurey-io-agent[bot]` in [#1204](
-https://github.com/crates-lurey-io/retroglyph/pull/1204)
+- [51e8d40](https://github.com/crates-lurey-io/retroglyph/commit/51e8d40b94102ed3c59c0773809fb00356712fd6) _(window)_ Re-export EventLoopError so downstream can name the driver error by `@crates-lurey-io-agent[bot]` in [#1204](https://github.com/crates-lurey-io/retroglyph/pull/1204)
 
-- [ff66904](
-https://github.com/crates-lurey-io/retroglyph/commit/ff669041fa6a5d496e6563f24cdc9faa2b27f831) *(window)* Add PresenterBuilder over the three windowed builders by `@crates-lurey-io-agent[bot]` in [#1196](
-https://github.com/crates-lurey-io/retroglyph/pull/1196)
+- [ff66904](https://github.com/crates-lurey-io/retroglyph/commit/ff669041fa6a5d496e6563f24cdc9faa2b27f831) _(window)_ Add PresenterBuilder over the three windowed builders by `@crates-lurey-io-agent[bot]` in [#1196](https://github.com/crates-lurey-io/retroglyph/pull/1196)
 
-- [1be1958](
-https://github.com/crates-lurey-io/retroglyph/commit/1be1958ac0f18503d5d1799797a219e47bd26bda) *(window)* Add run_app_on and read pacing from RunOptions by `@crates-lurey-io-agent[bot]` in [#1195](
-https://github.com/crates-lurey-io/retroglyph/pull/1195)
+- [1be1958](https://github.com/crates-lurey-io/retroglyph/commit/1be1958ac0f18503d5d1799797a219e47bd26bda) _(window)_ Add run_app_on and read pacing from RunOptions by `@crates-lurey-io-agent[bot]` in [#1195](https://github.com/crates-lurey-io/retroglyph/pull/1195)
 
-- [e9bfd08](
-https://github.com/crates-lurey-io/retroglyph/commit/e9bfd080e45a9a08d5ed68b0bd1f17820cc87621) *(workspace)* Scaffold crates/retroglyph, the consumer-facing facade by `@crates-lurey-io-agent[bot]` in [#1212](
-https://github.com/crates-lurey-io/retroglyph/pull/1212)
+- [e9bfd08](https://github.com/crates-lurey-io/retroglyph/commit/e9bfd080e45a9a08d5ed68b0bd1f17820cc87621) _(workspace)_ Scaffold crates/retroglyph, the consumer-facing facade by `@crates-lurey-io-agent[bot]` in [#1212](https://github.com/crates-lurey-io/retroglyph/pull/1212)
 
 ### Refactor
 
-- [6b7a086](
-https://github.com/crates-lurey-io/retroglyph/commit/6b7a08625aee81941b052a79ddebd2aa7da7269e) *(core)* Rename run_blocking to run_on by `@crates-lurey-io-agent[bot]` in [#1205](
-https://github.com/crates-lurey-io/retroglyph/pull/1205)
+- [6b7a086](https://github.com/crates-lurey-io/retroglyph/commit/6b7a08625aee81941b052a79ddebd2aa7da7269e) _(core)_ Rename run_blocking to run_on by `@crates-lurey-io-agent[bot]` in [#1205](https://github.com/crates-lurey-io/retroglyph/pull/1205)
 
 ### Documentation
 
-- [b877649](
-https://github.com/crates-lurey-io/retroglyph/commit/b877649357ad459584347e28b45dc194319a71eb) *(core, window)* Relocate oversized doc comments into explanation/ pages by `@crates-lurey-io-agent[bot]` in [#1240](
-https://github.com/crates-lurey-io/retroglyph/pull/1240)
+- [b877649](https://github.com/crates-lurey-io/retroglyph/commit/b877649357ad459584347e28b45dc194319a71eb) _(core, window)_ Relocate oversized doc comments into explanation/ pages by `@crates-lurey-io-agent[bot]` in [#1240](https://github.com/crates-lurey-io/retroglyph/pull/1240)
 
-- [f6c17c7](
-https://github.com/crates-lurey-io/retroglyph/commit/f6c17c715a52af7faba7e4ccf042a9159bf335f0) *(workspace)* Add pseudographic project logo/favicon by `@crates-lurey-io-agent[bot]` in [#1200](
-https://github.com/crates-lurey-io/retroglyph/pull/1200)
+- [f6c17c7](https://github.com/crates-lurey-io/retroglyph/commit/f6c17c715a52af7faba7e4ccf042a9159bf335f0) _(workspace)_ Add pseudographic project logo/favicon by `@crates-lurey-io-agent[bot]` in [#1200](https://github.com/crates-lurey-io/retroglyph/pull/1200)
 
 ### Testing
 
-- [0571a2e](
-https://github.com/crates-lurey-io/retroglyph/commit/0571a2eb8246f8b239a7815ccc22baed0277bf4c) *(core, crossterm, software, window)* Wire assert_input_contract into every Input backend by `@crates-lurey-io-agent[bot]` in [#1199](
-https://github.com/crates-lurey-io/retroglyph/pull/1199)
+- [0571a2e](https://github.com/crates-lurey-io/retroglyph/commit/0571a2eb8246f8b239a7815ccc22baed0277bf4c) _(core, crossterm, software, window)_ Wire assert_input_contract into every Input backend by `@crates-lurey-io-agent[bot]` in [#1199](https://github.com/crates-lurey-io/retroglyph/pull/1199)
 
 **Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-window-v0.5.0...retroglyph-window-v0.5.1
-
 
 ## [0.5.0+retroglyph-window](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-window-v0.4.1...retroglyph-window-v0.5.0) - 2026-08-05
 
