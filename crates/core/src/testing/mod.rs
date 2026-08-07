@@ -66,7 +66,7 @@ pub const DEFAULT_MAX_STEPS: u32 = 64;
 /// # Presenting
 ///
 /// [`step`](Self::step) presents automatically: skipped on [`Flow::Idle`](crate::app::Flow::Idle), skipped as a no-op if
-/// `update` already presented (mirroring [`run_blocking`](crate::app::run_blocking)'s own
+/// `update` already presented (mirroring [`run_on`](crate::app::run_on)'s own
 /// behavior). Nothing queued is visible in [`view`](Self::view) until a `step` call has run.
 ///
 /// # Examples

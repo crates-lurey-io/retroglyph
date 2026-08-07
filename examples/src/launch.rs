@@ -119,12 +119,12 @@ pub trait Example: Default + Sized + 'static {
     ///
     /// `frame` carries the real wall-clock time elapsed since the previous tick
     /// ([`Frame::delta`]), already measured correctly by whichever driver is
-    /// actually running (`run_blocking`'s `std::time::Instant` on native,
+    /// actually running (`run_on`'s `std::time::Instant` on native,
     /// `run_app`'s native/wasm split, or a fixed synthetic delta from the
     /// headless test harness -- see [`render_headless_frames`]). Any example
     /// that animates over real time (rather than once per raw tick, which can
     /// fire at wildly different rates depending on the backend -- crossterm's
-    /// `run_blocking` is an unthrottled spin loop, unlike the software
+    /// `run_on` is an unthrottled spin loop, unlike the software
     /// backend's vsync-paced redraw) should drive a [`Tween`](retroglyph_ui::Tween)
     /// or [`FrameClock`](retroglyph_core::frames::FrameClock) with `frame.delta`
     /// instead of counting raw `tick` calls -- see `06_layers.rs`.
@@ -519,7 +519,7 @@ pub fn run_crossterm<E: Example>() -> std::io::Result<()> {
         inner: perf_overlay_app(ExampleApp::<E>::new(), "crossterm"),
         presses,
     };
-    retroglyph_core::app::run_blocking(Terminal::new(filter), app)
+    retroglyph_core::app::run_on(Terminal::new(filter), app)
 }
 
 // ── Headless (stdout) fallback ──────────────────────────────────────────────

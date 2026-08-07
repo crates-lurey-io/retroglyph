@@ -54,7 +54,7 @@ fn visible_from_env(value: Option<&str>) -> bool {
 /// [`PerfOverlayApp`](retroglyph_ui::PerfOverlayApp) via [`CrosstermToggleApp`](crate::launch).
 ///
 /// Shared by clone: the filter wraps the raw backend, the driver owns the `PerfOverlayApp`, and
-/// `run_blocking` takes both by value into separate owners, so the count has to live outside
+/// `run_on` takes both by value into separate owners, so the count has to live outside
 /// either of them. `Rc`/`Cell` rather than `Arc`/atomics because both ends are the same thread --
 /// the blocking driver loop.
 #[cfg(feature = "crossterm")]

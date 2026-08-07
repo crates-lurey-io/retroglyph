@@ -46,8 +46,8 @@ use crate::Theme;
 ///         .render(&mut surface.scope(area));
 /// })
 /// .size(Size::new(34, 8));
-/// retroglyph_core::app::run_blocking(term, app).expect("run_blocking");
-/// # } // `run_blocking` is `std`-only; a no-op under `--no-default-features`.
+/// retroglyph_core::app::run_on(term, app).expect("run_on");
+/// # } // `run_on` is `std`-only; a no-op under `--no-default-features`.
 /// ```
 ///
 /// `N` must match the [`FrameStats`] window it's built from; this crate's
@@ -295,8 +295,8 @@ fn millis(duration: core::time::Duration) -> f32 {
 ///
 /// let term = Terminal::new(Headless::new(60, 12));
 /// let app = MyGame { stats: FrameStats::new() };
-/// retroglyph_core::app::run_blocking(term, app).expect("run_blocking");
-/// # } // `run_blocking` is `std`-only; a no-op under `--no-default-features`.
+/// retroglyph_core::app::run_on(term, app).expect("run_on");
+/// # } // `run_on` is `std`-only; a no-op under `--no-default-features`.
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct AnimatedPerfOverlay<'a, const N: usize = 120> {
