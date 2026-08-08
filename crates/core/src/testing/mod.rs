@@ -419,11 +419,11 @@ impl TestHarness {
     }
 
     /// Rounds `delay` to the nearest whole number of [`STEP_DELTA`] steps.
+    ///
+    /// No zero-`step_nanos` guard: [`STEP_DELTA`] is a fixed, non-zero constant (16ms), not a
+    /// runtime value, so that branch would be dead code no test could ever exercise.
     fn steps_for_delay(delay: Duration) -> u32 {
         let step_nanos = STEP_DELTA.as_nanos();
-        if step_nanos == 0 {
-            return 0;
-        }
         let steps = (delay.as_nanos() + step_nanos / 2) / step_nanos;
         u32::try_from(steps).unwrap_or(u32::MAX)
     }
