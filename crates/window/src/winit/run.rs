@@ -711,11 +711,7 @@ where
 ///
 /// Returns [`EventLoopError`] if the event loop cannot be
 /// created or fails while running.
-pub fn run_app<P, A>(
-    config: WindowConfig,
-    presenter: P,
-    app: A,
-) -> Result<(), EventLoopError>
+pub fn run_app<P, A>(config: WindowConfig, presenter: P, app: A) -> Result<(), EventLoopError>
 where
     P: Presenter + 'static,
     A: retroglyph_core::app::App<WindowBackend<P>> + 'static,
