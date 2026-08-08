@@ -15,8 +15,6 @@
 //! sub-cell pixel offsets. [`Color`](crate::color::Color) covers the full spectrum: the
 //! terminal's default foreground/background, the 16 standard ANSI colors, the 256-color
 //! palette, and 24-bit RGB.
-//! [`Style`](crate::color::Style) has no text modifiers (bold, italic, underline, ...);
-//! see its own doc comment for the full rationale.
 //!
 //! ## Draw order
 //!
@@ -43,7 +41,7 @@
 //! it beats ordering draw calls.
 //!
 //! Compositing itself happens in one of two places, chosen by the backend
-//! (see [`crate::backend::Output::composites_layers`]):
+//! (see [`crate::backend::Output::compositing`]):
 //!
 //! - **Cell backends** (`Headless`, `retroglyph-crossterm`) do not composite
 //!   layers themselves. [`crate::terminal::Terminal::present`] calls
@@ -102,6 +100,29 @@
 //! ([`tile_mut`](crate::grid::Grid::tile_mut), `IndexMut`), which cannot intercept the
 //! write; use [`clear_span`](crate::grid::Grid::clear_span) first if you reach for one of those on a grid
 //! that uses spans.
+//!
+//! ## Naming: `put_*`/`write_*`/`print_*`
+//!
+//! `put_*` names a raw single-slot write: it stores exactly the [`Tile`](crate::tile::Tile)/`char`/grapheme
+//! given, with no text interpretation. [`Grid::put_tile`](crate::grid::Grid::put_tile) is the base case; [`Surface::put`](crate::surface::Surface::put)
+//! and its `put_grapheme`/`put_signed`/`put_offset`/`put_span*` siblings are all `put_tile` plus
+//! surface-local bookkeeping (clipping, tint, coordinate translation), never more than one
+//! caller-given unit per call.
+//!
+//! `write_*` is reserved for a [`Grid`](crate::grid::Grid) write that does more than copy a slot: [`write_grapheme`](crate::grid::Grid::write_grapheme)
+//! adds wide-character/extra-storage bookkeeping on top of `put_tile`, and [`write_span`](crate::grid::Grid::write_span)/
+//! [`write_span_uniform`](crate::grid::Grid::write_span_uniform) claim a multi-cell footprint (see "Multi-cell spans" above). If a new
+//! `Grid` method's job is "store this one thing, with some extra rules for what \"this one
+//! thing\" means", it's `write_*`; if it's "store exactly the tile I hand you", it's `put_*`.
+//!
+//! `print_*` lives only on [`Surface`](crate::surface::Surface), for its string/[`Line`](crate::text::Line)-oriented
+//! convenience layer: [`Surface::print`](crate::surface::Surface::print)/[`print_line`](crate::surface::Surface::print_line)/[`print_aligned`](crate::surface::Surface::print_aligned) take a whole
+//! run of text and handle newlines, wrapping, and alignment by making repeated `put`/`put_grapheme`
+//! calls internally; they never appear on `Grid`, which has no concept of a text run.
+//!
+//! This mirrors how `retroglyph-ui`'s `Ui::show`/`Ui::draw` settled its own naming split: named once
+//! here, rather than re-litigated per method, and a mismatch (a `put`-shaped operation named with
+//! `write_`, or vice versa) is a bug to fix, not a style choice to leave alone.
 //!
 //! ## No short-circuiting: every allocated layer is visited, for every cell
 //!
@@ -185,13 +206,18 @@ impl BlendMode {
 
 /// Size of the grid.
 ///
+/// `width`/`height` are public fields, readable directly (`size.width`). For method-call style
+/// (`size.width()`), bring [`HasSize`] into scope: it's re-exported from this module rather than
+/// `ixy` so callers never need a direct `ixy` dependency just to call it.
+///
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::grid::Size;
+/// use retroglyph_core::grid::{HasSize, Size};
 ///
 /// let size = Size::new(80, 24);
 /// assert_eq!(size.width, 80);
+/// assert_eq!(size.width(), 80);
 /// ```
 ///
 /// This crate's `serde` feature forwards to [`ixy`]'s own `serde` feature, so `Size` gains
@@ -219,6 +245,9 @@ pub type Size = ixy::Size<u16>;
 pub type Pos = ixy::Pos<u16>;
 
 /// Rectangle in the grid.
+///
+/// `.width()`/`.height()` are inherent methods here (unlike on [`Size`]), so no [`HasSize`]
+/// import is needed to call them.
 ///
 /// # Examples
 ///

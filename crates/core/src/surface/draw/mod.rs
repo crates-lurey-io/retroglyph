@@ -64,21 +64,42 @@ impl Surface<'_> {
         }
     }
 
-    /// Writes `grapheme` (already a single extended grapheme cluster) at `(x, y)`. A no-op if
-    /// out of this surface's clip.
+    /// Writes `grapheme` (already a single extended grapheme cluster, e.g. an emoji plus a
+    /// variation selector, a combining sequence, or a flag) at `(x, y)`, in this surface's own
+    /// local coordinate space (matching [`put`](Self::put)'s convention). A no-op if out of this
+    /// surface's clip.
     ///
     /// A 2-column grapheme also needs its spacer cell (`x + 1`) inside the clip: `shift` only
     /// checks the primary cell, and `Grid::write_grapheme` only refuses the spacer at the
     /// *grid*'s own edge, not the clip's, so without this the spacer would land one column past
     /// the clip. Refusing the whole write here (rather than writing a primary cell with no
-    /// spacer) matches [`span_fits`](Self::span_fits)'s reasoning: a footprint half outside the
-    /// clip would reserve a cell the caller does not own.
+    /// spacer) matches this surface's span-writing methods' reasoning: a footprint half outside
+    /// the clip would reserve a cell the caller does not own.
+    ///
+    /// Only present when the `egc` feature is enabled: without it, a `char` (as [`put`](Self::put)
+    /// already takes) is the only glyph unit this surface can address.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Pos, Rect};
+    /// use retroglyph_core::surface::Surface;
+    ///
+    /// let mut grid = Grid::new(4, 4);
+    /// let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 4, 4), 0);
+    ///
+    /// // A combining sequence: 'e' followed by U+0301 COMBINING ACUTE ACCENT.
+    /// surface.put_grapheme(1, 1, "e\u{0301}", Style::default());
+    ///
+    /// assert_eq!(grid[Pos::new(1, 1)].glyph(), 'e');
+    /// ```
     #[cfg(feature = "egc")]
-    pub(super) fn put_grapheme(&mut self, x: u16, y: u16, grapheme: &str, style: Style) {
+    pub fn put_grapheme(&mut self, x: u16, y: u16, grapheme: &str, style: Style) {
         let Some((x, y)) = self.shift(x, y) else {
             return;
         };
-        self.write_grapheme_at(x, y, grapheme, style);
+        self.put_grapheme_at(x, y, grapheme, style);
     }
 
     /// Writes `grapheme` at the already-*absolute* grid coordinate `(x, y)` (post-[`shift`],
@@ -98,19 +119,16 @@ impl Surface<'_> {
     /// distinct from the clip check above, so `apply_tint` is gated on its own `bool` too rather
     /// than assumed to always land once `wide_spacer_fits` passes.
     #[cfg(feature = "egc")]
-    pub(super) fn write_grapheme_at(
-        &mut self,
-        x: u16,
-        y: u16,
-        grapheme: &str,
-        style: Style,
-    ) -> bool {
+    pub(super) fn put_grapheme_at(&mut self, x: u16, y: u16, grapheme: &str, style: Style) -> bool {
         use unicode_width::UnicodeWidthStr;
 
         if !self.wide_spacer_fits(x, y, grapheme.width()) {
             return false;
         }
-        let wrote = self.grid.write_grapheme(self.layer, x, y, grapheme, style);
+        let wrote = self
+            .grid
+            .write_grapheme(self.layer, x, y, grapheme, style)
+            .is_some();
         if wrote {
             self.apply_tint(x, y);
         }
@@ -122,7 +140,7 @@ impl Surface<'_> {
     ///
     /// [`Grid::put_tile`]/[`Grid::write_grapheme`] only refuse a wide write at the *grid*'s own
     /// right edge, not the clip's, so every wide write site (both the `egc` grapheme path via
-    /// [`write_grapheme_at`](Self::write_grapheme_at) and the plain-`char` path in
+    /// [`put_grapheme_at`](Self::put_grapheme_at) and the plain-`char` path in
     /// [`put`](Self::put)/[`put_signed`](Self::put_signed)/[`put_offset`](Self::put_offset))
     /// calls this first: without it, a clip narrower than the surface's own area would let a
     /// wide glyph's spacer land one column past the clip, silently overwriting whatever is

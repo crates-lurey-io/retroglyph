@@ -15,6 +15,7 @@ use crate::theme::Theme;
 
 /// Which border edge a [`PanelTitle`] is drawn into.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum TitlePosition {
     /// The top border row, the same edge [`Panel::title`]'s sugar title is drawn into.
     #[default]
@@ -48,6 +49,11 @@ pub struct PanelTitle<'a> {
 /// anything past that (a bottom title, more than one title on an edge, or a title aligned other
 /// than via `title_align`), use [`Panel::add_title`], which is fully additive: it never disturbs
 /// `title`/`title_align`, and multiple `add_title` calls stack rather than overwrite each other.
+///
+/// `Panel` draws in place into a [`Surface`] the caller already owns and has no concept of
+/// margin. For a standalone box rendered into its own `Grid` -- composed outside a frame, laid
+/// out with `join_h`/`join_v`, or needing margin (space outside the border) -- see
+/// [`BoxStyle`](crate::style::BoxStyle) instead.
 ///
 /// # Examples
 ///
@@ -331,7 +337,8 @@ impl TitleCursor {
         match align {
             Align::Left => self.lo = title_x + padded,
             Align::Right => self.hi = title_x,
-            Align::Center => self.hi = self.lo,
+            // `Align::Center`, and any future variant, centers by collapsing the title span.
+            _ => self.hi = self.lo,
         }
     }
 }

@@ -113,7 +113,7 @@ use surface::WindowSurface;
 struct ReadmeDoctests;
 
 use retroglyph_core::backend::DrawCell;
-use retroglyph_core::backend::{Cursor, Input, Output};
+use retroglyph_core::backend::{Compositing, Cursor, Input, Output};
 use retroglyph_core::color::Color;
 
 // The bitmap font lives in `retroglyph-window`'s winit-free `font` module (both graphical
@@ -135,6 +135,7 @@ use retroglyph_core::event::{Event, coalesces_with};
 use retroglyph_core::grid::HasSize;
 use retroglyph_core::grid::{Pos, Size};
 use retroglyph_core::tile::Tile;
+use retroglyph_window::diagnostics::warn_notdef_glyph;
 use retroglyph_window::geometry::CellGeometry;
 use retroglyph_window::palette::{DEFAULT_BG, DEFAULT_FG};
 use retroglyph_window::presenter::WindowHandle;
@@ -143,7 +144,6 @@ use retroglyph_window::presenter::cell_art_glyph;
 use retroglyph_window::sprite_cache::{
     Sprite, SpriteCache, SpriteTint, warn_sprite_needs_span, warn_tint_needs_sprite,
 };
-#[cfg(feature = "tilesets")]
 use std::collections::BTreeSet;
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -200,7 +200,8 @@ struct RenderContext {
     /// `GridBuf` per layer indexed `[layer_id]`, each internally flat-indexed `[y * cols + x]`.
     /// Used to find dirty cells without touching core's diff model: `draw_layers` already
     /// receives every cell on every allocated layer every frame (see
-    /// [`Output::needs_full_frame`]), so comparing against this shadow copy in place is enough to
+    /// [`Compositing::PixelLayered`](crate::backend::Compositing::PixelLayered)), so comparing
+    /// against this shadow copy in place is enough to
     /// tell which cells actually changed, with no new core API needed. Each layer's `GridBuf` is
     /// always replaced wholesale (via `GridBuf::new_filled`), never resized in place, whenever the
     /// grid dimensions change, so a layer's buffer and its declared width/height can never drift
@@ -238,6 +239,9 @@ struct RenderContext {
     /// redraw loop logs each one once instead of every frame.
     #[cfg(feature = "tilesets")]
     warned_dropped_tint: BTreeSet<char>,
+    /// Characters already reported by [`warn_notdef_glyph`] as resolving to the fallback rather
+    /// than their own glyph, so a 60fps redraw loop logs each one once instead of every frame.
+    warned_notdef: BTreeSet<char>,
 }
 
 impl SoftwareRenderer {
@@ -272,6 +276,7 @@ impl SoftwareRenderer {
                 warned_oversized: BTreeSet::new(),
                 #[cfg(feature = "tilesets")]
                 warned_dropped_tint: BTreeSet::new(),
+                warned_notdef: BTreeSet::new(),
             },
             #[cfg(feature = "tilesets")]
             sprite_cache,
@@ -395,8 +400,8 @@ impl SoftwareRenderer {
     /// `pixel_buf` into `prev_pixels` afterwards, since every other row is
     /// already known to match; when nothing changed, the copy is skipped
     /// entirely. `draw_layers` always repaints every cell (see
-    /// [`Output::needs_full_frame`]), so `prev_pixels` still has to hold a
-    /// full previous-frame pixel buffer to diff against: this only removes
+    /// [`Compositing::PixelLayered`](crate::backend::Compositing::PixelLayered)), so `prev_pixels`
+    /// still has to hold a full previous-frame pixel buffer to diff against: this only removes
     /// the copy's cost from being proportional to the whole buffer instead of
     /// the changed region, which is what actually dominates this function's
     /// cost on an unchanged or near-unchanged frame.
@@ -619,6 +624,7 @@ impl SoftwareRenderer {
             art_glyph,
             &self.fonts,
             scale,
+            &mut self.ctx.warned_notdef,
         );
     }
 }
@@ -654,7 +660,7 @@ impl SoftwareBackend {
     ///     .unwrap();
     ///
     /// // Render a red cell on layer 0.
-    /// let tile = Tile::new(' ', Style::new().bg(Color::Rgb { r: 255, g: 0, b: 0 }));
+    /// let tile = Tile::new(' ', Style::new().bg(Color::rgb(255, 0, 0)));
     /// renderer
     ///     .draw_layers([DrawCell::on_layer(0, Pos::new(0, 0), &tile)].into_iter())
     ///     .unwrap();
@@ -725,7 +731,7 @@ impl SoftwareBackend {
 impl Output for SoftwareRenderer {
     type Error = core::convert::Infallible;
 
-    // No `draw` override: this backend always composites (`composites_layers` returns `true`
+    // No `draw` override: this backend always composites (`compositing` returns `PixelLayered`
     // below), so `Terminal::present` never calls single-layer `draw` and the default
     // implementation (forwards to `draw_layers`) is exactly right. See retroglyph#561.
 
@@ -738,7 +744,7 @@ impl Output for SoftwareRenderer {
     /// cases paints (it is not always the tile's own background, to mirror
     /// `Grid::flatten_into`'s background-inheritance rule exactly). The `is_empty`
     /// guard matters because this receives the full frame (see
-    /// [`needs_full_frame`](Output::needs_full_frame)), including empty
+    /// [`Compositing::PixelLayered`]), including empty
     /// higher-layer cells that must not overwrite layer 0.
     ///
     /// This matches cell backends (retroglyph#304): an occupied space with a
@@ -765,9 +771,10 @@ impl Output for SoftwareRenderer {
         let buf_w = cols * cell_w;
         let cell_count = cols * rows;
 
-        // `needs_full_frame` always returns `true` for this backend, so this receives every cell
-        // on every allocated layer on every call: `Terminal::present`'s diff-only path (used when
-        // a backend's `needs_full_frame` is `false`) never applies here, and changing that would
+        // `compositing()` always returns `needs_full_frame: true` for this backend, so this
+        // receives every cell on every allocated layer on every call: `Terminal::present`'s
+        // diff-only path (used when `needs_full_frame` is `false`) never applies here, and
+        // changing that would
         // be a `retroglyph-core` API change (retroglyph#302). Instead, this method keeps its own
         // per-cell shadow copy of the last frame's tiles (`RenderContext::prev_tiles`) and diffs
         // incoming cells against it below, entirely internally: cells whose tile is unchanged
@@ -959,12 +966,10 @@ impl Output for SoftwareRenderer {
         Ok(())
     }
 
-    fn needs_full_frame(&self) -> bool {
-        true
-    }
-
-    fn composites_layers(&self) -> bool {
-        true
+    fn compositing(&self) -> Compositing {
+        Compositing::PixelLayered {
+            needs_full_frame: true,
+        }
     }
 }
 
@@ -1131,6 +1136,7 @@ fn blit_glyph(
     art_glyph: char,
     fonts: &FontChain<'static>,
     scale: usize,
+    warned_notdef: &mut BTreeSet<char>,
 ) {
     let fg = resolve_color(tile.style().foreground(), DEFAULT_FG);
 
@@ -1144,6 +1150,12 @@ fn blit_glyph(
     let Some(glyph) = fonts.resolve(art_glyph) else {
         return;
     };
+    // A resolved glyph flagged `is_notdef` drew the fallback, not `art_glyph`'s own shape -- a
+    // legitimate cell on its own (a solid block can be drawn on purpose), so this is the only
+    // place a caller finds out it happened at all (retroglyph#1292).
+    if glyph.is_notdef() {
+        warn_notdef_glyph(warned_notdef, art_glyph);
+    }
     let buf_h = buffer.len() / buf_w;
 
     blit_glyph_mask(
@@ -1461,9 +1473,23 @@ mod tests {
     }
 
     #[test]
+    fn compositing_requests_pixel_layered_full_frames() {
+        // Pins `Output::compositing`'s return value directly: sub-cell offsets can spill glyph
+        // pixels into neighboring cells, so this backend always needs the full frame redrawn (see
+        // `compositing`'s doc).
+        let renderer = test_renderer();
+        assert_eq!(
+            renderer.compositing(),
+            Compositing::PixelLayered {
+                needs_full_frame: true
+            }
+        );
+    }
+
+    #[test]
     fn layer0_paints_background() {
         let mut renderer = test_renderer();
-        let tile = Tile::new(' ', Style::new().bg(Color::Rgb { r: 255, g: 0, b: 0 }));
+        let tile = Tile::new(' ', Style::new().bg(Color::rgb(255, 0, 0)));
         let diff: Vec<DrawCell<'_>> = vec![DrawCell::on_layer(0, Pos::new(0, 0), &tile)];
         renderer.draw_layers(diff.into_iter());
 
@@ -1479,8 +1505,8 @@ mod tests {
     fn layer1_does_not_paint_background() {
         let mut renderer = test_renderer();
 
-        let bg_tile = Tile::new(' ', Style::new().bg(Color::Rgb { r: 255, g: 0, b: 0 }));
-        let space_tile = Tile::new(' ', Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 }));
+        let bg_tile = Tile::new(' ', Style::new().bg(Color::rgb(255, 0, 0)));
+        let space_tile = Tile::new(' ', Style::new().fg(Color::rgb(0, 255, 0)));
         // draw_layers clears buffer first, so pass all layers in one call.
         renderer.draw_layers(
             [
@@ -1504,15 +1530,8 @@ mod tests {
     fn layer1_glyph_overwrites_layer0() {
         let mut renderer = test_renderer();
 
-        let bg = Tile::new(
-            ' ',
-            Style::new().bg(Color::Rgb {
-                r: 10,
-                g: 10,
-                b: 10,
-            }),
-        );
-        let fg = Tile::new('@', Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 }));
+        let bg = Tile::new(' ', Style::new().bg(Color::rgb(10, 10, 10)));
+        let fg = Tile::new('@', Style::new().fg(Color::rgb(0, 255, 0)));
         // draw_layers clears buffer first, so pass all layers in one call.
         renderer.draw_layers(
             [
@@ -1540,8 +1559,8 @@ mod tests {
         let glyph_on_red = Tile::new(
             '@',
             Style::new()
-                .fg(Color::Rgb { r: 0, g: 255, b: 0 })
-                .bg(Color::Rgb { r: 255, g: 0, b: 0 }),
+                .fg(Color::rgb(0, 255, 0))
+                .bg(Color::rgb(255, 0, 0)),
         );
         // Occupied (non-empty, via the `Tile::new` builder) space with no explicit
         // background: `Color::Default`.
@@ -1567,16 +1586,8 @@ mod tests {
     fn sub_cell_offset_shifts_glyph() {
         let mut renderer = test_renderer();
 
-        let bg = Tile::new(
-            ' ',
-            Style::new().bg(Color::Rgb {
-                r: 10,
-                g: 10,
-                b: 10,
-            }),
-        );
-        let fg =
-            Tile::new('@', Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 })).with_offset(1, 0);
+        let bg = Tile::new(' ', Style::new().bg(Color::rgb(10, 10, 10)));
+        let fg = Tile::new('@', Style::new().fg(Color::rgb(0, 255, 0))).with_offset(1, 0);
         // draw_layers clears buffer first, so pass all layers in one call.
         renderer.draw_layers(
             [
@@ -1604,8 +1615,7 @@ mod tests {
         // for the two to silently disagree.
         let mut renderer = test_renderer();
 
-        let fg =
-            Tile::new('@', Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 })).with_offset(1, 0);
+        let fg = Tile::new('@', Style::new().fg(Color::rgb(0, 255, 0))).with_offset(1, 0);
         Output::draw(
             &mut renderer,
             [DrawCell::new(Pos::new(0, 0), &fg)].into_iter(),
@@ -1662,14 +1672,10 @@ mod tests {
 
         // Full block (all 8x16 pixels set), green, shifted right by 4px (half a cell): its left
         // half stays in cell 0, its right half spills into cell 1.
-        let block = Tile::new(
-            '\u{2588}',
-            Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 }),
-        )
-        .with_offset(4, 0);
+        let block = Tile::new('\u{2588}', Style::new().fg(Color::rgb(0, 255, 0))).with_offset(4, 0);
         // Neighbor cell (1, 0): blank with an opaque blue background, the fill that used to erase
         // the spill.
-        let neighbor = Tile::new(' ', Style::new().bg(Color::Rgb { r: 0, g: 0, b: 255 }));
+        let neighbor = Tile::new(' ', Style::new().bg(Color::rgb(0, 0, 255)));
 
         renderer.draw_layers(
             [
@@ -1728,13 +1734,9 @@ mod tests {
         let green = 0x0000_FF00_u32;
         let blue = 0x0000_00FF_u32;
         let block_at = |dx: i16| {
-            Tile::new(
-                '\u{2588}',
-                Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 }),
-            )
-            .with_offset(dx, 0)
+            Tile::new('\u{2588}', Style::new().fg(Color::rgb(0, 255, 0))).with_offset(dx, 0)
         };
-        let neighbor = Tile::new(' ', Style::new().bg(Color::Rgb { r: 0, g: 0, b: 255 }));
+        let neighbor = Tile::new(' ', Style::new().bg(Color::rgb(0, 0, 255)));
 
         // Frame 1: block offset right by half a cell, spills green into cell 1's left half.
         renderer.draw_layers(
@@ -1778,40 +1780,20 @@ mod tests {
         let bg = Tile::new(
             ':',
             Style::new()
-                .fg(Color::Rgb {
-                    r: 60,
-                    g: 60,
-                    b: 80,
-                })
-                .bg(Color::Rgb {
-                    r: 20,
-                    g: 20,
-                    b: 30,
-                }),
+                .fg(Color::rgb(60, 60, 80))
+                .bg(Color::rgb(20, 20, 30)),
         );
         let dot = Tile::new(
             '.',
             Style::new()
-                .fg(Color::Rgb {
-                    r: 40,
-                    g: 40,
-                    b: 50,
-                })
-                .bg(Color::Rgb {
-                    r: 20,
-                    g: 20,
-                    b: 30,
-                }),
+                .fg(Color::rgb(40, 40, 50))
+                .bg(Color::rgb(20, 20, 30)),
         );
         let entity = Tile::new(
             '@',
             Style::new()
-                .fg(Color::Rgb { r: 0, g: 255, b: 0 })
-                .bg(Color::Rgb {
-                    r: 10,
-                    g: 10,
-                    b: 10,
-                }),
+                .fg(Color::rgb(0, 255, 0))
+                .bg(Color::rgb(10, 10, 10)),
         )
         .with_offset(1, 0);
         // Single draw_layers call (clears buffer first).
@@ -1857,16 +1839,9 @@ mod tests {
             .unwrap();
         let mut renderer = opts.into_renderer().unwrap();
 
-        let base = Tile::new(
-            ' ',
-            Style::new().bg(Color::Rgb {
-                r: 20,
-                g: 20,
-                b: 20,
-            }),
-        );
+        let base = Tile::new(' ', Style::new().bg(Color::rgb(20, 20, 20)));
         // Layer 1 overlay: an opaque space (non-empty) with a red background.
-        let overlay = Tile::new(' ', Style::new().bg(Color::Rgb { r: 200, g: 0, b: 0 }));
+        let overlay = Tile::new(' ', Style::new().bg(Color::rgb(200, 0, 0)));
         // Layer 1 empty cell (default tile) must be skipped.
         let empty = Tile::default();
 
@@ -1932,7 +1907,7 @@ mod tests {
     }
 
     fn bg_tile(r: u8, g: u8, b: u8) -> Tile {
-        Tile::new(' ', Style::new().bg(Color::Rgb { r, g, b }))
+        Tile::new(' ', Style::new().bg(Color::rgb(r, g, b)))
     }
 
     #[test]
@@ -2086,7 +2061,7 @@ mod tests {
 
     // ── Dirty-cell repaint (retroglyph#302) ──────────────────────────────
     //
-    // `draw_layers` always receives every cell (see `Output::needs_full_frame`), but internally
+    // `draw_layers` always receives every cell (see `Compositing::PixelLayered`), but internally
     // it should only actually repaint pixels for cells that changed since the last call, falling
     // back to a full clear + repaint when a sub-cell offset or a layer-count change is in play.
     // These assert on the rendered pixels (not on any private dirty-tracking state), so they
@@ -2106,7 +2081,7 @@ mod tests {
         for y in 0..rows {
             for x in 0..cols {
                 let style = if (x, y) == glyph_pos {
-                    Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 }).bg(bg)
+                    Style::new().fg(Color::rgb(0, 255, 0)).bg(bg)
                 } else {
                     Style::new().bg(bg)
                 };
@@ -2137,17 +2112,7 @@ mod tests {
         // untouched cell would be visible. Change only the middle cell's glyph and re-draw; the
         // other two cells' pixels must be byte-for-byte identical to the first frame.
         let mut r = damage_renderer(3, 1);
-        let base = glyph_scene(
-            3,
-            1,
-            Color::Rgb {
-                r: 10,
-                g: 10,
-                b: 10,
-            },
-            (1, 0),
-            '@',
-        );
+        let base = glyph_scene(3, 1, Color::rgb(10, 10, 10), (1, 0), '@');
         draw_scene(&mut r, 3, &base);
         let before = r.pixels().to_vec();
 
@@ -2155,12 +2120,8 @@ mod tests {
         changed[1] = Tile::new(
             '#',
             Style::new()
-                .fg(Color::Rgb { r: 0, g: 0, b: 255 })
-                .bg(Color::Rgb {
-                    r: 10,
-                    g: 10,
-                    b: 10,
-                }),
+                .fg(Color::rgb(0, 0, 255))
+                .bg(Color::rgb(10, 10, 10)),
         );
         draw_scene(&mut r, 3, &changed);
         let after = r.pixels().to_vec();
@@ -2200,11 +2161,11 @@ mod tests {
     #[test]
     fn dirty_cell_repaint_updates_changed_cell() {
         let mut r = damage_renderer(2, 1);
-        let base = glyph_scene(2, 1, Color::Rgb { r: 0, g: 0, b: 0 }, (0, 0), ' ');
+        let base = glyph_scene(2, 1, Color::rgb(0, 0, 0), (0, 0), ' ');
         draw_scene(&mut r, 2, &base);
 
         let mut changed = base;
-        changed[0] = Tile::new(' ', Style::new().bg(Color::Rgb { r: 200, g: 0, b: 0 }));
+        changed[0] = Tile::new(' ', Style::new().bg(Color::rgb(200, 0, 0)));
         draw_scene(&mut r, 2, &changed);
 
         let cell_w = 8usize;
@@ -2221,9 +2182,8 @@ mod tests {
         // the fallback repaint path runs regardless of the dirty set; assert the buffer is
         // still correct (not that any particular code path ran).
         let mut r = damage_renderer(2, 1);
-        let bg = Tile::new(' ', Style::new().bg(Color::Rgb { r: 5, g: 5, b: 5 }));
-        let offset_fg =
-            Tile::new('@', Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 })).with_offset(1, 0);
+        let bg = Tile::new(' ', Style::new().bg(Color::rgb(5, 5, 5)));
+        let offset_fg = Tile::new('@', Style::new().fg(Color::rgb(0, 255, 0))).with_offset(1, 0);
 
         let draw = |r: &mut SoftwareRenderer| {
             r.draw_layers(
@@ -2263,14 +2223,7 @@ mod tests {
         // dirty-cell path (layer 0's own cell never changed, so a naive per-cell diff limited to
         // previously-seen layers would skip it).
         let mut r = damage_renderer(1, 1);
-        let base = Tile::new(
-            ' ',
-            Style::new().bg(Color::Rgb {
-                r: 10,
-                g: 10,
-                b: 10,
-            }),
-        );
+        let base = Tile::new(' ', Style::new().bg(Color::rgb(10, 10, 10)));
         r.draw_layers(core::iter::once(DrawCell::on_layer(
             0,
             Pos::new(0, 0),
@@ -2278,7 +2231,7 @@ mod tests {
         )))
         .unwrap();
 
-        let overlay = Tile::new(' ', Style::new().bg(Color::Rgb { r: 200, g: 0, b: 0 }));
+        let overlay = Tile::new(' ', Style::new().bg(Color::rgb(200, 0, 0)));
         r.draw_layers(
             [
                 DrawCell::on_layer(0, Pos::new(0, 0), &base),
@@ -2368,7 +2321,7 @@ mod tests {
 
         fn resize(&mut self, size: Size) {
             Output::resize(&mut self.renderer, size);
-            // This backend always reports `needs_full_frame() == true` (see its `Output` impl):
+            // This backend always reports `needs_full_frame: true` (see its `Output` impl):
             // its pixel buffer is only actually repainted (and so only meaningfully
             // observable) on the next `draw_layers` call, which `Terminal::present` always
             // supplies in real use. `snapshot()` reads pixels directly instead, so settle it
@@ -2574,14 +2527,8 @@ mod span_tests {
         // sprite pixel ever reaches it.
         let mut r = renderer_with_sprite(2, 1, 8, 16, 8, SpriteAlign::TopLeft);
         let mut grid = Grid::new(2, 1);
-        grid.write_span(
-            0,
-            0,
-            0,
-            &["S#"],
-            Style::new().bg(Color::Rgb { r: 0, g: 0, b: 255 }),
-        )
-        .unwrap();
+        grid.write_span(0, 0, 0, &["S#"], Style::new().bg(Color::rgb(0, 0, 255)))
+            .unwrap();
         paint(&mut r, &grid);
 
         // Cell 0 is the sprite.
@@ -2605,8 +2552,8 @@ mod span_tests {
             0,
             &["S#"],
             Style::new()
-                .fg(Color::Rgb { r: 0, g: 255, b: 0 })
-                .bg(Color::Rgb { r: 0, g: 0, b: 255 }),
+                .fg(Color::rgb(0, 255, 0))
+                .bg(Color::rgb(0, 0, 255)),
         )
         .unwrap();
         paint(&mut r, &grid);
@@ -2623,14 +2570,8 @@ mod span_tests {
         // through the transparent half, which lives in the *covered* cell.
         let mut r = renderer_with_sprite(2, 1, 16, 16, 8, SpriteAlign::TopLeft);
         let mut grid = Grid::new(2, 1);
-        grid.write_span(
-            0,
-            0,
-            0,
-            &["S#"],
-            Style::new().bg(Color::Rgb { r: 0, g: 0, b: 255 }),
-        )
-        .unwrap();
+        grid.write_span(0, 0, 0, &["S#"], Style::new().bg(Color::rgb(0, 0, 255)))
+            .unwrap();
         paint(&mut r, &grid);
 
         assert_eq!(px(&r, 2, 0, 0), RED, "sprite's opaque half");
@@ -2674,11 +2615,7 @@ mod span_tests {
     fn an_art_sheet_ignores_fg_however_it_is_set() {
         // The #537 regression guard: a full-color sheet renders as authored, and a caller who
         // sets `fg` hoping to tint it gets no silent change.
-        for fg in [
-            Color::Default,
-            Color::Rgb { r: 0, g: 255, b: 0 },
-            Color::Rgb { r: 0, g: 0, b: 255 },
-        ] {
+        for fg in [Color::Default, Color::rgb(0, 255, 0), Color::rgb(0, 0, 255)] {
             assert_eq!(
                 sprite_pixel(fg, Tint::None),
                 RED,
@@ -2748,14 +2685,8 @@ mod span_tests {
         // An 8x16 sprite centered in a 2x1 span of 8x16 cells: 8px of slack, so it starts at x=4.
         let mut r = renderer_with_sprite(2, 1, 8, 16, 8, SpriteAlign::Center);
         let mut grid = Grid::new(2, 1);
-        grid.write_span(
-            0,
-            0,
-            0,
-            &["S#"],
-            Style::new().bg(Color::Rgb { r: 0, g: 0, b: 255 }),
-        )
-        .unwrap();
+        grid.write_span(0, 0, 0, &["S#"], Style::new().bg(Color::rgb(0, 0, 255)))
+            .unwrap();
         paint(&mut r, &grid);
 
         assert_eq!(px(&r, 2, 3, 0), BLUE, "left of the centered sprite");
@@ -2795,7 +2726,7 @@ mod span_tests {
             .into_renderer()
             .unwrap();
 
-        let bg = Style::new().bg(Color::Rgb { r: 0, g: 0, b: 255 });
+        let bg = Style::new().bg(Color::rgb(0, 0, 255));
         let frame = |anchor: &str| {
             let mut grid = Grid::new(2, 1);
             grid.write_span(0, 0, 0, &[anchor], bg).unwrap();
@@ -2837,10 +2768,7 @@ mod span_tests {
         grid.put_tile(
             1,
             (1, 0),
-            Tile::new(
-                '\u{2588}',
-                Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 }),
-            ),
+            Tile::new('\u{2588}', Style::new().fg(Color::rgb(0, 255, 0))),
         );
 
         let tiles: Vec<(u8, Pos, Tile)> = (0..=1u8)
@@ -2871,7 +2799,7 @@ mod span_tests {
             0,
             0,
             &["\u{2588}\u{2588}"],
-            Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 }),
+            Style::new().fg(Color::rgb(0, 255, 0)),
         )
         .unwrap();
         paint(&mut r, &grid);
@@ -3011,9 +2939,9 @@ mod font_chain_tests {
     use retroglyph_core::grid::Pos;
     use retroglyph_window::font::{BitmapFont, FontChain, unscii16};
 
-    const RED: Color = Color::Rgb { r: 255, g: 0, b: 0 };
-    const BLUE: Color = Color::Rgb { r: 0, g: 0, b: 255 };
-    const BLACK: Color = Color::Rgb { r: 0, g: 0, b: 0 };
+    const RED: Color = Color::rgb(255, 0, 0);
+    const BLUE: Color = Color::rgb(0, 0, 255);
+    const BLACK: Color = Color::rgb(0, 0, 0);
 
     const RED_PX: u32 = 0x00FF_0000;
     const BLUE_PX: u32 = 0x0000_00FF;
@@ -3086,6 +3014,58 @@ mod font_chain_tests {
             pixels.iter().all(|&p| p == RED_PX),
             "every pixel of the solid block is foreground"
         );
+    }
+
+    /// retroglyph#1292: the solid-block substitute above is a legitimate cell on its own, so
+    /// nothing about the rendered pixels distinguishes it from a real solid-block glyph. This is
+    /// the diagnostic that closes that gap: a dev build reports the character the chain couldn't
+    /// actually draw.
+    #[test]
+    fn uncovered_char_reports_the_notdef_diagnostic() {
+        let mut renderer = SoftwareBackendBuilder::new()
+            .font(FontChain::new(unscii16::FONT, &FALLBACKS))
+            .grid_size(1, 1)
+            .scale(1)
+            .build()
+            .expect("chain builds")
+            .into_renderer()
+            .expect("renderer builds");
+        let tile = Tile::new('あ', Style::new().fg(RED).bg(BLACK));
+        renderer
+            .draw_layers(core::iter::once(DrawCell::on_layer(
+                0,
+                Pos::new(0, 0),
+                &tile,
+            )))
+            .unwrap();
+
+        assert_eq!(
+            renderer.ctx.warned_notdef.contains(&'あ'),
+            retroglyph_core::dev::DEV
+        );
+    }
+
+    /// A character some font in the chain does cover must never be reported, dev build or not.
+    #[test]
+    fn covered_char_does_not_report_the_notdef_diagnostic() {
+        let mut renderer = SoftwareBackendBuilder::new()
+            .font(FontChain::new(unscii16::FONT, &FALLBACKS))
+            .grid_size(1, 1)
+            .scale(1)
+            .build()
+            .expect("chain builds")
+            .into_renderer()
+            .expect("renderer builds");
+        let tile = Tile::new('A', Style::new().fg(RED).bg(BLACK));
+        renderer
+            .draw_layers(core::iter::once(DrawCell::on_layer(
+                0,
+                Pos::new(0, 0),
+                &tile,
+            )))
+            .unwrap();
+
+        assert!(!renderer.ctx.warned_notdef.contains(&'A'));
     }
 
     /// The panic reported in #539 (`glyph index 219 out of range (2)`): the CP437 solid block is

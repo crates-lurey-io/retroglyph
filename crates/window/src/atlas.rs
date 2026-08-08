@@ -275,6 +275,20 @@ impl GlyphAtlas {
         let glyph = self.fonts.resolve(ch)?;
         Some((self.bases[glyph.font_index()] + u32::from(glyph.index())) as u16)
     }
+
+    /// Whether [`resolve`](Self::resolve) fell back to the substituted "not defined" glyph for
+    /// `ch`, rather than a font actually covering it.
+    ///
+    /// [`resolve`](Self::resolve) itself returns a flat slot index, which carries no notdef bit,
+    /// so a caller that wants to warn on the fallback (see
+    /// [`diagnostics::warn_notdef_glyph`](crate::diagnostics::warn_notdef_glyph)) checks this
+    /// separately rather than through the slot it already resolved.
+    #[must_use]
+    pub fn is_notdef(&self, ch: char) -> bool {
+        self.fonts
+            .resolve(ch)
+            .is_some_and(|glyph| glyph.is_notdef())
+    }
 }
 
 #[cfg(test)]
@@ -368,6 +382,9 @@ mod tests {
         assert_eq!(atlas.resolve('▝'), Some(257));
         // Still no coverage anywhere in the chain: the substituted solid block, not a quadrant.
         assert_eq!(atlas.resolve('あ'), Some(0xDB));
+        assert!(!atlas.is_notdef('A'), "'A' is covered by the primary font");
+        assert!(!atlas.is_notdef('▘'), "'▘' is covered by the fallback font");
+        assert!(atlas.is_notdef('あ'), "nothing in the chain covers 'あ'");
     }
 
     /// Every coverage byte is exactly `0x00` or `0xFF`, never anything between.

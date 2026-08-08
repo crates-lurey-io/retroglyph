@@ -6,14 +6,16 @@
 //! `Color`'s inherent methods (constants, RGB resolution, `gem` color-space conversions),
 //! `named` is `Color`'s string-name/hex constructors (`from_named`, `from_hex`), `palette_oklab`
 //! is the generated Oklab table `ansi` quantizes against, `parse` is `Color`'s
-//! `Display`/`FromStr`/serde impls, `style` is [`Style`](crate::color::Style) itself, and `tint`
-//! is [`Tint`](crate::color::Tint), sprite colour modulation.
+//! `Display`/`FromStr`/serde impls, `sgr` (public: shared with `retroglyph-recorder`) is the SGR
+//! ANSI encoding [`Style`] resolves to, `style` is [`Style`](crate::color::Style) itself, and
+//! `tint` is [`Tint`](crate::color::Tint), sprite colour modulation.
 
 mod ansi;
 mod convert;
 mod named;
 mod palette_oklab;
 mod parse;
+pub mod sgr;
 mod style;
 mod tint;
 
@@ -32,7 +34,7 @@ pub use tint::Tint;
 /// use retroglyph_core::color::Color;
 ///
 /// let named = Color::GREEN;
-/// let rgb = Color::Rgb { r: 255, g: 0, b: 0 };
+/// let rgb = Color::rgb(255, 0, 0);
 /// let indexed = Color::Indexed(42);
 /// assert_ne!(named, rgb);
 /// assert_ne!(rgb, indexed);

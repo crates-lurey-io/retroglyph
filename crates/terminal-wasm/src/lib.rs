@@ -107,11 +107,9 @@
 //! | `CSI Ps SP q` | DECSCUSR (cursor shape) | [`set_cursor_style`](Cursor::set_cursor_style) | set the cursor's shape/blink behavior |
 //! | `CSI 2J` then `CSI H` | ED (erase display) + CUP home | [`clear`](Output::clear) | clear the screen, then move the cursor to `(1, 1)` |
 //!
-//! retroglyph does not model text attributes (bold, italic, underline, etc.; see
-//! [`retroglyph_core::color::Style`]'s docs for why), so no SGR attribute codes (`1`, `3`, `4`,
-//! ...) are ever emitted here; only the color and cursor/erase sequences above. Glyph bytes
-//! themselves (see [`take_output`](TerminalWasm::take_output)) are plain UTF-8, not an escape
-//! sequence.
+//! retroglyph does not model text attributes, so no SGR attribute codes (`1`, `3`, `4`, ...) are
+//! ever emitted here; only the color and cursor/erase sequences above. Glyph bytes themselves (see
+//! [`take_output`](TerminalWasm::take_output)) are plain UTF-8, not an escape sequence.
 //!
 //! ## `TerminalRenderer` quirks to know before validating against a specific emulator
 //!
@@ -1000,7 +998,7 @@ mod tests {
 
         let backend = TerminalWasm::new(10, 3);
         let mut term = Terminal::new(backend);
-        let style = Style::default().bg(Color::Rgb { r: 200, g: 0, b: 0 });
+        let style = Style::default().bg(Color::rgb(200, 0, 0));
         term.draw(|s| s.put((0, 0), 'X', style)).unwrap();
         let _ = term.backend_mut().take_output();
 

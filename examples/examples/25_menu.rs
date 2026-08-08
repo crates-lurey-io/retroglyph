@@ -1,4 +1,4 @@
-//! 24: Menu
+//! 25: Menu
 //!
 //! [`Menu`]/[`MenuState`]/[`MenuRow`]: the anchored-popup core a dropdown, a combobox's open
 //! list, and a command palette all share (retroglyph#1290). A "File ▾" [`Button`] anchors an
@@ -15,9 +15,9 @@
 //! read the frame-stale way [`Response::hovered`] already is.
 //!
 //! ```sh
-//! cargo run --example 24_menu --features crossterm
-//! cargo run --example 24_menu --features software
-//! cargo run --example 24_menu  # headless fallback, prints a few frames to stdout
+//! cargo run --example 25_menu --features crossterm
+//! cargo run --example 25_menu --features software
+//! cargo run --example 25_menu  # headless fallback, prints a few frames to stdout
 //! ```
 //!
 //! Keys: click "File" (or Tab to it, Enter/Space) to open. Up/Down navigate, Enter activates,
@@ -163,7 +163,7 @@ impl Default for MenuDemo {
 }
 
 impl Example for MenuDemo {
-    const NAME: &'static str = "24_menu";
+    const NAME: &'static str = "25_menu";
 
     fn tick<B: Backend>(&mut self, term: &mut Terminal<B>, _frame: &Frame) -> bool {
         let events: Vec<Event> = term.drain_events().collect();

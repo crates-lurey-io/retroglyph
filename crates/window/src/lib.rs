@@ -76,6 +76,15 @@
 //! font, so a consumer that only wants CP437 text shouldn't pay for it. Computed at compile time by
 //! a `const fn`, so this adds no font asset and no new dependency.
 //!
+//! ### `testing`
+//!
+//! ⚪ Optional.
+//!
+//! Testing helpers for asserting glyph coverage (`testing::assert_glyphs_covered`,
+//! `testing::uncovered_glyphs`), so a consumer can check a `FontChain` actually draws the
+//! characters it cares about rather than silently falling back to the substituted solid block
+//! (retroglyph#1292).
+//!
 //! ### `tilesets`
 //!
 //! ⚪ Optional.
@@ -170,6 +179,10 @@ pub mod backend;
 /// System clipboard read/write ([`Clipboard`](clipboard::Clipboard),
 /// [`SystemClipboard`](clipboard::SystemClipboard) on native targets).
 pub mod clipboard;
+// See the `too_long_first_doc_paragraph` comment above `backend`: same noisy-lint mis-attribution.
+#[allow(clippy::too_long_first_doc_paragraph)]
+/// Shared render-time glyph diagnostics ([`diagnostics::warn_notdef_glyph`]).
+pub mod diagnostics;
 pub mod font;
 /// Shared cell/surface pixel geometry ([`CellGeometry`](geometry::CellGeometry)).
 pub mod geometry;
@@ -186,6 +199,12 @@ pub mod presenter;
 pub mod presenter_builder;
 #[cfg(feature = "tilesets")]
 pub mod sprite_cache;
+// See the `too_long_first_doc_paragraph` comment above `backend`: same noisy-lint mis-attribution.
+#[allow(clippy::too_long_first_doc_paragraph)]
+/// Testing helpers for asserting glyph coverage against a [`font::FontChain`]
+/// ([`testing::assert_glyphs_covered`], [`testing::uncovered_glyphs`]).
+#[cfg(feature = "testing")]
+pub mod testing;
 #[cfg(feature = "tilesets")]
 pub mod tileset;
 /// Locates winit's `<canvas>` element via the DOM ([`web::winit_canvas`]).

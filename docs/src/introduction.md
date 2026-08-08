@@ -15,5 +15,5 @@ For example, the draw step from `01_hello_world`:
 {{#include ../../examples/examples/01_hello_world.rs:draw}}
 ```
 
-Tutorials and per-topic explanation pages land here in follow-up issues; this page is a stub to
-prove the include/anchor wiring works end to end.
+See the sidebar for the tutorial (a walked-through game, chapter by chapter), how-to pages (one task
+each), and explanation pages (background on how a piece of retroglyph is designed).

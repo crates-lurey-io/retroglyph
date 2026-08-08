@@ -21,8 +21,10 @@
 //! wrap; [`Panel`] reports its border-plus-padding chrome height, since it
 //! owns no content of its own to measure.
 use retroglyph_core::app::Frame;
+use retroglyph_core::grid::Size;
 
 use crate::Surface;
+use crate::interact::Density;
 use crate::interact::Response;
 use crate::interact::Sense;
 
@@ -181,6 +183,46 @@ pub trait Measure {
     /// The number of rows this widget would need to render at `width`
     /// columns.
     fn height_for(&self, width: u16) -> u16;
+}
+
+/// A widget that can report the smallest size its content and [`Density`] allow, before ever
+/// being rendered.
+///
+/// This is a different question from [`Measure::height_for`]: `height_for` answers "how tall are
+/// you, given this width" (content wrapped into a fixed width); `min_size` answers "how small
+/// can you be at all" (a floor driven by both content and the [`Density`] a caller is targeting).
+/// Conflating the two into one trait/method would force every `Measure` impl to also take a
+/// `Density` it doesn't need, and every `MinSize` impl to accept a `width` it can't use to answer
+/// "how small can you get". Kept separate on purpose; a widget can implement either, both, or
+/// neither.
+///
+/// Interactive widgets ([`Button`], [`Tabs`], [`Scrollbar`], [`TextInput`]) are the intended
+/// implementors: [`Density::min_target_size`] exists specifically so a caller sizing a
+/// clickable/tappable control doesn't have to invent its own touch-target floor, and `min_size`
+/// is how a widget applies that floor to its own content.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::grid::Size;
+/// use retroglyph_ui::interact::Density;
+/// use retroglyph_ui::widget::MinSize;
+///
+/// struct FixedSize(Size);
+///
+/// impl MinSize for FixedSize {
+///     fn min_size(&self, density: Density) -> Size {
+///         self.0.max(density.min_target_size())
+///     }
+/// }
+///
+/// let small = FixedSize(Size::new(1, 1));
+/// assert_eq!(small.min_size(Density::Mouse), Density::Mouse.min_target_size());
+/// ```
+pub trait MinSize {
+    /// The smallest size, in cells, this widget can be drawn at without clipping its content or
+    /// falling below `density`'s minimum interactive target size.
+    fn min_size(&self, density: Density) -> Size;
 }
 
 /// Like [`StatefulWidget`], but for widgets whose state evolves with wall-clock time.

@@ -104,6 +104,14 @@ wasm-headless = []
 # `wasm_entry!` prefer `software`, then `wasm-headless`, then this).
 wasm-terminal = ["dep:retroglyph-terminal-wasm"]
 
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# `--record <path>` (`launch::<E>()`): wraps whichever native, text-oriented backend
+# (crossterm, or the headless-stdout fallback) is running in `FrameRecorder`, writing an
+# asciicast `.cast` on quit. Not wired into the windowed (software/gl/wgpu) backends -- those
+# present pixels, not `DrawCell` text/glyph diffs, and `write_cast`'s ANSI export has nothing
+# meaningful to say about a pixel frame. `wasm32` has no filesystem to write a `.cast` to either.
+retroglyph-recorder = { path = "../crates/recorder", version = "0.1.0" }
+
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "=0.2.126"
 console_error_panic_hook = "0.1"
@@ -128,8 +136,13 @@ retroglyph-core = { path = "../crates/core", features = ["testing"] }
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 # PNG snapshots of the software (headless) renderer's pixel buffer.
 image = { version = "0.25", default-features = false, features = ["png"] }
-# PTY + vt100 SVG snapshots of the crossterm backend's ANSI output.
-portable-pty = "0.9"
+# `examples/tests/support`'s PTY capture (`capture_pty_until`) drives the crossterm binary
+# through `retroglyph-recorder`'s `pty::PtySession` (retroglyph#1320) rather than opening a PTY
+# and spawning a reader thread itself; `pty` is otherwise unused off the test target, so this is
+# a dev-dependency even though the crate is already a normal one above.
+retroglyph-recorder = { path = "../crates/recorder", version = "0.1.0", features = ["pty"] }
+# `vt100` SVG rendering of the crossterm backend's ANSI output (`svg_snapshot`) -- the PTY capture
+# itself goes through `retroglyph-recorder`'s `pty` feature above, which brings in its own copy.
 vt100 = "0.16"
 
 [[example]]

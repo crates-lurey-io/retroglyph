@@ -8,6 +8,7 @@
 /// `items[state.offset()]` draws at the bottom row and later items draw upward, for a
 /// chat/log-style list that grows toward the top.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum ListDirection {
     /// `items[state.offset()]` draws at the top of the area; later items draw downward.
     #[default]

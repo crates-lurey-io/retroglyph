@@ -18,8 +18,13 @@
 
 - [Choose a backend](./how-to/choose-a-backend.md)
 - [Test a game](./how-to/test-a-game.md)
+- [Record and replay](./how-to/record-and-replay.md)
 - [Handle resize](./how-to/handle-resize.md)
 - [Use a tileset](./how-to/use-a-tileset.md)
+- [Draw a panel](./how-to/draw-a-panel.md)
+- [Handle a click](./how-to/handle-a-click.md)
+- [Split a layout](./how-to/split-a-layout.md)
+- [Theme a widget](./how-to/theme-a-widget.md)
 - [Run in a browser](./how-to/run-in-a-browser.md)
 - [Write a backend](./how-to/write-a-backend.md)
 

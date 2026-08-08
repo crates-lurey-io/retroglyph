@@ -133,7 +133,7 @@ name = "flatten"
 harness = false
 
 [[bench]]
-name = "fill_region"
+name = "fill_rect"
 harness = false
 
 [[bench]]

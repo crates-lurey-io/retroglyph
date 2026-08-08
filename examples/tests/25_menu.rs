@@ -1,7 +1,7 @@
-//! Snapshot tests for the `24_menu` example.
+//! Snapshot tests for the `25_menu` example.
 //!
 //! Includes the example's own source (rather than reimplementing its logic) via `#[path]`, so
-//! these tests exercise exactly what `cargo run --example 24_menu` runs.
+//! these tests exercise exactly what `cargo run --example 25_menu` runs.
 //!
 //! `headless_snapshot_click_opens_navigates_and_activates` drives the full loop retroglyph#1290
 //! is about: a click resolves one frame after the press/release pair arrives (same one-frame
@@ -16,7 +16,7 @@
 #[path = "support/mod.rs"]
 mod support;
 
-#[path = "../examples/24_menu.rs"]
+#[path = "../examples/25_menu.rs"]
 #[allow(dead_code)] // `main`/the `wasm_entry!` FFI surface aren't exercised by these tests
 mod menu_example;
 
@@ -105,13 +105,13 @@ fn png_snapshot() {
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn svg_snapshot() {
-    let bin = support::build_crossterm_example("24_menu");
+    let bin = support::build_crossterm_example("25_menu");
     let raw = support::capture_pty(&bin, b"", 25, 50, "File");
     let svg = support::svg_snapshot(&raw, 25, 50);
     assert!(
         svg.contains("File"),
         "SVG output missing expected trigger label"
     );
-    support::write_snapshot_file("24_menu.svg", svg.as_bytes());
+    support::write_snapshot_file("25_menu.svg", svg.as_bytes());
     insta::assert_snapshot!(svg);
 }

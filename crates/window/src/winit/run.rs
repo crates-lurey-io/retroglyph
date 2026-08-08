@@ -7,6 +7,7 @@
 //! [`run_on`](retroglyph_core::app::run_on), which owns its own
 //! `while` loop.
 
+use super::EventLoopError;
 use super::translate::{
     translate_ime, translate_key, translate_modifiers, translate_mouse_button,
     translate_physical_pos,
@@ -15,7 +16,7 @@ use super::translate::{
 use super::web;
 use crate::backend::WindowBackend;
 use crate::presenter::Presenter;
-use retroglyph_core::backend::{Input, Output};
+use retroglyph_core::backend::Input;
 use retroglyph_core::event::{
     Event, KeyModifiers, MouseButton, MouseEvent, MouseEventKind, PhysicalPos,
 };
@@ -144,7 +145,7 @@ impl WindowConfig {
     ///
     /// This is why renderer crates don't need their own windowing code: the
     /// grid/cell geometry already lives behind
-    /// [`Output::size`] and
+    /// [`Output::size`](retroglyph_core::backend::Output::size) and
     /// [`Presenter::cell_size`].
     ///
     /// `target_fps` and `event_driven` are independent controls, on native and `wasm32` alike:
@@ -385,13 +386,13 @@ impl WindowConfig {
 ///
 /// # Errors
 ///
-/// Returns [`winit::error::EventLoopError`] if the event loop cannot be
+/// Returns [`EventLoopError`] if the event loop cannot be
 /// created or fails while running.
 pub fn run_windowed<P, F>(
     config: WindowConfig,
     presenter: P,
     app_loop: F,
-) -> Result<(), winit::error::EventLoopError>
+) -> Result<(), EventLoopError>
 where
     P: Presenter + 'static,
     F: FnMut(&mut Terminal<WindowBackend<P>>) + 'static,
@@ -458,14 +459,14 @@ where
 ///
 /// # Errors
 ///
-/// Returns [`winit::error::EventLoopError`] if the event loop cannot be
+/// Returns [`EventLoopError`] if the event loop cannot be
 /// created or fails while running.
 pub fn run_windowed_with_proxy<P, F, O>(
     config: WindowConfig,
     presenter: P,
     app_loop: F,
     on_proxy: O,
-) -> Result<(), winit::error::EventLoopError>
+) -> Result<(), EventLoopError>
 where
     P: Presenter + 'static,
     F: FnMut(&mut Terminal<WindowBackend<P>>) + 'static,
@@ -549,7 +550,7 @@ where
 ///
 /// # Errors
 ///
-/// Returns [`winit::error::EventLoopError`] if the event loop cannot be
+/// Returns [`EventLoopError`] if the event loop cannot be
 /// created or fails while running.
 pub fn run_windowed_with_typed_proxy<T, P, F, O, D>(
     config: WindowConfig,
@@ -557,7 +558,7 @@ pub fn run_windowed_with_typed_proxy<T, P, F, O, D>(
     app_loop: F,
     on_proxy: O,
     on_custom_event: D,
-) -> Result<(), winit::error::EventLoopError>
+) -> Result<(), EventLoopError>
 where
     T: Send + 'static,
     P: Presenter + 'static,
@@ -604,7 +605,7 @@ fn run_windowed_with_typed_proxy_and_exit_flag<T, P, F, O, D>(
     on_custom_event: D,
     exit_requested: Rc<Cell<bool>>,
     skip_present: Rc<Cell<bool>>,
-) -> Result<(), winit::error::EventLoopError>
+) -> Result<(), EventLoopError>
 where
     T: Send + 'static,
     P: Presenter + 'static,
@@ -654,7 +655,7 @@ where
     #[cfg(not(target_arch = "wasm32"))]
     {
         let mut app = app;
-        event_loop.run_app(&mut app)
+        event_loop.run_app(&mut app).map_err(EventLoopError::from)
     }
 
     #[cfg(target_arch = "wasm32")]
@@ -688,11 +689,14 @@ where
 /// this driver presents automatically after each [`App::update`](retroglyph_core::app::App::update)
 /// call, except on [`Flow::Idle`](retroglyph_core::app::Flow::Idle).
 ///
-/// # Resizing is not automatic
+/// # Resizing applies before `update` runs
 ///
-/// This driver does not resize the [`Terminal`] itself. On every window resize it pushes
-/// [`Event::Resize`] with the new cell dimensions; the app must poll that event and call
-/// [`Terminal::resize`] to resize the terminal's own grid buffers.
+/// This driver resizes the [`Terminal`] itself on every window resize, before the next
+/// [`App::update`](retroglyph_core::app::App::update) call, so [`Terminal::size`] is never stale
+/// from the app's point of view even if it never reacts to input. It also pushes
+/// [`Event::Resize`] with the new cell dimensions, for an app that wants to react to the change
+/// itself (reflow a layout, regenerate a world) rather than just read the new size on its next
+/// draw.
 ///
 /// # Return contract differs on `wasm32`
 ///
@@ -705,13 +709,9 @@ where
 ///
 /// # Errors
 ///
-/// Returns [`winit::error::EventLoopError`] if the event loop cannot be
+/// Returns [`EventLoopError`] if the event loop cannot be
 /// created or fails while running.
-pub fn run_app<P, A>(
-    config: WindowConfig,
-    presenter: P,
-    app: A,
-) -> Result<(), winit::error::EventLoopError>
+pub fn run_app<P, A>(config: WindowConfig, presenter: P, app: A) -> Result<(), EventLoopError>
 where
     P: Presenter + 'static,
     A: retroglyph_core::app::App<WindowBackend<P>> + 'static,
@@ -726,19 +726,20 @@ where
 /// into its [`WindowBackend`]) before the loop starts, which is impossible through `run_app`
 /// alone.
 ///
-/// See [`run_app`]'s "Resizing is not automatic" and "Return contract differs on `wasm32`"
-/// sections, and <https://main.retroglyph.dev/book/explanation/architecture.html#presenting-is-automatic>:
+/// See [`run_app`]'s "Resizing applies before `update` runs" and "Return contract differs on
+/// `wasm32`" sections, and
+/// <https://main.retroglyph.dev/book/explanation/architecture.html#presenting-is-automatic>:
 /// this function shares all three behaviors.
 ///
 /// # Errors
 ///
-/// Returns [`winit::error::EventLoopError`] if the event loop cannot be
+/// Returns [`EventLoopError`] if the event loop cannot be
 /// created or fails while running.
 pub fn run_app_on<P, A>(
     config: WindowConfig,
     terminal: Terminal<WindowBackend<P>>,
     app: A,
-) -> Result<(), winit::error::EventLoopError>
+) -> Result<(), EventLoopError>
 where
     P: Presenter + 'static,
     A: retroglyph_core::app::App<WindowBackend<P>> + 'static,
@@ -764,14 +765,14 @@ where
 ///
 /// # Errors
 ///
-/// Returns [`winit::error::EventLoopError`] if the event loop cannot be
+/// Returns [`EventLoopError`] if the event loop cannot be
 /// created or fails while running.
 pub fn run_app_with_proxy<P, A, O>(
     config: WindowConfig,
     presenter: P,
     app: A,
     on_proxy: O,
-) -> Result<(), winit::error::EventLoopError>
+) -> Result<(), EventLoopError>
 where
     P: Presenter + 'static,
     A: retroglyph_core::app::App<WindowBackend<P>> + 'static,
@@ -792,7 +793,7 @@ where
 ///
 /// # Errors
 ///
-/// Returns [`winit::error::EventLoopError`] if the event loop cannot be
+/// Returns [`EventLoopError`] if the event loop cannot be
 /// created or fails while running.
 pub fn run_app_with_typed_proxy<T, P, A, O, D>(
     config: WindowConfig,
@@ -800,7 +801,7 @@ pub fn run_app_with_typed_proxy<T, P, A, O, D>(
     app: A,
     on_proxy: O,
     on_custom_event: D,
-) -> Result<(), winit::error::EventLoopError>
+) -> Result<(), EventLoopError>
 where
     T: Send + 'static,
     P: Presenter + 'static,
@@ -826,7 +827,7 @@ fn run_app_on_with_typed_proxy<T, P, A, O, D>(
     mut app: A,
     on_proxy: O,
     on_custom_event: D,
-) -> Result<(), winit::error::EventLoopError>
+) -> Result<(), EventLoopError>
 where
     T: Send + 'static,
     P: Presenter + 'static,
@@ -1646,13 +1647,17 @@ where
     }
 
     /// Recompute the grid size (in cells) from a physical pixel size, resize
-    /// the presenter's surface to the whole-cell-aligned pixel size, update
-    /// the backend's own reported [`Output::size`], and push [`Event::Resize`] with the new
+    /// the presenter's surface to the whole-cell-aligned pixel size, resize the
+    /// [`Terminal`]'s own grid buffers to match, and push [`Event::Resize`] with the new
     /// cell dimensions.
     ///
-    /// This keeps `backend.size()` in sync with the surface immediately, but it does not
-    /// resize the [`Terminal`]'s own grid buffers: that stays the app's responsibility,
-    /// done by calling [`Terminal::resize`] in response to the pushed [`Event::Resize`].
+    /// [`Terminal::resize`] (which also updates the backend's own reported
+    /// [`Output::size`](retroglyph_core::backend::Output::size))
+    /// runs before this returns, so `term.size()` is never stale from the caller's point of
+    /// view, even if nothing ever polls the pushed event. `Event::Resize` is still delivered for
+    /// an app that wants to react to a resize (reflow a layout, regenerate a world) beyond just
+    /// reading the new size on its next draw; polling it later re-applies the same size through
+    /// [`Terminal::poll`]'s own resize handling, which is a no-op once the sizes already agree.
     ///
     /// Shared by [`on_resized`](Self::on_resized) and
     /// [`on_scale_factor_changed`](Self::on_scale_factor_changed): both need
@@ -1691,12 +1696,11 @@ where
             .resize_surface(cols * cell_w, rows * cell_h);
         #[allow(clippy::cast_possible_truncation)]
         let (cols, rows) = (cols as u16, rows as u16);
-        // Update the backend's own reported size immediately so `backend.size()` agrees with
-        // the surface without waiting for the app to react to `Event::Resize` below. This does
-        // not touch the `Terminal`'s grid content (see `Terminal::resize`, which additionally
-        // resizes/clears both grids): that remains the app's job in response to the event.
-        term.backend_mut()
-            .resize(retroglyph_core::grid::Size::new(cols, rows));
+        // Resize the terminal itself (grids + `backend.size()`) immediately, so `term.size()`
+        // agrees with the surface right away instead of waiting for the app to poll and react to
+        // `Event::Resize` below. `Event::Resize` is still pushed after so an app that wants to
+        // react to the change (not just read the new size) still can.
+        term.resize(cols, rows);
         term.backend_mut().push_event(Event::Resize(cols, rows));
     }
 
@@ -2106,8 +2110,8 @@ mod tests {
         /// Records the last [`Presenter::scale_factor_changed`] argument, if any.
         last_scale_factor: Cell<Option<f64>>,
         /// The size last reported by [`Output::size`], updated by [`Output::resize`] so tests
-        /// can assert that `resize_to` keeps it in sync with the surface immediately, rather
-        /// than only via a separate `Terminal::resize` call in response to `Event::Resize`.
+        /// can assert that `resize_to` keeps it in sync with the surface immediately, as a
+        /// byproduct of the `Terminal::resize` call it now makes directly.
         size: Cell<Size>,
     }
 
@@ -3393,9 +3397,11 @@ mod tests {
             app.terminal.as_ref().unwrap().backend().size(),
             Size::new(11, 5)
         );
-        // `Terminal::size` (the grid itself) is untouched: that stays the app's job, done by
-        // calling `Terminal::resize` in response to the `Event::Resize` this same call pushed.
-        assert_eq!(app.terminal.as_ref().unwrap().size(), Size::new(10, 5));
+        // Regression test for retroglyph#1291: `Terminal::size` (the grid itself) must also be
+        // updated immediately, not just the backend's own reported size. The old behavior (grid
+        // untouched until the app polled and reacted to the pushed `Event::Resize`) is exactly
+        // the bug this call is now expected to fix.
+        assert_eq!(app.terminal.as_ref().unwrap().size(), Size::new(11, 5));
     }
 
     #[test]

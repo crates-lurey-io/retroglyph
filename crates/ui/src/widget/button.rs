@@ -1,10 +1,13 @@
 //! [`Button`]: a clickable label, styled from an already-resolved [`Response`].
 use retroglyph_core::color::{Color, Style};
+use retroglyph_core::grid::Size;
+use retroglyph_core::text::width;
 
-use super::{InteractiveWidget, Widget};
+use super::{InteractiveWidget, MinSize, Widget};
 use crate::Surface;
 use crate::align::Align;
 use crate::draw::fill_rect;
+use crate::interact::Density;
 use crate::interact::Response;
 use crate::interact::Sense;
 use crate::text::draw_clipped;
@@ -171,6 +174,16 @@ impl<'a> Button<'a> {
     }
 }
 
+impl MinSize for Button<'_> {
+    /// [`label`](Button::new)'s display width plus 2 columns of padding on each side, one row
+    /// tall, floored at `density`'s [`min_target_size`](Density::min_target_size) so a narrow
+    /// label never claims less room than `density` calls for a clickable target.
+    fn min_size(&self, density: Density) -> Size {
+        let content = Size::new(width(self.label).saturating_add(4), 1);
+        content.max(density.min_target_size())
+    }
+}
+
 impl<Id> InteractiveWidget<Id> for Button<'_> {
     type State = ();
 
@@ -206,7 +219,7 @@ impl Widget for Button<'_> {
 #[cfg(test)]
 mod tests {
     use retroglyph_core::event::{Event, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
-    use retroglyph_core::grid::{Grid, Pos, Rect};
+    use retroglyph_core::grid::{Grid, HasSize as _, Pos, Rect};
 
     use super::*;
     use crate::interact::Interaction;
@@ -454,5 +467,32 @@ mod tests {
         // "保存" (4 cols) centered in width 8 starts at column (8-4)/2 = 2.
         assert_eq!(grid[Pos::new(2, 0)].glyph(), '保');
         assert_eq!(grid[Pos::new(4, 0)].glyph(), '存');
+    }
+
+    #[test]
+    fn min_size_pads_the_label_by_two_columns_each_side() {
+        // "Go" is 2 cols wide; a mouse density is one row tall and doesn't hit the 6-wide
+        // floor, so the label's own padding (2 cols + 2 cols) determines the width.
+        let size = Button::new("Go").min_size(Density::Mouse);
+        assert_eq!(size.width(), 6);
+        assert_eq!(size.height(), 1);
+    }
+
+    #[test]
+    fn min_size_floors_a_short_label_at_the_density_minimum() {
+        // "OK" padded is 2 + 4 = 6 cols wide, matching `Density::min_target_size`'s own 6-cell
+        // floor exactly, so this only proves the floor doesn't shrink it below that; the touch
+        // row height (3, vs. this button's own unpadded 1) is what actually exercises the max.
+        let size = Button::new("OK").min_size(Density::Touch);
+        assert_eq!(size, Density::Touch.min_target_size());
+    }
+
+    #[test]
+    fn min_size_grows_past_the_density_floor_for_a_wide_label() {
+        // "Save Changes" is 12 cols; padded to 16, well past the 6-cell floor either density
+        // sets, so the label's own width should win over `min_target_size`.
+        let size = Button::new("Save Changes").min_size(Density::Mouse);
+        assert_eq!(size.width(), 16);
+        assert_eq!(size.height(), 1);
     }
 }

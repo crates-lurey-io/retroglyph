@@ -819,7 +819,7 @@ mod tests {
 
     #[test]
     fn rgb_color_uses_extended_sgr() {
-        let style = Style::new().fg(Color::Rgb { r: 1, g: 2, b: 3 });
+        let style = Style::new().fg(Color::rgb(1, 2, 3));
         let tile = Tile::new('X', style);
         let out = render_one(&tile);
         assert!(out.contains("\x1b[38;2;1;2;3;49m"), "output: {out:?}");
@@ -840,11 +840,7 @@ mod tests {
         // entries (e.g. a 6x6x6 cube step or a grayscale ramp step) is still
         // emitted verbatim as a 24-bit truecolor sequence, not snapped to the
         // nearest indexed color.
-        let style = Style::new().fg(Color::Rgb {
-            r: 91,
-            g: 142,
-            b: 217,
-        });
+        let style = Style::new().fg(Color::rgb(91, 142, 217));
         let tile = Tile::new('X', style);
         let out = render_one(&tile);
         assert!(out.contains("\x1b[38;2;91;142;217;49m"), "output: {out:?}");
@@ -877,11 +873,7 @@ mod tests {
 
     #[test]
     fn color_support_truecolor_passes_rgb_through_unquantized() {
-        let style = Style::new().fg(Color::Rgb {
-            r: 91,
-            g: 142,
-            b: 217,
-        });
+        let style = Style::new().fg(Color::rgb(91, 142, 217));
         let tile = Tile::new('X', style);
         let out = render_one_with_color_support(&tile, ColorSupport::Truecolor);
         assert!(out.contains("\x1b[38;2;91;142;217;49m"), "output: {out:?}");
@@ -889,7 +881,7 @@ mod tests {
 
     #[test]
     fn color_support_indexed256_quantizes_rgb_to_the_256_color_palette() {
-        let style = Style::new().fg(Color::Rgb { r: 1, g: 2, b: 3 });
+        let style = Style::new().fg(Color::rgb(1, 2, 3));
         let tile = Tile::new('X', style);
         let out = render_one_with_color_support(&tile, ColorSupport::Indexed256);
         assert!(
@@ -904,7 +896,7 @@ mod tests {
 
     #[test]
     fn color_support_ansi16_quantizes_rgb_to_the_standard_ansi_range() {
-        let style = Style::new().fg(Color::Rgb { r: 255, g: 0, b: 0 });
+        let style = Style::new().fg(Color::rgb(255, 0, 0));
         let tile = Tile::new('X', style);
         let out = render_one_with_color_support(&tile, ColorSupport::Ansi16);
         assert!(
@@ -918,11 +910,7 @@ mod tests {
     #[test]
     fn color_support_none_forces_every_color_to_default() {
         let style = Style::new()
-            .fg(Color::Rgb {
-                r: 91,
-                g: 142,
-                b: 217,
-            })
+            .fg(Color::rgb(91, 142, 217))
             .bg(Color::Ansi(AnsiColor::Red));
         let tile = Tile::new('X', style);
         let out = render_one_with_color_support(&tile, ColorSupport::None);
@@ -939,23 +927,13 @@ mod tests {
         // coalesced into one `\x1b[38;...;48;...m` sequence instead of two separate escapes.
         let old = Tile::new(
             'A',
-            Style::new()
-                .fg(Color::Rgb { r: 1, g: 2, b: 3 })
-                .bg(Color::Rgb { r: 4, g: 5, b: 6 }),
+            Style::new().fg(Color::rgb(1, 2, 3)).bg(Color::rgb(4, 5, 6)),
         );
         let new = Tile::new(
             'B',
             Style::new()
-                .fg(Color::Rgb {
-                    r: 10,
-                    g: 20,
-                    b: 30,
-                })
-                .bg(Color::Rgb {
-                    r: 40,
-                    g: 50,
-                    b: 60,
-                }),
+                .fg(Color::rgb(10, 20, 30))
+                .bg(Color::rgb(40, 50, 60)),
         );
         let mut renderer = TerminalRenderer::new(Vec::new());
         renderer
@@ -980,18 +958,9 @@ mod tests {
     fn only_fg_change_emits_single_channel_sequence() {
         // Background is unchanged between the two draws, so only the fg escape should be
         // emitted: no combined sequence, and no redundant bg re-emission.
-        let bg = Color::Rgb { r: 4, g: 5, b: 6 };
-        let old = Tile::new('A', Style::new().fg(Color::Rgb { r: 1, g: 2, b: 3 }).bg(bg));
-        let new = Tile::new(
-            'B',
-            Style::new()
-                .fg(Color::Rgb {
-                    r: 10,
-                    g: 20,
-                    b: 30,
-                })
-                .bg(bg),
-        );
+        let bg = Color::rgb(4, 5, 6);
+        let old = Tile::new('A', Style::new().fg(Color::rgb(1, 2, 3)).bg(bg));
+        let new = Tile::new('B', Style::new().fg(Color::rgb(10, 20, 30)).bg(bg));
         let mut renderer = TerminalRenderer::new(Vec::new());
         renderer
             .draw(core::iter::once(DrawCell::new(Pos { x: 0, y: 0 }, &old)))

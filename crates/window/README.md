@@ -67,6 +67,14 @@ niche/specialized addition (subcell image rendering, braille density tricks) tha
 font, so a consumer that only wants CP437 text shouldn't pay for it. Computed at compile time by a
 `const fn`, so this adds no font asset and no new dependency.
 
+### `testing`
+
+⚪ Optional.
+
+Testing helpers for asserting glyph coverage (`testing::assert_glyphs_covered`,
+`testing::uncovered_glyphs`), so a consumer can check a `FontChain` actually draws the characters it
+cares about rather than silently falling back to the substituted solid block (retroglyph#1292).
+
 ### `tilesets`
 
 ⚪ Optional.
