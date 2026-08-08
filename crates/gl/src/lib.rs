@@ -134,6 +134,7 @@ use renderer::{FLAG_HAS_BG, FLAG_HAS_GLYPH, GlResources, Instance};
 use retroglyph_core::backend::DrawCell;
 use retroglyph_core::backend::Output;
 use retroglyph_core::color::Color;
+use retroglyph_core::dev_only;
 use retroglyph_core::grid::HasSize;
 use retroglyph_core::grid::Size;
 use retroglyph_core::tile::Tile;
@@ -199,6 +200,10 @@ pub struct GlRenderer {
     /// instead of every frame. See `retroglyph_window::sprite_cache::warn_tint_needs_sprite`.
     #[cfg(feature = "tilesets")]
     warned_dropped_tint: std::collections::BTreeSet<char>,
+    /// Characters already reported as resolving to the atlas's notdef fallback rather than their
+    /// own glyph, so a redraw loop logs each one once instead of every frame. See
+    /// `retroglyph_window::diagnostics::warn_notdef_glyph`.
+    warned_notdef: std::collections::BTreeSet<char>,
     /// The current surface size in physical pixels (set by [`resize_surface`](Presenter::resize_surface)).
     surface_size: (u32, u32),
     /// GL context + resources. `None` until [`init_surface`](Presenter::init_surface).
@@ -241,6 +246,7 @@ impl GlRenderer {
             warned_oversized: std::collections::BTreeSet::new(),
             #[cfg(feature = "tilesets")]
             warned_dropped_tint: std::collections::BTreeSet::new(),
+            warned_notdef: std::collections::BTreeSet::new(),
             surface_size: geometry.surface_size(cols, rows),
             gpu: None,
         }
@@ -295,6 +301,24 @@ impl GlRenderer {
             glyph,
             tint,
         );
+    }
+
+    /// Reports a character that resolved to the atlas's substituted "not defined" glyph rather
+    /// than its own shape: a legitimate cell on its own (a solid block can be drawn on purpose),
+    /// so this is the only place a caller finds out no font in the chain actually covers `ch`
+    /// (retroglyph#1292).
+    ///
+    /// Shares `retroglyph-window`'s diagnostic with the software backend so both name the same
+    /// fix. `self.glyphs.resolve` returns a flat slot with no notdef bit, so unlike the software
+    /// backend (which already has a `ResolvedGlyph` in hand from the resolve it needs anyway for
+    /// rendering) this re-resolves `ch` through [`GlyphAtlas::is_notdef`] to find out. The whole
+    /// check sits inside [`dev_only!`], so a release build pays for neither call.
+    fn warn_if_notdef_glyph(&mut self, ch: char) {
+        dev_only!({
+            if self.glyphs.is_notdef(ch) {
+                retroglyph_window::diagnostics::warn_notdef_glyph(&mut self.warned_notdef, ch);
+            }
+        });
     }
 
     /// Total cell count for the current grid.
@@ -509,6 +533,7 @@ impl Output for GlRenderer {
 
             if layer_id == 0 {
                 let slot = self.glyphs.resolve(tile.glyph());
+                self.warn_if_notdef_glyph(tile.glyph());
                 let inst = base_instance(slot, tile);
                 // Sprite dispatch is gated on `cell_art_glyph`, not the raw `tile.glyph()`: a
                 // blank layer-0 cell (`is_empty()`, e.g. an untouched grid cell) draws no art at
@@ -575,6 +600,7 @@ impl Output for GlRenderer {
             // the tile's background is `Default`) plus its glyph, unless no font in the chain can
             // draw that character at all (see `base_instance`).
             let resolved = self.glyphs.resolve(tile.glyph());
+            self.warn_if_notdef_glyph(tile.glyph());
             let glyph = resolved.unwrap_or(0);
             let has_glyph = if resolved.is_some() {
                 FLAG_HAS_GLYPH
@@ -1101,6 +1127,69 @@ mod compositing_tests {
             0,
             "a sprite anchor's covered cell paints no background"
         );
+    }
+
+    // ── Notdef diagnostic (retroglyph#1292) ─────────────────────────────────
+
+    /// The substituted solid block is a legitimate cell on its own, so nothing about the
+    /// rendered instance distinguishes it from a real one; this is the diagnostic that closes
+    /// that gap on the base layer.
+    #[test]
+    fn layer_0_reports_a_character_no_font_covers() {
+        let mut r = GlBackendBuilder::new()
+            .grid_size(1, 1)
+            .build()
+            .expect("default-font builds");
+        // Outside unscii16's CP437 repertoire.
+        let tile = Tile::new('あ', Style::new());
+        r.draw_layers(core::iter::once(DrawCell::on_layer(
+            0,
+            Pos::new(0, 0),
+            &tile,
+        )))
+        .expect("draw_layers is infallible");
+
+        assert_eq!(r.warned_notdef.contains(&'あ'), retroglyph_core::dev::DEV);
+    }
+
+    /// A character CP437 does cover must never be reported, dev build or not.
+    #[test]
+    fn layer_0_does_not_report_a_covered_character() {
+        let mut r = GlBackendBuilder::new()
+            .grid_size(1, 1)
+            .build()
+            .expect("default-font builds");
+        let tile = Tile::new('A', Style::new());
+        r.draw_layers(core::iter::once(DrawCell::on_layer(
+            0,
+            Pos::new(0, 0),
+            &tile,
+        )))
+        .expect("draw_layers is infallible");
+
+        assert!(!r.warned_notdef.contains(&'A'));
+    }
+
+    /// The `layer_id != 0` branch is a separate code path from layer 0's; it must report the same
+    /// thing.
+    #[test]
+    fn a_higher_layer_reports_a_character_no_font_covers() {
+        let mut r = GlBackendBuilder::new()
+            .grid_size(1, 1)
+            .build()
+            .expect("default-font builds");
+        let base = Tile::new(' ', Style::new());
+        let tile = Tile::new('あ', Style::new());
+        r.draw_layers(
+            [
+                DrawCell::on_layer(0, Pos::new(0, 0), &base),
+                DrawCell::on_layer(1, Pos::new(0, 0), &tile),
+            ]
+            .into_iter(),
+        )
+        .expect("draw_layers is infallible");
+
+        assert_eq!(r.warned_notdef.contains(&'あ'), retroglyph_core::dev::DEV);
     }
 }
 

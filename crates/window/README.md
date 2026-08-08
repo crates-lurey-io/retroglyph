@@ -42,30 +42,39 @@ cargo add retroglyph-window
 
 Embeds the Unscii 16 default font (`font::unscii16`).
 
-Off by default so a consumer that supplies its own bitmap font pays nothing for the ~4 KB atlas; the
-graphical backends' own `default-font` features forward to this one.
+Off by default so a consumer that supplies its own bitmap font pays nothing for the ~4 KB atlas;
+the graphical backends' own `default-font` features forward to this one.
 
 ### `dev`
 
 ⚪ Optional.
 
-Forwards `retroglyph-core`'s `dev` feature, which forces development diagnostics on in a build that
-would otherwise compile them out (see `retroglyph_core::dev`).
+Forwards `retroglyph-core`'s `dev` feature, which forces development diagnostics on in a build
+that would otherwise compile them out (see `retroglyph_core::dev`).
 
-Forwarded so a consumer of this crate can turn them on without adding a direct dependency on core
-just to reach the flag.
+Forwarded so a consumer of this crate can turn them on without adding a direct dependency on
+core just to reach the flag.
 
 ### `legacy-computing`
 
 ⚪ Optional.
 
-Embeds a generated block-elements/braille fallback font (`font::legacy_computing`): the 10 quadrant,
-60 sextant, and 256 braille glyphs CP437 (and so `unscii16`) has no mapping for.
+Embeds a generated block-elements/braille fallback font (`font::legacy_computing`): the 10
+quadrant, 60 sextant, and 256 braille glyphs CP437 (and so `unscii16`) has no mapping for.
 
 A separate opt-in from `default-font` rather than folded into it: this repertoire is a much more
 niche/specialized addition (subcell image rendering, braille density tricks) than the base text
-font, so a consumer that only wants CP437 text shouldn't pay for it. Computed at compile time by a
-`const fn`, so this adds no font asset and no new dependency.
+font, so a consumer that only wants CP437 text shouldn't pay for it. Computed at compile time by
+a `const fn`, so this adds no font asset and no new dependency.
+
+### `testing`
+
+⚪ Optional.
+
+Testing helpers for asserting glyph coverage (`testing::assert_glyphs_covered`,
+`testing::uncovered_glyphs`), so a consumer can check a `FontChain` actually draws the
+characters it cares about rather than silently falling back to the substituted solid block
+(retroglyph#1292).
 
 ### `tilesets`
 
@@ -81,9 +90,9 @@ Both graphical backends' own `tilesets` features forward to this one.
 
 The winit event loop and event translation (`run`, `translate`, `run_windowed`/`run_app`).
 
-Renderer crates that only implement `Presenter` can disable this and depend solely on
-`raw-window-handle`; loops other than winit (SDL2, tao, custom) bring their own driver against
-`Presenter` + `WindowBackend`.
+Renderer crates that only implement `Presenter` can disable this and
+depend solely on `raw-window-handle`; loops other than winit (SDL2, tao, custom) bring their own
+driver against `Presenter` + `WindowBackend`.
 
 </details>
 <!-- gen-features:end -->

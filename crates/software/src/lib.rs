@@ -135,6 +135,7 @@ use retroglyph_core::event::{Event, coalesces_with};
 use retroglyph_core::grid::HasSize;
 use retroglyph_core::grid::{Pos, Size};
 use retroglyph_core::tile::Tile;
+use retroglyph_window::diagnostics::warn_notdef_glyph;
 use retroglyph_window::geometry::CellGeometry;
 use retroglyph_window::palette::{DEFAULT_BG, DEFAULT_FG};
 use retroglyph_window::presenter::WindowHandle;
@@ -143,7 +144,6 @@ use retroglyph_window::presenter::cell_art_glyph;
 use retroglyph_window::sprite_cache::{
     Sprite, SpriteCache, SpriteTint, warn_sprite_needs_span, warn_tint_needs_sprite,
 };
-#[cfg(feature = "tilesets")]
 use std::collections::BTreeSet;
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -238,6 +238,9 @@ struct RenderContext {
     /// redraw loop logs each one once instead of every frame.
     #[cfg(feature = "tilesets")]
     warned_dropped_tint: BTreeSet<char>,
+    /// Characters already reported by [`warn_notdef_glyph`] as resolving to the fallback rather
+    /// than their own glyph, so a 60fps redraw loop logs each one once instead of every frame.
+    warned_notdef: BTreeSet<char>,
 }
 
 impl SoftwareRenderer {
@@ -272,6 +275,7 @@ impl SoftwareRenderer {
                 warned_oversized: BTreeSet::new(),
                 #[cfg(feature = "tilesets")]
                 warned_dropped_tint: BTreeSet::new(),
+                warned_notdef: BTreeSet::new(),
             },
             #[cfg(feature = "tilesets")]
             sprite_cache,
@@ -619,6 +623,7 @@ impl SoftwareRenderer {
             art_glyph,
             &self.fonts,
             scale,
+            &mut self.ctx.warned_notdef,
         );
     }
 }
@@ -1131,6 +1136,7 @@ fn blit_glyph(
     art_glyph: char,
     fonts: &FontChain<'static>,
     scale: usize,
+    warned_notdef: &mut BTreeSet<char>,
 ) {
     let fg = resolve_color(tile.style().foreground(), DEFAULT_FG);
 
@@ -1144,6 +1150,12 @@ fn blit_glyph(
     let Some(glyph) = fonts.resolve(art_glyph) else {
         return;
     };
+    // A resolved glyph flagged `is_notdef` drew the fallback, not `art_glyph`'s own shape -- a
+    // legitimate cell on its own (a solid block can be drawn on purpose), so this is the only
+    // place a caller finds out it happened at all (retroglyph#1292).
+    if glyph.is_notdef() {
+        warn_notdef_glyph(warned_notdef, art_glyph);
+    }
     let buf_h = buffer.len() / buf_w;
 
     blit_glyph_mask(
@@ -3086,6 +3098,58 @@ mod font_chain_tests {
             pixels.iter().all(|&p| p == RED_PX),
             "every pixel of the solid block is foreground"
         );
+    }
+
+    /// retroglyph#1292: the solid-block substitute above is a legitimate cell on its own, so
+    /// nothing about the rendered pixels distinguishes it from a real solid-block glyph. This is
+    /// the diagnostic that closes that gap: a dev build reports the character the chain couldn't
+    /// actually draw.
+    #[test]
+    fn uncovered_char_reports_the_notdef_diagnostic() {
+        let mut renderer = SoftwareBackendBuilder::new()
+            .font(FontChain::new(unscii16::FONT, &FALLBACKS))
+            .grid_size(1, 1)
+            .scale(1)
+            .build()
+            .expect("chain builds")
+            .into_renderer()
+            .expect("renderer builds");
+        let tile = Tile::new('あ', Style::new().fg(RED).bg(BLACK));
+        renderer
+            .draw_layers(core::iter::once(DrawCell::on_layer(
+                0,
+                Pos::new(0, 0),
+                &tile,
+            )))
+            .unwrap();
+
+        assert_eq!(
+            renderer.ctx.warned_notdef.contains(&'あ'),
+            retroglyph_core::dev::DEV
+        );
+    }
+
+    /// A character some font in the chain does cover must never be reported, dev build or not.
+    #[test]
+    fn covered_char_does_not_report_the_notdef_diagnostic() {
+        let mut renderer = SoftwareBackendBuilder::new()
+            .font(FontChain::new(unscii16::FONT, &FALLBACKS))
+            .grid_size(1, 1)
+            .scale(1)
+            .build()
+            .expect("chain builds")
+            .into_renderer()
+            .expect("renderer builds");
+        let tile = Tile::new('A', Style::new().fg(RED).bg(BLACK));
+        renderer
+            .draw_layers(core::iter::once(DrawCell::on_layer(
+                0,
+                Pos::new(0, 0),
+                &tile,
+            )))
+            .unwrap();
+
+        assert!(!renderer.ctx.warned_notdef.contains(&'A'));
     }
 
     /// The panic reported in #539 (`glyph index 219 out of range (2)`): the CP437 solid block is
