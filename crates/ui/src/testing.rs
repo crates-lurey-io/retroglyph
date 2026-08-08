@@ -58,7 +58,7 @@ use crate::ui::Ui;
 /// ```
 /// use retroglyph_core::grid::Rect;
 /// use retroglyph_ui::testing::WidgetHarness;
-/// use retroglyph_ui::{Button, InteractiveWidget};
+/// use retroglyph_ui::widget::{Button, InteractiveWidget};
 ///
 /// #[derive(Clone, Copy, PartialEq, Eq)]
 /// enum Id {
@@ -206,7 +206,7 @@ mod tests {
     use retroglyph_core::color::Style;
     use retroglyph_core::grid::Rect;
 
-    use crate::{Response, Sense};
+    use crate::interact::{Response, Sense};
 
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     enum Id {
