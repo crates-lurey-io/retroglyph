@@ -11,6 +11,7 @@ use crate::grid::Pos;
 pub type PhysicalPos = ixy::Pos<u32>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 /// Mouse button identifiers.
 pub enum MouseButton {
@@ -23,6 +24,7 @@ pub enum MouseButton {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 /// Kinds of mouse events.
 ///
@@ -51,6 +53,7 @@ pub enum MouseEventKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 /// Mouse input event.
 ///
@@ -155,6 +158,22 @@ mod tests {
         assert_eq!(
             mouse_event.pixel_position,
             Some(PhysicalPos { x: 55, y: 38 })
+        );
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn mouse_event_round_trips_through_serde_json() {
+        let mouse_event = MouseEvent::with_pixel_position(
+            MouseEventKind::Scroll { dx: 1.0, dy: -2.5 },
+            Pos { x: 3, y: 2 },
+            KeyModifiers::CONTROL,
+            PhysicalPos { x: 55, y: 38 },
+        );
+        let json = serde_json::to_string(&mouse_event).expect("serialize");
+        assert_eq!(
+            serde_json::from_str::<MouseEvent>(&json).expect("deserialize"),
+            mouse_event
         );
     }
 

@@ -5,6 +5,7 @@ use alloc::vec::Vec;
 use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 /// Keyboard modifier flags.
 ///
 /// Implemented as a manual bitflag over `u8` (`SHIFT = 1`, `CONTROL = 2`, `ALT = 4`,
@@ -102,6 +103,7 @@ impl Not for KeyModifiers {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 /// A modifier key pressed as a standalone key event, independent of the [`KeyModifiers`](crate::event::KeyModifiers) flags
 /// carried on non-modifier key events.
@@ -125,6 +127,7 @@ pub enum ModifierKey {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 /// Keyboard key codes.
 pub enum KeyCode {
@@ -180,6 +183,7 @@ pub enum KeyCode {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 /// Whether a key event is a press, an auto-repeat, or a release.
 ///
@@ -206,6 +210,7 @@ pub enum KeyEventKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 /// The physical location of a key on the keyboard, for keys that appear in more than one place.
 ///
@@ -227,6 +232,7 @@ pub enum KeyLocation {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 /// Keyboard input event.
 pub struct KeyEvent {
@@ -315,6 +321,7 @@ impl KeyEvent {
 /// held set on it: without that, alt-tabbing or clicking away while a key is down would leave it
 /// stuck held forever, since the release is delivered to whichever window/app gains focus instead.
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct KeyState {
     held: Vec<(KeyCode, KeyLocation)>,
 }
@@ -677,6 +684,33 @@ mod tests {
         assert!(!state.is_held(KeyCode::Down, KeyLocation::Standard));
         assert!(state.is_held(KeyCode::Up, KeyLocation::Standard));
         assert_eq!(state.held().count(), 1);
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn key_event_and_key_state_round_trip_through_serde_json() {
+        let event = KeyEvent::with_location(
+            KeyCode::Modifier(ModifierKey::Shift),
+            KeyModifiers::SHIFT | KeyModifiers::ALT,
+            KeyEventKind::Repeat,
+            KeyLocation::Left,
+        );
+        let json = serde_json::to_string(&event).expect("serialize");
+        assert_eq!(
+            serde_json::from_str::<KeyEvent>(&json).expect("deserialize"),
+            event
+        );
+
+        let mut state = KeyState::new();
+        state.apply(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
+        let json = serde_json::to_string(&state).expect("serialize");
+        assert_eq!(
+            serde_json::from_str::<KeyState>(&json)
+                .expect("deserialize")
+                .held()
+                .collect::<Vec<_>>(),
+            state.held().collect::<Vec<_>>()
+        );
     }
 
     #[test]

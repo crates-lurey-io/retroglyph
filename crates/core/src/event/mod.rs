@@ -26,6 +26,7 @@ use alloc::string::String;
 /// `#[non_exhaustive]` for consistency with sibling public enums, in case a
 /// future source (e.g. a `HighContrast` case) needs to be added.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub enum SystemTheme {
     /// The system prefers a light color scheme.
@@ -35,6 +36,7 @@ pub enum SystemTheme {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 /// Terminal input event.
 ///
@@ -257,5 +259,26 @@ mod tests {
     #[test]
     fn coalesces_with_false_for_two_non_mouse_events() {
         assert!(!coalesces_with(&Event::Close, &Event::Resize(1, 1)));
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn event_round_trips_through_serde_json() {
+        let event = Event::Key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::SHIFT));
+        let json = serde_json::to_string(&event).expect("serialize");
+        assert_eq!(
+            serde_json::from_str::<Event>(&json).expect("deserialize"),
+            event
+        );
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn system_theme_round_trips_through_serde_json() {
+        let json = serde_json::to_string(&SystemTheme::Dark).expect("serialize");
+        assert_eq!(
+            serde_json::from_str::<SystemTheme>(&json).expect("deserialize"),
+            SystemTheme::Dark
+        );
     }
 }
