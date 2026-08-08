@@ -6,6 +6,7 @@
 /// via `(selected + 1) % len`). Older `tui-rs`-style wraparound is available via [`Wrap`](Self::Wrap)
 /// for callers that want circular menu navigation instead.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SelectionWrap {
     /// Stop at the first/last item: `select_next` past the last item stays on the last item, and
     /// `select_previous` before the first item stays on the first.

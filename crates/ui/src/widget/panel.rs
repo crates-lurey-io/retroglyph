@@ -15,6 +15,7 @@ use crate::theme::Theme;
 
 /// Which border edge a [`PanelTitle`] is drawn into.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum TitlePosition {
     /// The top border row, the same edge [`Panel::title`]'s sugar title is drawn into.
     #[default]
@@ -331,7 +332,8 @@ impl TitleCursor {
         match align {
             Align::Left => self.lo = title_x + padded,
             Align::Right => self.hi = title_x,
-            Align::Center => self.hi = self.lo,
+            // `Align::Center`, and any future variant, centers by collapsing the title span.
+            _ => self.hi = self.lo,
         }
     }
 }

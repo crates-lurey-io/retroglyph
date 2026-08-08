@@ -8,6 +8,7 @@
 
 /// Horizontal alignment within a bounded rectangle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[non_exhaustive]
 pub enum HAlign {
     /// Align text to the left edge (default).
     #[default]
@@ -37,6 +38,7 @@ impl HAlign {
 
 /// Vertical alignment within a bounded rectangle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[non_exhaustive]
 pub enum VAlign {
     /// Align text to the top edge (default).
     #[default]
