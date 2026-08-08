@@ -1,4 +1,4 @@
-//! `Grid`'s per-cell tile access: [`Grid::put_tile`], [`Grid::fill_region`], [`Grid::tile`], and
+//! `Grid`'s per-cell tile access: [`Grid::put_tile`], [`Grid::fill_rect`], [`Grid::tile`], and
 //! [`Grid::tile_mut`], plus per-layer allocation lifecycle ([`Grid::deallocate_layer`],
 //! [`Grid::layer_is_empty`]).
 //!
@@ -153,13 +153,13 @@ impl Grid {
     /// use retroglyph_core::tile::Tile;
     ///
     /// let mut grid = Grid::new(4, 4);
-    /// grid.fill_region(0, Rect::new(1, 1, 2, 2), Tile::new('#', Style::default()));
+    /// grid.fill_rect(0, Rect::new(1, 1, 2, 2), Tile::new('#', Style::default()));
     ///
     /// assert_eq!(grid[Pos::new(1, 1)].glyph(), '#');
     /// assert_eq!(grid[Pos::new(2, 2)].glyph(), '#');
     /// assert_eq!(grid[Pos::new(0, 0)].glyph(), ' ');
     /// ```
-    pub fn fill_region(&mut self, layer: u8, rect: Rect, mut tile: Tile) {
+    pub fn fill_rect(&mut self, layer: u8, rect: Rect, mut tile: Tile) {
         let bounds = self.size().to_rect();
         let rect = rect.intersect(bounds);
         if rect.is_empty() {
@@ -782,17 +782,17 @@ mod tests {
         assert_eq!(g[Pos::new(5, 0)].glyph(), 'Z');
     }
 
-    /// `fill_region` must clear any span it would partially overwrite the same way a per-cell
+    /// `fill_rect` must clear any span it would partially overwrite the same way a per-cell
     /// `put_tile` loop would (via `clear_span_overlap`), or the surviving span's anchor would
     /// keep claiming a footprint the fill just overwrote part of.
     #[test]
-    fn fill_region_clears_a_span_it_partially_overwrites() {
+    fn fill_rect_clears_a_span_it_partially_overwrites() {
         let mut g = Grid::new(4, 4);
         g.write_span(0, 0, 0, &["C=", "[]"], Style::default())
             .expect("2x2 span fits in a 4x4 grid");
 
         // Overlaps only the span's right column, (1, 0) and (1, 1).
-        g.fill_region(0, Rect::new(1, 0, 3, 3), Tile::new('#', Style::default()));
+        g.fill_rect(0, Rect::new(1, 0, 3, 3), Tile::new('#', Style::default()));
 
         // The anchor at (0, 0) is gone, not left claiming a footprint that no longer matches
         // reality.
@@ -801,17 +801,17 @@ mod tests {
         assert_eq!(anchor.glyph(), ' ');
     }
 
-    /// `fill_region` scans the region for overlapping spans once, not once per row (see
+    /// `fill_rect` scans the region for overlapping spans once, not once per row (see
     /// `clear_span_overlap_rect`, retroglyph#1020): a span several rows tall, entirely inside
     /// `rect`, must still come out fully and correctly reset rather than leaving a stale anchor
     /// or covered cell behind from a row the single-pass collection missed.
     #[test]
-    fn fill_region_clears_a_multi_row_span_it_fully_covers() {
+    fn fill_rect_clears_a_multi_row_span_it_fully_covers() {
         let mut g = Grid::new(6, 6);
         g.write_span(0, 1, 1, &["AB", "CD", "EF", "GH"], Style::default())
             .expect("2x4 span fits in a 6x6 grid");
 
-        g.fill_region(0, Rect::new(0, 0, 6, 6), Tile::new('#', Style::default()));
+        g.fill_rect(0, Rect::new(0, 0, 6, 6), Tile::new('#', Style::default()));
 
         for y in 0..6 {
             for x in 0..6 {
@@ -820,12 +820,12 @@ mod tests {
         }
     }
 
-    /// `clear_overlap` runs regardless of `egc` (see its own doc comment): `fill_region` gated it
+    /// `clear_overlap` runs regardless of `egc` (see its own doc comment): `fill_rect` gated it
     /// behind the feature until retroglyph#1014, so a wide pair written by `put_tile` (which is
     /// not itself `egc`-gated) kept a stale `WIDE_CHAR` flag after a fill partially overwrote it
     /// with `egc` off.
     #[test]
-    fn fill_region_clears_a_wide_char_it_partially_overwrites() {
+    fn fill_rect_clears_a_wide_char_it_partially_overwrites() {
         let mut g = Grid::new(4, 1);
         g.put_tile(0, (0, 0), Tile::new('\u{4e2d}', Style::default()));
         assert!(
@@ -835,7 +835,7 @@ mod tests {
                 .contains(TileFlags::WIDE_CHAR)
         );
 
-        g.fill_region(0, Rect::new(1, 0, 3, 1), Tile::new('#', Style::default()));
+        g.fill_rect(0, Rect::new(1, 0, 3, 1), Tile::new('#', Style::default()));
 
         assert!(
             !g.tile(0, (0, 0))
@@ -845,14 +845,14 @@ mod tests {
         );
     }
 
-    /// `fill_region` writing a wide `tile` raw (no lead/spacer synthesis) would desync any
+    /// `fill_rect` writing a wide `tile` raw (no lead/spacer synthesis) would desync any
     /// cursor-advancing consumer that trusts `Tile::width`/`WIDE_CHAR_SPACER` to track column
     /// position (retroglyph#1014). It refuses instead, leaving the region untouched.
     #[test]
-    fn fill_region_refuses_a_wide_tile() {
+    fn fill_rect_refuses_a_wide_tile() {
         let mut g = Grid::new(4, 1);
 
-        g.fill_region(
+        g.fill_rect(
             0,
             Rect::new(0, 0, 4, 1),
             Tile::new('\u{4e2d}', Style::default()),
@@ -865,17 +865,17 @@ mod tests {
         }
     }
 
-    /// `fill_region` writes a caller-constructed `Tile`, which (like `put_tile`) can never
+    /// `fill_rect` writes a caller-constructed `Tile`, which (like `put_tile`) can never
     /// legitimately carry `HAS_EXTRA`, so any grapheme/tint side-table entry the fill's cells
     /// used to own must be dropped, not left dangling under the new tile.
     #[cfg(feature = "egc")]
     #[test]
-    fn fill_region_drops_stale_extras() {
+    fn fill_rect_drops_stale_extras() {
         let mut g = Grid::new(4, 4);
         g.write_grapheme(0, 1, 1, "e\u{0301}", Style::default());
         g.set_tint(0, 2, 2, Tint::multiply(1, 2, 3));
 
-        g.fill_region(0, Rect::new(0, 0, 4, 4), Tile::new('#', Style::default()));
+        g.fill_rect(0, Rect::new(0, 0, 4, 4), Tile::new('#', Style::default()));
 
         assert_eq!(crate::grid::grapheme_at(&g, 0, 1, 1), None);
         assert_eq!(g.tint(0, 2, 2), Tint::None);
@@ -884,9 +884,9 @@ mod tests {
     /// A `rect` that extends past the grid's own edges only fills the in-bounds overlap, the
     /// same clipping `put_tile` gets for free per cell by refusing an out-of-bounds `pos`.
     #[test]
-    fn fill_region_clips_to_grid_bounds() {
+    fn fill_rect_clips_to_grid_bounds() {
         let mut g = Grid::new(4, 4);
-        g.fill_region(0, Rect::new(2, 2, 10, 10), Tile::new('#', Style::default()));
+        g.fill_rect(0, Rect::new(2, 2, 10, 10), Tile::new('#', Style::default()));
 
         assert_eq!(g.tile(0, (3, 3)).unwrap().glyph(), '#');
         assert_eq!(g.tile(0, (0, 0)).unwrap().glyph(), ' ');
@@ -896,13 +896,13 @@ mod tests {
     /// `rect`: without stripping it, a 2x2 fill with a replayed anchor would produce four anchors
     /// each wrongly claiming their own 2x2 footprint (retroglyph#984).
     #[test]
-    fn fill_region_strips_a_span_anchor_replayed_from_elsewhere() {
+    fn fill_rect_strips_a_span_anchor_replayed_from_elsewhere() {
         let mut g = Grid::new(8, 4);
         g.write_span_uniform(0, (0, 0), (2u16, 2u16), 'A', '.', Style::default())
             .expect("2x2 span fits in an 8x4 grid");
         let anchor = *g.tile(0, Pos::new(0, 0)).unwrap();
 
-        g.fill_region(0, Rect::new(4, 0, 2, 2), anchor);
+        g.fill_rect(0, Rect::new(4, 0, 2, 2), anchor);
 
         for y in 0..2 {
             for x in 4..6 {
@@ -913,12 +913,12 @@ mod tests {
         }
     }
 
-    /// An empty (or fully out-of-bounds) `rect` allocates nothing: `fill_region` returns before
+    /// An empty (or fully out-of-bounds) `rect` allocates nothing: `fill_rect` returns before
     /// touching `layer_or_alloc`.
     #[test]
-    fn fill_region_on_an_empty_rect_does_not_allocate_the_layer() {
+    fn fill_rect_on_an_empty_rect_does_not_allocate_the_layer() {
         let mut g = Grid::new(4, 4);
-        g.fill_region(1, Rect::new(10, 10, 2, 2), Tile::new('#', Style::default()));
+        g.fill_rect(1, Rect::new(10, 10, 2, 2), Tile::new('#', Style::default()));
         assert_eq!(g.tile(1, (0, 0)), None);
     }
 }

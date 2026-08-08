@@ -189,6 +189,22 @@ docs-preview-full: doc
     @(sleep 1 && (command -v xdg-open > /dev/null && xdg-open http://localhost:8000 || open http://localhost:8000 2>/dev/null || true)) &
     cargo bin miniserve target/doc --port 8000 --index index.html -q
 
+# Regenerates documentation GIFs into docs/assets/ from a real crossterm capture (retroglyph#1268,
+# retroglyph#461). `--record` (`retroglyph-examples`' `launch::<E>()`) captures the crossterm
+# binary's own asciicast output via `retroglyph-recorder`'s `FrameRecorder`; `agg` then converts
+# that `.cast` to a GIF. `agg` is an external tool invocation, not a `Cargo.toml` dependency:
+# `agg`/`gifski` are GPL/AGPL and `just deny-licenses` would reject either as a linked dependency
+# in this MIT-licensed workspace. Install: see <https://docs.asciinema.org/manual/agg/>. Not a CI
+# gate -- GIF encoding is slow/non-deterministic enough to stay manual, the same reasoning
+# retroglyph#461 used for the `vhs` plan this supersedes. Interactive: this opens a real terminal
+# session against a real TTY, so drive the example by hand and press its quit key (`q`) when done
+# -- `--record` only writes its `.cast` once the app actually quits (see `launch::run_crossterm`),
+# there's no scripted input path here the way `FrameRecorder`'s `TestHarness`-driven tests get.
+assets: build-pty-examples
+    ./target/pty-examples/debug/examples/15_outpost_dashboard --record docs/assets/15_outpost_dashboard.cast --time-scale 20
+    agg docs/assets/15_outpost_dashboard.cast docs/assets/15_outpost_dashboard.gif
+    rm docs/assets/15_outpost_dashboard.cast
+
 # ── Test ─────────────────────────────────────────────────────────────────────
 
 # Builds every example with `--features crossterm` into its own `--target-dir` (see

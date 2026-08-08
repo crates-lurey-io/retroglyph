@@ -193,7 +193,7 @@ impl Grid {
         // first, so a refused write can never have already destroyed the caller's content.
         // Neither call is gated on `egc`: `put_tile` writes a `WIDE_CHAR`/`WIDE_CHAR_SPACER` pair
         // on every feature combination, so a span that can land inside one has to clean it up
-        // regardless of `egc` (same reasoning as `fill_region`'s matching pair of calls).
+        // regardless of `egc` (same reasoning as `fill_rect`'s matching pair of calls).
         for row in 0..footprint_h {
             let cy = y + u16::from(row);
             self.clear_span_overlap(layer, x, cy, u16::from(footprint_w));
@@ -437,7 +437,7 @@ impl Grid {
     /// `layer` would partially overwrite.
     ///
     /// The region analogue of [`clear_span_overlap`](Self::clear_span_overlap), for callers like
-    /// [`fill_region`](super::Grid::fill_region) that would otherwise call it once per row: a span
+    /// [`fill_rect`](super::Grid::fill_rect) that would otherwise call it once per row: a span
     /// spanning several of those rows would then be collected, and fully reset, once per row it
     /// occupies. This scans the whole region once instead, deduplicating anchors in a
     /// `BTreeSet<(u16, u16)>` (`Pos` has no `Ord`) so each span is reset exactly once regardless
@@ -779,7 +779,7 @@ mod tests {
         grid.write_span(0, 1, 1, &["AB", "CD", "EF", "GH"], Style::default())
             .expect("2x4 span fits in a 6x6 grid");
 
-        // A single call covering all four rows the span occupies, same as `fill_region` now
+        // A single call covering all four rows the span occupies, same as `fill_rect` now
         // makes once per call instead of once per row.
         grid.clear_span_overlap_rect(0, 0, 1, 6, 4);
 
@@ -806,7 +806,7 @@ mod tests {
         assert!(grid.tile(1, (0, 0)).is_none());
     }
 
-    /// A direct `clear_span_overlap_rect` call, unlike `fill_region`, is not clipped to the grid
+    /// A direct `clear_span_overlap_rect` call, unlike `fill_rect`, is not clipped to the grid
     /// before it scans: `width`/`height` reaching past the grid's own edges must skip the
     /// out-of-bounds cells rather than panicking, while still resetting the in-bounds portion of
     /// a span the in-bounds part of the scan touches.

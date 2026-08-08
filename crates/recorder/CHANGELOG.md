@@ -17,3 +17,9 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 - `replay_live`: forward replay of a recording into a live `Terminal`/`App`, at recorded pace.
 - `install_panic_recorder`: auto-saves an in-progress recording on panic, without suppressing the
   original panic output.
+- `FrameRecorder<B>`: wraps any backend, taps its `Output` side, and buffers every changed frame
+  seen through `draw_layers` as owned cells, with a cloneable `FrameRecorderHandle`.
+- `write_cast`: exports captured frames as [asciicast v3](https://docs.asciinema.org/manual/asciicast/v3/)
+  newline-delimited JSON, for `agg`/`asciinema-player`/`svg-term` to render.
+- `pty` feature: `capture_pty`, a real-pseudo-terminal capture source feeding the same
+  `write_cast` path.

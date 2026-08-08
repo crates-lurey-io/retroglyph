@@ -2,6 +2,7 @@
 
 use crate::color::Style;
 use crate::text::{Line, Span};
+use alloc::borrow::Cow;
 use alloc::string::String;
 use alloc::vec::Vec;
 use unicode_segmentation::UnicodeSegmentation;
@@ -152,6 +153,42 @@ pub fn wrap(line: &Line, max_width: u16) -> Vec<Line> {
         .collect()
 }
 
+/// Word-wraps plain `text` to `max_width` columns, returning the broken-apart rows.
+///
+/// This runs the same greedy, grapheme-cluster-aware wrap pass as [`wrap`] (breaking on ASCII
+/// space, honoring hard `\n`s, force-breaking an overlong word at the column boundary), for
+/// callers that just have a plain string and would otherwise hand-roll a wrap loop to get it.
+/// Reach for [`wrap`] instead when the text carries per-[`Span`](crate::text::Span)
+/// [`Style`](crate::color::Style): `text: &str` converts to a plain [`Line`] via `.into()`, so
+/// `wrap(&text.into(), w)` covers that case without constructing spans by hand.
+///
+/// Each row is grapheme-rejoined during wrapping, so this always returns
+/// [`Cow::Owned`](alloc::borrow::Cow::Owned); the `Cow` return type is kept so a row that turns
+/// out not to need wrapping can borrow `text` directly if a future revision adds that
+/// fast path.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::layout::wrap_str;
+///
+/// let rows = wrap_str("hello world", 7);
+/// assert_eq!(rows, vec!["hello", "world"]);
+/// ```
+#[must_use]
+pub fn wrap_str(text: &str, max_width: u16) -> Vec<Cow<'_, str>> {
+    wrap_line(&Line::raw(text), max_width)
+        .into_iter()
+        .map(|wrapped| {
+            let mut row = String::new();
+            for glyph in wrapped.glyphs {
+                row.push_str(&glyph.grapheme);
+            }
+            Cow::Owned(row)
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -228,5 +265,31 @@ mod tests {
         // The "bar" glyphs should carry the red style.
         let bar_count = lines[0].glyphs.iter().filter(|g| g.style == red()).count();
         assert_eq!(bar_count, 3);
+    }
+
+    #[test]
+    fn test_wrap_str_soft_break_on_space() {
+        let rows = wrap_str("hello world", 7);
+        assert_eq!(rows, alloc::vec!["hello", "world"]);
+    }
+
+    #[test]
+    fn test_wrap_str_hard_newline() {
+        let rows = wrap_str("hi\nthere", 20);
+        assert_eq!(rows, alloc::vec!["hi", "there"]);
+    }
+
+    #[test]
+    fn test_wrap_str_wide_chars() {
+        // Each CJK char is width 2; "中文中" in a 4-wide box wraps after "中文".
+        let rows = wrap_str("中文中", 4);
+        assert_eq!(rows, alloc::vec!["中文", "中"]);
+    }
+
+    #[test]
+    fn test_wrap_str_no_wrap_needed_returns_owned() {
+        let rows = wrap_str("hello", 10);
+        assert_eq!(rows.len(), 1);
+        assert!(matches!(rows[0], Cow::Owned(_)));
     }
 }

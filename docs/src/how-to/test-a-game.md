@@ -68,3 +68,7 @@ cargo test --lib   # unit tests only
 
 - [Choose a backend](./choose-a-backend.md): `Headless` is the backend to test against regardless of
   which real backend the game ships on.
+- [Record and replay](./record-and-replay.md): `TestHarness::replay`/`InputRecording` (this page)
+  cover replaying a recording back through a headless `App` in a test; `retroglyph-recorder` covers
+  actually capturing a session to a file (`InputRecorder`) or exporting it as a docs GIF
+  (`FrameRecorder`).

@@ -22,6 +22,8 @@ use retroglyph::app::Frame;
 ))]
 use retroglyph::app::{App, Flow};
 use retroglyph::backend::Backend;
+#[cfg(feature = "crossterm")]
+use retroglyph::backend::Output;
 use retroglyph::terminal::Terminal;
 #[cfg(any(
     feature = "crossterm",
@@ -165,8 +167,9 @@ struct ExampleApp<E> {
     time_scale: f64,
 }
 
-/// Multiplier applied to every [`Frame::delta`] handed to [`Example::tick`], read once from the
-/// `RG_TIME_SCALE` environment variable. Defaults to `1.0`, i.e. real time.
+/// Multiplier applied to every [`Frame::delta`] handed to [`Example::tick`], from `--time-scale`
+/// (see [`crate::args`]) or, if that flag isn't passed, the `RG_TIME_SCALE` environment
+/// variable. Defaults to `1.0`, i.e. real time.
 ///
 /// This exists for captures, not for viewers. An example that animates over real elapsed time
 /// takes real seconds to reach its end state, and the ones that deliberately park there
@@ -192,7 +195,9 @@ struct ExampleApp<E> {
     feature = "wgpu"
 ))]
 fn time_scale() -> f64 {
-    scale_from_env(std::env::var("RG_TIME_SCALE").ok().as_deref())
+    crate::args::parsed()
+        .time_scale
+        .unwrap_or_else(|| scale_from_env(std::env::var("RG_TIME_SCALE").ok().as_deref()))
 }
 
 /// [`time_scale`]'s parsing, split out so it's testable without mutating the process environment
@@ -504,6 +509,11 @@ pub fn run_wgpu<E: Example>() {
 
 /// Runs `E` on the crossterm (real TTY) backend, blocking until it quits.
 ///
+/// When `--record <path>` is passed (see [`crate::args`]), wraps the backend in a
+/// [`retroglyph_recorder::FrameRecorder`] and writes an asciicast `.cast` to `path` once `E`
+/// quits -- this is the one native, text-oriented backend `--record` covers; see that flag's own
+/// docs on [`launch`] for why the windowed backends don't get it.
+///
 /// # Errors
 ///
 /// Returns an error if the terminal fails to initialize, or if a frame present fails while `E` is
@@ -523,7 +533,42 @@ pub fn run_crossterm<E: Example>() -> std::io::Result<()> {
         inner: perf_overlay_app(ExampleApp::<E>::new(), "crossterm"),
         presses,
     };
-    retroglyph::app::run_on(Terminal::new(filter), app)
+
+    match crate::args::parsed().record.clone() {
+        None => retroglyph::app::run_on(Terminal::new(filter), app),
+        Some(path) => {
+            let recorder = retroglyph_recorder::FrameRecorder::new(filter);
+            let handle = recorder.handle();
+            let size = recorder.inner().size();
+            // `run_on` takes `Terminal<B>` (and so this `FrameRecorder`) by value and never
+            // hands it back -- `handle`, taken before this call, is how the captured frames
+            // survive it. Runs to completion (propagating any error) before saving, so a
+            // recording is only written for a session that actually ran; see `save_cast` for why
+            // a save failure itself doesn't override that result.
+            let result = retroglyph::app::run_on(Terminal::new(recorder), app);
+            save_cast(&handle, size, &path);
+            result
+        }
+    }
+}
+
+/// Writes `handle`'s captured frames to `path` as asciicast v3, via
+/// [`retroglyph_recorder::write_cast`]. Errors are logged to stderr rather than propagated: by
+/// the time this runs, `E` has already quit (successfully or not) and the process is about to
+/// exit either way, so failing to save the recording shouldn't also turn an otherwise-successful
+/// run into a nonzero exit code.
+#[cfg(not(target_arch = "wasm32"))]
+fn save_cast(
+    handle: &retroglyph_recorder::FrameRecorderHandle,
+    size: retroglyph::grid::Size,
+    path: &std::path::Path,
+) {
+    let frames = handle.frames();
+    let result = std::fs::File::create(path)
+        .and_then(|mut file| retroglyph_recorder::write_cast(&mut file, size, &frames));
+    if let Err(error) = result {
+        eprintln!("--record: failed to write {}: {error}", path.display());
+    }
 }
 
 // ── Headless (stdout) fallback ──────────────────────────────────────────────
@@ -671,19 +716,69 @@ pub fn render_perf_overlay_rgb<E: Example>(
 /// build`-able) with the crate's default feature set, and so
 /// `examples/src/bin/runner.rs` can offer a "Headless" backend option
 /// uniformly across examples instead of requiring each one to opt in
-/// individually. Frame count defaults to 3 and can be overridden with the
-/// `RG_HEADLESS_FRAMES` environment variable.
+/// individually. Frame count defaults to 3 and can be overridden with `--headless-frames` (see
+/// [`crate::args`]) or, if that flag isn't passed, the `RG_HEADLESS_FRAMES` environment
+/// variable.
+#[cfg(target_arch = "wasm32")]
 pub fn run_headless_stdout<E: Example>() {
-    let frames: u32 = std::env::var("RG_HEADLESS_FRAMES")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .filter(|&n| n > 0)
-        .unwrap_or(3);
-
+    let frames = headless_frame_count();
     for (i, view) in render_headless_frames::<E>(frames).into_iter().enumerate() {
         println!("--- Frame {} ---", i + 1);
         println!("{view}");
     }
+}
+
+/// Native counterpart to the `wasm32` [`run_headless_stdout`] above.
+///
+/// Adds `--record <path>` support: wraps the backend in a [`retroglyph_recorder::FrameRecorder`]
+/// and writes an asciicast `.cast` to `path` once `E` quits. A separate loop (rather than adding
+/// an optional `FrameRecorder` parameter to [`render_headless_frames`], which stays exactly as it
+/// was) since `retroglyph-recorder` is a native-only dependency (see `examples/Cargo.toml`).
+#[cfg(not(target_arch = "wasm32"))]
+pub fn run_headless_stdout<E: Example>() {
+    use retroglyph::backend::{Headless, Output as _};
+
+    let frames = headless_frame_count();
+
+    let Some(path) = crate::args::parsed().record.clone() else {
+        for (i, view) in render_headless_frames::<E>(frames).into_iter().enumerate() {
+            println!("--- Frame {} ---", i + 1);
+            println!("{view}");
+        }
+        return;
+    };
+
+    let backend = retroglyph_recorder::FrameRecorder::new(Headless::new(50, 25));
+    let mut term = Terminal::new(backend);
+    let mut state = E::init(&mut term);
+    for i in 0..frames {
+        let frame = Frame {
+            delta: HEADLESS_FRAME_DELTA,
+            frame: u64::from(i),
+        };
+        if !state.tick(&mut term, &frame) {
+            break;
+        }
+        term.present().ok();
+        println!("--- Frame {} ---", i + 1);
+        println!("{}", term.backend().inner().format_view());
+    }
+    let handle = term.backend().handle();
+    let size = term.backend().inner().size();
+    save_cast(&handle, size, &path);
+}
+
+/// The frame count [`run_headless_stdout`] renders, from `--headless-frames` (see
+/// [`crate::args`]) or, if that flag isn't passed, the `RG_HEADLESS_FRAMES` environment
+/// variable. Defaults to 3.
+fn headless_frame_count() -> u32 {
+    crate::args::parsed().headless_frames.unwrap_or_else(|| {
+        std::env::var("RG_HEADLESS_FRAMES")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .filter(|&n| n > 0)
+            .unwrap_or(3)
+    })
 }
 
 // ── Backend dispatch ─────────────────────────────────────────────────────────
@@ -697,6 +792,14 @@ pub fn run_headless_stdout<E: Example>() {
 
 /// Picks a backend from the crate's enabled Cargo features and runs `E` on
 /// it. Call this (and nothing else) from every example's `main`.
+///
+/// `--record <path>` (see [`crate::args`]) is honored by the crossterm and headless-stdout
+/// arms only, not this windowed (software) one: [`retroglyph_recorder::write_cast`] exports
+/// text/ANSI output, and this backend presents pixels, not `DrawCell` glyph diffs, so there is
+/// nothing meaningful for a `FrameRecorder` to capture here. Passing `--record` to a
+/// software/gl/wgpu build is silently ignored rather than an error, matching this crate's
+/// existing convention for a flag or env var a particular build doesn't apply to (see
+/// `time_scale`'s `wasm32` note for the same convention elsewhere).
 #[cfg(feature = "software")]
 pub fn launch<E: Example>() {
     run_software::<E>();
