@@ -1,6 +1,6 @@
 [package]
 name = "retroglyph-gl"
-version = "0.3.2"
+version = "0.3.3"
 description = "GPU rendering backend for retroglyph: OpenGL 3.3 (native) and WebGL2 (wasm) via glow"
 readme = "README.md"
 edition.workspace = true
@@ -67,10 +67,10 @@ dev = ["retroglyph-core/dev"]
 tilesets = ["retroglyph-window/tilesets", "retroglyph-software/tilesets"]
 
 [dependencies]
-retroglyph-core = { path = "../core", version = "0.7.1", default-features = false, features = ["std"] }
+retroglyph-core = { path = "../core", version = "0.7.2", default-features = false, features = ["std"] }
 # The glyph source (BitmapFont + unscii16) lives in retroglyph-window's winit-free `font` module,
 # which this crate already depends on for `Presenter`. `default-font` forwards to window's feature.
-retroglyph-window = { path = "../window", version = "0.5.2", default-features = false }
+retroglyph-window = { path = "../window", version = "0.5.3", default-features = false }
 # 0.17 fixed a WebGL2 bug where the web backend passed `texImage3D`'s `depth` and `border`
 # arguments swapped, which made the glyph-atlas upload fail (`INVALID_VALUE: texImage3D: border
 # != 0`) so no text rendered in the browser. 0.18 adds a wasm64 dependency on
@@ -105,7 +105,7 @@ retroglyph-core = { path = "../core", default-features = false, features = ["tes
 # The README quick start and `GlBackendBuilder`'s doc example call into `retroglyph_window::winit`;
 # this crate's own `[dependencies]` entry disables `winit` (a GL renderer doesn't need the loop to
 # implement `Presenter`), so doctests need it turned back on to compile those examples.
-retroglyph-window = { path = "../window", version = "0.5.2", features = ["winit"] }
+retroglyph-window = { path = "../window", version = "0.5.3", features = ["winit"] }
 
 # Headless render tests (src/headless.rs, Linux/EGL only): they create an EGL surfaceless context,
 # run the real pipeline into an offscreen FBO, and read the pixels back to compare against the CPU

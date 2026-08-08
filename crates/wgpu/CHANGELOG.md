@@ -7,6 +7,7 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
+
 ## [0.1.2+retroglyph-wgpu](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-wgpu-v0.1.1...retroglyph-wgpu-v0.1.2) - 2026-08-07
 
 ### Documentation
