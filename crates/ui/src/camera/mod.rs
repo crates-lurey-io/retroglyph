@@ -34,6 +34,17 @@
 //! than its viewport (a fixed board, a generated map, a minimap) should be
 //! letterboxed and centered instead.
 //!
+//! [`zoom`](crate::camera::Camera::zoom) scales the same picture up: at a zoom of `(1, 1)` (the
+//! default) one world cell is one screen cell, same as above. At a larger zoom, one world cell
+//! covers a `zoom.width() x zoom.height()` block of screen cells instead, the shape a tile map
+//! with a user-controlled zoom level needs (every tile is several cells across) rather than the
+//! roguelike shape the rest of this module doc describes.
+//! [`tile_rect`](crate::camera::Camera::tile_rect) and
+//! [`tile_surface`](crate::camera::Camera::tile_surface) are the zoomed analogues of
+//! [`world_to_screen`](crate::camera::Camera::world_to_screen) and
+//! [`surface`](crate::camera::Camera::surface): one world cell in, one (possibly clipped)
+//! screen-cell block out, instead of one screen cell.
+//!
 //! See the `12_dungeon_scroll` example for `Camera` in action:
 //! <https://main.retroglyph.dev/examples/12_dungeon_scroll/terminal/>.
 //!
@@ -69,6 +80,7 @@ pub struct Camera {
     viewport: Rect,
     world: Size,
     origin: Pos,
+    zoom: Size,
 }
 
 impl Camera {
@@ -81,6 +93,7 @@ impl Camera {
             viewport,
             world,
             origin: Pos::new(0, 0),
+            zoom: Size::new(1, 1),
         }
     }
 
@@ -100,6 +113,44 @@ impl Camera {
     #[must_use]
     pub const fn origin(&self) -> Pos {
         self.origin
+    }
+
+    /// How many screen cells one world cell covers, per axis. `(1, 1)` by default: one world
+    /// cell to one screen cell, the roguelike shape the rest of this type is built around.
+    #[must_use]
+    pub const fn zoom(&self) -> Size {
+        self.zoom
+    }
+
+    /// Set how many screen cells one world cell covers, per axis, for a tile map whose tiles are
+    /// several cells across at a user-controlled scale. Pan/clamp/origin math is unaffected --
+    /// zoom only changes how a world cell projects onto screen cells, via
+    /// [`tile_rect`](Self::tile_rect) and [`tile_surface`](Self::tile_surface); it does not
+    /// change [`world_to_screen`](Self::world_to_screen), [`surface`](Self::surface), or any
+    /// other existing method, which stay one-world-cell-to-one-screen-cell regardless of zoom.
+    ///
+    /// A zero width or height clamps to `1`: a zero-size tile has no meaningful footprint to
+    /// draw into, so this refuses to create one rather than silently making every tile
+    /// disappear.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::grid::{Pos, Rect, Size};
+    /// use retroglyph_ui::camera::Camera;
+    ///
+    /// let mut cam = Camera::new(Rect::new(0, 0, 10, 10), Size::new(20, 20));
+    /// cam.set_zoom(Size::new(3, 2));
+    /// assert_eq!(cam.zoom(), Size::new(3, 2));
+    ///
+    /// // A zero axis clamps to 1 rather than producing an empty tile footprint.
+    /// cam.set_zoom(Size::new(0, 4));
+    /// assert_eq!(cam.zoom(), Size::new(1, 4));
+    /// ```
+    pub const fn set_zoom(&mut self, zoom: Size) {
+        let width = if zoom.width == 0 { 1 } else { zoom.width };
+        let height = if zoom.height == 0 { 1 } else { zoom.height };
+        self.zoom = Size::new(width, height);
     }
 
     /// Replace the viewport (for example after a terminal resize), keeping the
