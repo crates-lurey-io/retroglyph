@@ -19,13 +19,13 @@ mod support;
 mod dashboard;
 
 use dashboard::{HitTarget, MIN_TARGET_H, MIN_TARGET_W, OutpostDashboard, Tab};
-use retroglyph_core::backend::Headless;
-use retroglyph_core::event::{
+use retroglyph::TestHarness;
+use retroglyph::backend::Headless;
+use retroglyph::event::{
     Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
 };
-use retroglyph_core::grid::{Pos, Rect};
-use retroglyph_core::terminal::Terminal;
-use retroglyph_core::testing::TestHarness;
+use retroglyph::grid::{Pos, Rect};
+use retroglyph::terminal::Terminal;
 use retroglyph_examples::{Example, HEADLESS_FRAME_DELTA};
 use support::TestApp;
 

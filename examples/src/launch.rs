@@ -20,18 +20,18 @@
     feature = "wgpu"
 ))]
 use crate::perf_overlay::PerfOverlayApp;
-use retroglyph_core::app::Frame;
+use retroglyph::app::Frame;
 #[cfg(any(
     feature = "crossterm",
     feature = "software",
     feature = "gl",
     feature = "wgpu"
 ))]
-use retroglyph_core::app::{App, Flow};
-use retroglyph_core::backend::Backend;
+use retroglyph::app::{App, Flow};
+use retroglyph::backend::Backend;
 #[cfg(feature = "crossterm")]
-use retroglyph_core::backend::Output;
-use retroglyph_core::terminal::Terminal;
+use retroglyph::backend::Output;
+use retroglyph::terminal::Terminal;
 #[cfg(feature = "crossterm")]
 use std::rc::Rc;
 use std::time::Duration;
@@ -76,10 +76,10 @@ pub trait Example: Default + Sized + 'static {
 
     /// Customize a windowed backend's builder before it's built.
     ///
-    /// Generic over [`PresenterBuilder`](retroglyph_window::presenter_builder::PresenterBuilder) rather than one
+    /// Generic over [`PresenterBuilder`](retroglyph::PresenterBuilder) rather than one
     /// method per backend crate: `SoftwareBackendBuilder`, `GlBackendBuilder`, and
     /// `WgpuBackendBuilder` are different types from different crates, but
-    /// [`PresenterBuilder`](retroglyph_window::presenter_builder::PresenterBuilder) names the shape they share, so one
+    /// [`PresenterBuilder`](retroglyph::PresenterBuilder) names the shape they share, so one
     /// override here customizes every windowed backend the example is built with instead of one
     /// per crate (retroglyph#1192). An example that registers a tileset needs it on every
     /// graphical backend it supports, or a WebGL2/wgpu variant renders bitmap glyphs where the
@@ -91,15 +91,15 @@ pub trait Example: Default + Sized + 'static {
     /// windowed drivers thread through to the example, the same way [`init`](Self::init) is the
     /// one customization point for backend-dependent startup state.
     #[cfg(any(feature = "software", feature = "gl", feature = "wgpu"))]
-    fn configure<B: retroglyph_window::presenter_builder::PresenterBuilder>(builder: B) -> B {
+    fn configure<B: retroglyph::PresenterBuilder>(builder: B) -> B {
         builder
     }
 
     /// Whether the windowed backend's window should fill the browser viewport on `wasm32`
-    /// (see [`WindowConfig::fill_viewport`](retroglyph_window::winit::WindowConfig::fill_viewport))
+    /// (see [`WindowConfig::fill_viewport`](retroglyph::WindowConfig::fill_viewport))
     /// instead of rendering at its natural grid size wherever it lands on the page.
     ///
-    /// Default: `false`, matching [`WindowConfig::fit`](retroglyph_window::winit::WindowConfig::fit)'s
+    /// Default: `false`, matching [`WindowConfig::fit`](retroglyph::WindowConfig::fit)'s
     /// own default -- most demos should render at a fixed, predictable grid size. Override this
     /// (returning `true`) for an app-like example meant to be the whole page, e.g. one with a
     /// pannable world that benefits from every cell the viewport can offer, especially on a small
@@ -120,14 +120,14 @@ pub trait Example: Default + Sized + 'static {
     /// that animates over real time (rather than once per raw tick, which can
     /// fire at wildly different rates depending on the backend -- crossterm's
     /// `run_on` is an unthrottled spin loop, unlike the software
-    /// backend's vsync-paced redraw) should drive a [`Tween`](retroglyph_ui::animate::Tween)
-    /// or [`FrameClock`](retroglyph_core::frames::FrameClock) with `frame.delta`
+    /// backend's vsync-paced redraw) should drive a [`Tween`](retroglyph::ui::animate::Tween)
+    /// or [`FrameClock`](retroglyph::frames::FrameClock) with `frame.delta`
     /// instead of counting raw `tick` calls -- see `06_layers.rs`.
     ///
     /// Draws only -- it does **not** call [`Terminal::present`]. The shared driver presents after
     /// `tick` returns, so it can stamp the perf overlay (a [`PerfOverlayApp`] wrapping this
     /// adapter) on top first. Mirrors
-    /// [`App::update`](retroglyph_core::app::App::update)'s combined
+    /// [`App::update`](retroglyph::app::App::update)'s combined
     /// input-then-draw shape deliberately (rather than splitting into
     /// separate `handle_events`/`draw` trait methods) so `Example` stays a
     /// single-method contract, consistent with the rest of the library.
@@ -170,7 +170,7 @@ struct ExampleApp<E> {
 /// harness waits on -- so the marker cannot appear until the whole animation has played out. That
 /// makes the capture's wall-clock cost a property of the animation rather than of the terminal I/O
 /// it is actually there to test, and a
-/// [`FrameClock`](retroglyph_core::frames::FrameClock)-driven one cannot make that time up afterwards:
+/// [`FrameClock`](retroglyph::frames::FrameClock)-driven one cannot make that time up afterwards:
 /// `advance` caps catch-up at five steps, so any stretch the child spends descheduled under a
 /// loaded test runner is animation time it never gets back (retroglyph#544). Scaling the delta
 /// keeps the marker meaning exactly what it meant before -- "the animation has settled" -- while
@@ -324,7 +324,7 @@ impl<B: Backend, E: Example> App<B> for CrosstermToggleApp<E> {
 // ── Software backend (desktop + WASM) ───────────────────────────────────────
 
 /// Frame rate requested from the windowed backends, i.e. the
-/// [`target_fps`](retroglyph_window::winit::WindowConfig::fit) every example in this gallery runs
+/// [`target_fps`](retroglyph::WindowConfig::fit) every example in this gallery runs
 /// at.
 ///
 /// `Some(_)` rather than `None` for the whole gallery, not just the five examples that animate
@@ -346,14 +346,14 @@ impl<B: Backend, E: Example> App<B> for CrosstermToggleApp<E> {
 #[cfg(any(feature = "software", feature = "gl", feature = "wgpu"))]
 const TARGET_FPS: Option<u32> = Some(60);
 
-/// Drives a already-configured [`PresenterBuilder`](retroglyph_window::presenter_builder::PresenterBuilder) to
+/// Drives a already-configured [`PresenterBuilder`](retroglyph::PresenterBuilder) to
 /// completion: builds its presenter, wires up the perf overlay and wasm toggle button, and hands
 /// both to `retroglyph-window`'s winit `App` driver.
 ///
 /// Shared by [`run_software_with`], [`run_gl`], and [`run_wgpu`] -- the one driver behind all
 /// three, generic over `B: PresenterBuilder` (retroglyph#1192). `backend_label` becomes the perf
 /// overlay's backend readout and the panic message's backend name; it is the one thing that still
-/// varies per caller, since [`PresenterBuilder`](retroglyph_window::presenter_builder::PresenterBuilder) has no
+/// varies per caller, since [`PresenterBuilder`](retroglyph::PresenterBuilder) has no
 /// associated name of its own.
 ///
 /// Deliberately does not call [`Example::configure`]: the caller applies that (or not) before
@@ -364,7 +364,7 @@ const TARGET_FPS: Option<u32> = Some(60);
 ///
 /// Panics if `builder` fails to build its presenter, or if the event loop fails to start.
 #[cfg(any(feature = "software", feature = "gl", feature = "wgpu"))]
-fn run_windowed<E: Example, B: retroglyph_window::presenter_builder::PresenterBuilder>(
+fn run_windowed<E: Example, B: retroglyph::PresenterBuilder>(
     builder: B,
     backend_label: &'static str,
 ) {
@@ -374,18 +374,18 @@ fn run_windowed<E: Example, B: retroglyph_window::presenter_builder::PresenterBu
     let renderer = builder
         .build_presenter()
         .unwrap_or_else(|e| panic!("failed to initialize {backend_label} backend: {e}"));
-    let config = retroglyph_window::winit::WindowConfig::fit(&renderer, E::NAME, TARGET_FPS, false)
+    let config = retroglyph::WindowConfig::fit(&renderer, E::NAME, TARGET_FPS, false)
         .fill_viewport(E::fill_viewport());
     let app = WasmToggleApp::<E> {
         inner: perf_overlay_app(ExampleApp::<E>::new(), backend_label),
     };
-    retroglyph_window::winit::run_app(config, renderer, app).expect("event loop failed");
+    retroglyph::run_app(config, renderer, app).expect("event loop failed");
 }
 
 /// Runs `E` on the software (winit + softbuffer/Canvas2D) backend.
 ///
 /// Builds a 50x25 window at `scale(2)` sized to fit via
-/// [`WindowConfig::fit`](retroglyph_window::winit::WindowConfig::fit), then
+/// [`WindowConfig::fit`](retroglyph::WindowConfig::fit), then
 /// drives it with `retroglyph-window`'s winit `App` driver. This same
 /// function runs unchanged on native desktop and on `wasm32` (winit's event
 /// loop is portable); on `wasm32` it still needs to be *invoked* somehow,
@@ -399,7 +399,7 @@ fn run_windowed<E: Example, B: retroglyph_window::presenter_builder::PresenterBu
 #[cfg(feature = "software")]
 pub fn run_software<E: Example>() {
     run_software_with::<E>(E::configure(
-        retroglyph_software::config::SoftwareBackendBuilder::new()
+        retroglyph::software::config::SoftwareBackendBuilder::new()
             .grid_size(50, 25)
             .scale(2),
     ));
@@ -422,7 +422,9 @@ pub fn run_software<E: Example>() {
 /// Panics if the software backend fails to initialize, or if the event loop
 /// fails to start.
 #[cfg(feature = "software")]
-pub fn run_software_with<E: Example>(builder: retroglyph_software::config::SoftwareBackendBuilder) {
+pub fn run_software_with<E: Example>(
+    builder: retroglyph::software::config::SoftwareBackendBuilder,
+) {
     run_windowed::<E, _>(builder, "software");
 }
 
@@ -431,7 +433,7 @@ pub fn run_software_with<E: Example>(builder: retroglyph_software::config::Softw
 /// Runs `E` on the GPU (OpenGL 3.3 native / WebGL2 wasm) backend.
 ///
 /// Builds a 50x25 window at `scale(2)` sized to fit via
-/// [`WindowConfig::fit`](retroglyph_window::winit::WindowConfig::fit), then drives it with
+/// [`WindowConfig::fit`](retroglyph::WindowConfig::fit), then drives it with
 /// `retroglyph-window`'s winit `App` driver -- the same driver `run_software` uses, since
 /// `GlRenderer` is a `Presenter` too. Customization goes through [`Example::configure`], the same
 /// hook every windowed backend shares. Like `run_software`, it honors [`Example::fill_viewport`]
@@ -445,7 +447,7 @@ pub fn run_software_with<E: Example>(builder: retroglyph_software::config::Softw
 pub fn run_gl<E: Example>() {
     run_windowed::<E, _>(
         E::configure(
-            retroglyph_gl::config::GlBackendBuilder::new()
+            retroglyph::gl::config::GlBackendBuilder::new()
                 .grid_size(50, 25)
                 .scale(2),
         ),
@@ -458,7 +460,7 @@ pub fn run_gl<E: Example>() {
 /// Runs `E` on the GPU (Vulkan/Metal/D3D12, via `wgpu`) backend.
 ///
 /// Builds a 50x25 window at `scale(2)` sized to fit via
-/// [`WindowConfig::fit`](retroglyph_window::winit::WindowConfig::fit), then drives it with
+/// [`WindowConfig::fit`](retroglyph::WindowConfig::fit), then drives it with
 /// `retroglyph-window`'s winit `App` driver -- the same driver `run_software`/`run_gl` use, since
 /// `WgpuRenderer` is a `Presenter` too. Customization goes through [`Example::configure`], the
 /// same hook every windowed backend shares.
@@ -478,7 +480,7 @@ pub fn run_gl<E: Example>() {
 pub fn run_wgpu<E: Example>() {
     run_windowed::<E, _>(
         E::configure(
-            retroglyph_wgpu::config::WgpuBackendBuilder::new()
+            retroglyph::wgpu::config::WgpuBackendBuilder::new()
                 .grid_size(50, 25)
                 .scale(2),
         ),
@@ -506,15 +508,17 @@ pub fn run_crossterm<E: Example>() -> std::io::Result<()> {
     // `ToggleFilter`'s docs for why crossterm specifically needs this and the windowed backends
     // don't.
     let presses = crate::fps::TogglePresses::default();
-    let filter =
-        crate::fps::ToggleFilter::new(retroglyph_crossterm::Crossterm::new()?, Rc::clone(&presses));
+    let filter = crate::fps::ToggleFilter::new(
+        retroglyph::crossterm::Crossterm::new()?,
+        Rc::clone(&presses),
+    );
     let app = CrosstermToggleApp {
         inner: perf_overlay_app(ExampleApp::<E>::new(), "crossterm"),
         presses,
     };
 
     match crate::args::parsed().record.clone() {
-        None => retroglyph_core::app::run_on(Terminal::new(filter), app),
+        None => retroglyph::app::run_on(Terminal::new(filter), app),
         Some(path) => {
             let recorder = retroglyph_recorder::FrameRecorder::new(filter);
             let handle = recorder.handle();
@@ -524,7 +528,7 @@ pub fn run_crossterm<E: Example>() -> std::io::Result<()> {
             // survive it. Runs to completion (propagating any error) before saving, so a
             // recording is only written for a session that actually ran; see `save_cast` for why
             // a save failure itself doesn't override that result.
-            let result = retroglyph_core::app::run_on(Terminal::new(recorder), app);
+            let result = retroglyph::app::run_on(Terminal::new(recorder), app);
             save_cast(&handle, size, &path);
             result
         }
@@ -539,7 +543,7 @@ pub fn run_crossterm<E: Example>() -> std::io::Result<()> {
 #[cfg(not(target_arch = "wasm32"))]
 fn save_cast(
     handle: &retroglyph_recorder::FrameRecorderHandle,
-    size: retroglyph_core::grid::Size,
+    size: retroglyph::grid::Size,
     path: &std::path::Path,
 ) {
     let frames = handle.frames();
@@ -567,7 +571,7 @@ fn save_cast(
 pub const HEADLESS_FRAME_DELTA: Duration = Duration::from_millis(100);
 
 /// Renders up to `frames` frames of `E` against a fresh 50x25 `Headless` backend and returns
-/// each frame's [`format_view`](retroglyph_core::backend::Headless::format_view) text.
+/// each frame's [`format_view`](retroglyph::backend::Headless::format_view) text.
 ///
 /// No terminal or window is involved, and no input is ever injected --
 /// `tick` only ever sees an empty event queue. Each call is handed a
@@ -577,7 +581,7 @@ pub const HEADLESS_FRAME_DELTA: Duration = Duration::from_millis(100);
 /// exact same rendering path.
 #[must_use]
 pub fn render_headless_frames<E: Example>(frames: u32) -> Vec<String> {
-    let backend = retroglyph_core::backend::Headless::new(50, 25);
+    let backend = retroglyph::backend::Headless::new(50, 25);
     let mut term = Terminal::new(backend);
     let mut state = E::init(&mut term);
 
@@ -606,7 +610,7 @@ pub fn render_headless_frames<E: Example>(frames: u32) -> Vec<String> {
 /// [`render_headless_frames`]/`support::png_snapshot`, which both drive `E::tick` directly and so
 /// never show the overlay at all.
 ///
-/// Runs `settle_frames` plain frames first (so [`retroglyph_core::frames::FrameStats`] has real samples
+/// Runs `settle_frames` plain frames first (so [`retroglyph::frames::FrameStats`] has real samples
 /// for a sparkline-drawing renderer to show), then one synthetic toggle-key press per frame for
 /// `toggles` more frames (`PerfOverlayApp`'s toggle key cycles `Off -> Compact -> Full -> Off`),
 /// then presents once. Returns `(width, height,
@@ -626,11 +630,11 @@ pub fn render_perf_overlay_rgb<E: Example>(
     settle_frames: u32,
     toggles: u32,
 ) -> (u32, u32, Vec<u8>) {
-    use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+    use retroglyph::event::{Event, KeyCode, KeyEvent, KeyModifiers};
     use retroglyph_window::presenter::Presenter;
 
     let renderer = E::configure(
-        retroglyph_software::config::SoftwareBackendBuilder::new()
+        retroglyph::software::config::SoftwareBackendBuilder::new()
             .grid_size(cols, rows)
             .scale(scale),
     )
@@ -688,7 +692,7 @@ pub fn render_perf_overlay_rgb<E: Example>(
 }
 
 /// Fallback `main` body when neither `crossterm` nor `software` is enabled:
-/// ticks a few frames against a [`Headless`](retroglyph_core::backend::Headless)
+/// ticks a few frames against a [`Headless`](retroglyph::backend::Headless)
 /// backend and prints each to stdout.
 ///
 /// This exists so every example keeps a `main` (and stays `cargo
@@ -715,7 +719,7 @@ pub fn run_headless_stdout<E: Example>() {
 /// was) since `retroglyph-recorder` is a native-only dependency (see `examples/Cargo.toml`).
 #[cfg(not(target_arch = "wasm32"))]
 pub fn run_headless_stdout<E: Example>() {
-    use retroglyph_core::backend::{Headless, Output as _};
+    use retroglyph::backend::{Headless, Output as _};
 
     let frames = headless_frame_count();
 

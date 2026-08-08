@@ -22,10 +22,10 @@ mod support;
 #[allow(dead_code)] // `main`/the `wasm_entry!` FFI surface aren't exercised by these tests
 mod text_input;
 
-use retroglyph_core::backend::CursorStyle;
-use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyModifiers};
-use retroglyph_core::grid::Pos;
-use retroglyph_core::testing::TestHarness;
+use retroglyph::TestHarness;
+use retroglyph::backend::CursorStyle;
+use retroglyph::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+use retroglyph::grid::Pos;
 use retroglyph_examples::Example;
 use support::TestApp;
 use text_input::TextInputDemo;

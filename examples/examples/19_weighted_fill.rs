@@ -20,14 +20,14 @@
 //!
 //! Static display. Keys: `q` or `Escape` quits, or close the window.
 
-use retroglyph_core::backend::Backend;
-use retroglyph_core::color::Style;
-use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::grid::Rect;
-use retroglyph_core::surface::Surface;
-use retroglyph_core::terminal::Terminal;
+use retroglyph::backend::Backend;
+use retroglyph::color::Style;
+use retroglyph::event::{Event, KeyCode};
+use retroglyph::grid::Rect;
+use retroglyph::surface::Surface;
+use retroglyph::terminal::Terminal;
+use retroglyph::ui::layout::{Constraint, split_h, split_v};
 use retroglyph_examples::Example;
-use retroglyph_ui::layout::{Constraint, split_h, split_v};
 
 /// State for the weighted-fill example (none needed: the pane layout never changes).
 #[derive(Default)]
@@ -171,7 +171,7 @@ impl Example for WeightedFill {
     fn tick<B: Backend>(
         &mut self,
         term: &mut Terminal<B>,
-        _frame: &retroglyph_core::app::Frame,
+        _frame: &retroglyph::app::Frame,
     ) -> bool {
         if !self.handle_events(term) {
             return false;

@@ -19,9 +19,9 @@ mod support;
 mod combat_log;
 
 use combat_log::CombatLog;
-use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
-use retroglyph_core::grid::Pos;
-use retroglyph_core::testing::TestHarness;
+use retroglyph::TestHarness;
+use retroglyph::event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
+use retroglyph::grid::Pos;
 use retroglyph_examples::{Example, HEADLESS_FRAME_DELTA};
 use support::TestApp;
 
@@ -31,7 +31,7 @@ const fn key(code: KeyCode) -> Event {
 }
 
 /// Drives `E` through one synthetic key event per tick, returning each frame's
-/// [`Headless::format_view`](retroglyph_core::backend::Headless::format_view) text.
+/// [`Headless::format_view`](retroglyph::backend::Headless::format_view) text.
 ///
 /// `with_step_delta(HEADLESS_FRAME_DELTA)` (retroglyph#1001): `CombatLog::draw` integrates
 /// `ScrollState`'s wheel momentum against `frame.delta`, calibrated against

@@ -19,12 +19,12 @@ mod support;
 #[allow(dead_code)] // `main`/the `wasm_entry!` FFI surface aren't exercised by these tests
 mod settings_form;
 
-use retroglyph_core::app::Flow;
-use retroglyph_core::event::{
+use retroglyph::TestHarness;
+use retroglyph::app::Flow;
+use retroglyph::event::{
     Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
 };
-use retroglyph_core::grid::Pos;
-use retroglyph_core::testing::TestHarness;
+use retroglyph::grid::Pos;
 use retroglyph_examples::Example;
 use settings_form::SettingsForm;
 use support::TestApp;

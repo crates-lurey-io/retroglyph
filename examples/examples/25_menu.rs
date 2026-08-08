@@ -24,18 +24,18 @@
 //! Escape closes without firing. Click outside the menu to close it the same way. `q`/Escape
 //! quits while the menu is closed, or close the window.
 
-use retroglyph_core::app::Frame;
-use retroglyph_core::backend::Backend;
-use retroglyph_core::color::{Color, Style};
-use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::grid::{Rect, Size};
-use retroglyph_core::terminal::Terminal;
+use retroglyph::app::Frame;
+use retroglyph::backend::Backend;
+use retroglyph::color::{Color, Style};
+use retroglyph::event::{Event, KeyCode};
+use retroglyph::grid::{Rect, Size};
+use retroglyph::terminal::Terminal;
+use retroglyph::ui::interact::Interaction;
+use retroglyph::ui::layout::{Side, anchored_rect};
+use retroglyph::ui::state::MenuState;
+use retroglyph::ui::theme::Theme;
+use retroglyph::ui::widget::{Button, Marker, Menu, MenuRow};
 use retroglyph_examples::Example;
-use retroglyph_ui::interact::Interaction;
-use retroglyph_ui::layout::{Side, anchored_rect};
-use retroglyph_ui::state::MenuState;
-use retroglyph_ui::theme::Theme;
-use retroglyph_ui::widget::{Button, Marker, Menu, MenuRow};
 
 /// Identifies the two hit-testable regions [`Menu::show`] needs, plus the "File" trigger
 /// button's own id.

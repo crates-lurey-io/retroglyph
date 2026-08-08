@@ -9,7 +9,7 @@
 //! along the corridors, so the snapshot actually proves the camera scrolls and clamps at both
 //! edges, not just that the starting room renders once.
 //!
-//! The example moves via [`retroglyph_core::event::KeyState`], one held direction at a time, so
+//! The example moves via [`retroglyph::event::KeyState`], one held direction at a time, so
 //! the walk script below releases each direction key before pressing the next one -- an
 //! unreleased Right held across the whole walk would keep winning the example's Up/Down/Left/
 //! Right priority order over the later Down and Right legs in exactly the wrong way.
@@ -24,8 +24,8 @@ mod support;
 mod dungeon_scroll;
 
 use dungeon_scroll::DungeonScroll;
-use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
-use retroglyph_core::testing::TestHarness;
+use retroglyph::TestHarness;
+use retroglyph::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use retroglyph_examples::Example;
 use support::TestApp;
 
@@ -44,7 +44,7 @@ const fn release(code: KeyCode) -> Event {
 }
 
 /// Drives `E` through one synthetic key event per tick, returning each frame's
-/// [`Headless::format_view`](retroglyph_core::backend::Headless::format_view) text.
+/// [`Headless::format_view`](retroglyph::backend::Headless::format_view) text.
 fn drive<E: Example>(events: &[Event]) -> String {
     let mut harness = TestHarness::new(50, 25);
     let mut app = TestApp(E::init(harness.term_mut()));

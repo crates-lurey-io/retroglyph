@@ -11,17 +11,17 @@
 
 use std::vec::Vec;
 
-use retroglyph_core::app::{App, Flow, Frame};
-use retroglyph_core::backend::Backend;
-use retroglyph_core::color::Style;
-use retroglyph_core::event::{Event, KeyCode, KeyEventKind};
-use retroglyph_core::frames::FrameStats;
-use retroglyph_core::grid::{HasSize, Rect, Size};
-use retroglyph_core::surface::Layer;
-use retroglyph_core::terminal::Terminal;
-use retroglyph_ui::Surface;
-use retroglyph_ui::theme::Theme;
-use retroglyph_ui::widget::{PerfOverlay, Text, Widget as _};
+use retroglyph::app::{App, Flow, Frame};
+use retroglyph::backend::Backend;
+use retroglyph::color::Style;
+use retroglyph::event::{Event, KeyCode, KeyEventKind};
+use retroglyph::frames::FrameStats;
+use retroglyph::grid::{HasSize, Rect, Size};
+use retroglyph::surface::Layer;
+use retroglyph::terminal::Terminal;
+use retroglyph::ui::Surface;
+use retroglyph::ui::theme::Theme;
+use retroglyph::ui::widget::{PerfOverlay, Text, Widget as _};
 
 /// How many frames of [`FrameStats`] this overlay remembers. Matches `retroglyph-ui`'s own former
 /// default, and what [`PerfOverlay`] is generic over by default.
