@@ -400,7 +400,11 @@ impl Camera {
     /// assert!(cam.tile_surface(Pos::new(10, 10), &mut root).is_none());
     /// ```
     #[must_use]
-    pub fn tile_surface<'a>(&self, world: Pos, surface: &'a mut Surface<'_>) -> Option<Surface<'a>> {
+    pub fn tile_surface<'a>(
+        &self,
+        world: Pos,
+        surface: &'a mut Surface<'_>,
+    ) -> Option<Surface<'a>> {
         let (area, (ox, oy)) = self.tile_geometry(world);
         if area.is_empty() {
             return None;
