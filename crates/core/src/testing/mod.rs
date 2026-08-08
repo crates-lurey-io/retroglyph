@@ -308,7 +308,10 @@ impl TestHarness {
         // `format_view` stands `·` in for a plain space so layout is visible in text diffs
         // (`Headless::display_glyph`); matching against that convention here is what lets a
         // caller pass a natural, space-separated label instead of pre-encoding it themselves.
-        let needle: String = needle.chars().map(|c| if c == ' ' { '·' } else { c }).collect();
+        let needle: String = needle
+            .chars()
+            .map(|c| if c == ' ' { '·' } else { c })
+            .collect();
         for (y, row) in self.view().lines().enumerate() {
             if let Some(byte_index) = row.find(needle.as_str()) {
                 // `str::find` returns a byte offset; the harness's coordinates are cell (char)
