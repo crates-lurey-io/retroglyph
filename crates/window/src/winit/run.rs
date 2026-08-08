@@ -822,7 +822,7 @@ where
 /// from a bare `presenter` and delegates here.
 fn run_app_on_with_typed_proxy<T, P, A, O, D>(
     config: WindowConfig,
-    terminal: Terminal<WindowBackend<P>>,
+    mut terminal: Terminal<WindowBackend<P>>,
     mut app: A,
     on_proxy: O,
     on_custom_event: D,
@@ -834,6 +834,7 @@ where
     O: FnOnce(EventProxy<T>),
     D: FnMut(T, &mut Terminal<WindowBackend<P>>) + 'static,
 {
+    app.init(&mut terminal);
     let mut frame_count = 0u64;
     let mut last = web_time::Instant::now();
     let exit_requested = Rc::new(Cell::new(false));
