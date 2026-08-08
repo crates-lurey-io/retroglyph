@@ -10,6 +10,7 @@
 /// motion, and the in/in-out variants (the same shape mirrored to the start) are uncommon enough
 /// in practice that this curated set omits them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[non_exhaustive]
 pub enum Easing {
     /// Constant speed: `t` unchanged.
     ///

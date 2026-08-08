@@ -16,44 +16,28 @@ use crate::theme::Theme;
 /// metric rows (`VSync` state, resolution, render backend details, ...), and a scrolling
 /// frame-time [`Sparkline`].
 ///
-/// The richer counterpart to [`DefaultPerfRenderer`](crate::perf::DefaultPerfRenderer): composed
-/// entirely from existing widgets ([`Panel`], [`Text`], [`Sparkline`]), it draws through
-/// [`Surface`] like every other widget in this crate, so it already works on every backend. Hand
-/// it to [`PerfOverlayApp::with_closure`](crate::perf::PerfOverlayApp::with_closure) as a closure to use
-/// it instead of the built-in renderer:
+/// Composed entirely from existing widgets ([`Panel`], [`Text`], [`Sparkline`]), it draws through
+/// [`Surface`] like every other widget in this crate, so it already works on every backend:
 ///
 /// ```
-/// # #[cfg(feature = "std")]
-/// # {
-/// use retroglyph_core::app::{App, Flow, Frame};
-/// use retroglyph_core::backend::{Backend, Headless};
-/// use retroglyph_core::grid::Size;
-/// use retroglyph_core::terminal::Terminal;
-/// use retroglyph_ui::perf::PerfOverlayApp;
+/// use retroglyph_core::frames::FrameStats;
+/// use retroglyph_core::grid::{Grid, Rect};
 /// use retroglyph_ui::widget::{PerfOverlay, Widget};
+/// use retroglyph_ui::Surface;
 ///
-/// struct MyGame;
-/// impl<B: Backend> App<B> for MyGame {
-///     fn update(&mut self, _term: &mut Terminal<B>, frame: &Frame) -> Flow {
-///         if frame.frame >= 1 { Flow::Exit } else { Flow::Continue }
-///     }
-/// }
+/// let mut stats = FrameStats::<120>::new();
+/// stats.record(core::time::Duration::from_millis(16));
 ///
-/// let term = Terminal::new(Headless::new(60, 12));
-/// let app = PerfOverlayApp::with_closure(MyGame, "software", |stats, backend, area, surface| {
-///     PerfOverlay::new(stats)
-///         .backend(backend)
-///         .metrics(&[("res", "1920x1080"), ("vsync", "on")])
-///         .render(&mut surface.scope(area));
-/// })
-/// .size(Size::new(34, 8));
-/// retroglyph_core::app::run_on(term, app).expect("run_on");
-/// # } // `run_on` is `std`-only; a no-op under `--no-default-features`.
+/// let mut grid = Grid::new(34, 8);
+/// let area = Rect::new(0, 0, 34, 8);
+/// PerfOverlay::new(&stats)
+///     .backend("software")
+///     .metrics(&[("res", "1920x1080"), ("vsync", "on")])
+///     .render(&mut Surface::new(&mut grid, area, 0));
 /// ```
 ///
-/// `N` must match the [`FrameStats`] window it's built from; this crate's
-/// [`PerfOverlayApp`](crate::perf::PerfOverlayApp) always uses 120 samples
-/// ([`FRAME_HISTORY`](crate::perf::FRAME_HISTORY)), the default here too.
+/// `N` must match the [`FrameStats`] window it's built from; this defaults to 120 samples,
+/// matching [`FrameStats`]'s own default.
 ///
 /// # As an [`AnimatedWidget`]
 ///
@@ -62,8 +46,7 @@ use crate::theme::Theme;
 /// `state: &mut FrameStats` argument needs to *record into* the same data a draw call reads --
 /// an immutable borrow baked into `self` and a mutable one for `state` can't coexist. Use
 /// [`AnimatedPerfOverlay`] instead for a call site that owns one [`FrameStats`] field and wants to
-/// record and draw in a single call, with no [`PerfOverlayApp`](crate::perf::PerfOverlayApp) decorator
-/// wrapping the app.
+/// record and draw in a single call.
 ///
 /// Rows beyond the panel's available interior height are silently dropped: the readout row
 /// draws first, then one row per [`metrics`](Self::metrics) entry, then the sparkline, each only
@@ -260,12 +243,8 @@ fn millis(duration: core::time::Duration) -> f32 {
 /// same call. `AnimatedPerfOverlay` holds no stats reference of its own, only the same
 /// backend/title/metrics/style knobs [`PerfOverlay`] has, so there's nothing to alias.
 ///
-/// Replaces routing a `Duration` through [`PerfOverlayApp`](crate::perf::PerfOverlayApp) just to reach
-/// this widget: an app that owns one [`FrameStats`] field can record into it and draw in a single
-/// call, no decorator wrapping the app at all. [`PerfOverlayApp`](crate::perf::PerfOverlayApp) remains
-/// the right choice for an app that also wants its toggle-key handling, mode cycling, and event
-/// draining done generically, across any wrapped [`App`](retroglyph_core::app::App). This is only for
-/// the (now unblocked) case that doesn't need any of that.
+/// An app that owns one [`FrameStats`] field records into it and draws in a single call, with no
+/// decorator wrapping the app at all.
 ///
 /// # Examples
 ///

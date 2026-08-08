@@ -158,10 +158,6 @@ pub mod canvas;
 pub mod draw;
 pub mod interact;
 pub mod layout;
-// See the `too_long_first_doc_paragraph` comment above `animate`: same noisy-lint mis-attribution.
-#[allow(clippy::too_long_first_doc_paragraph)]
-/// A live frame-time/FPS overlay: [`PerfOverlayApp`](perf::PerfOverlayApp) wraps any `App` with one, on any `Backend`.
-pub mod perf;
 pub mod state;
 pub mod style;
 pub mod text;

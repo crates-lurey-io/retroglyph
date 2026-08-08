@@ -74,11 +74,10 @@
 use crate::backend::{Cursor, CursorStyle, DrawCell, Input, Output};
 use crate::color::Style;
 use crate::event::{Event, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
-use crate::grid::{Pos, Size};
+use crate::grid::{HasSize, Pos, Size};
 use crate::tile::Tile;
 use alloc::vec::Vec;
 use core::time::Duration;
-use ixy::HasSize;
 
 /// Hashes `bytes` with FNV-1a (64-bit).
 ///

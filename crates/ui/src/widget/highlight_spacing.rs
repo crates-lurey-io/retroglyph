@@ -12,6 +12,7 @@
 /// [`HighlightSpacing::Never`] never reserves it, so the symbol never renders even while
 /// something is selected.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum HighlightSpacing {
     /// Always reserve the marker column's width, whether or not anything is selected.
     Always,
