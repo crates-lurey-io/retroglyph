@@ -91,8 +91,8 @@
 //! The winit event loop and event translation (`run`, `translate`, `run_windowed`/`run_app`).
 //!
 //! Renderer crates that only implement [`Presenter`](presenter::Presenter) can disable this and
-//! depend solely on `raw-window-handle`; loops other than winit (SDL2, tao, custom) bring their
-//! own driver against `Presenter` + `WindowBackend`.
+//! depend solely on `raw-window-handle`; loops other than winit (SDL2, tao, custom) bring their own
+//! driver against `Presenter` + `WindowBackend`.
 //! <!-- gen-features:end -->
 //!
 //! # Feature flags

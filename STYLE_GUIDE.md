@@ -128,13 +128,13 @@ story: hand-rolled error enums, not a derive-macro crate.
 Reach every public item by its module path (`presenter::Presenter`, not a crate-root `Presenter`
 re-export). A crate with a `pub mod` tree gets no root `pub use` of its own items: the module path
 is the one way in, matching `ratatui-core`. `retroglyph-core` established this
-(retroglyph#1035/#1106); `retroglyph-window` followed (retroglyph#1270), and the other crates with
-a module tree (`retroglyph-gl`, `-wgpu`, `-software`, `-ui`) are the same move. `retroglyph` (the
+(retroglyph#1035/#1106); `retroglyph-window` followed (retroglyph#1270), and the other crates with a
+module tree (`retroglyph-gl`, `-wgpu`, `-software`, `-ui`) are the same move. `retroglyph` (the
 facade crate) is the deliberate exception to the whole rule: a curated root surface is its entire
 purpose.
 
-Three narrow exceptions, each called out with a one-line comment at its `pub use` so it doesn't
-read as an oversight:
+Three narrow exceptions, each called out with a one-line comment at its `pub use` so it doesn't read
+as an oversight:
 
 1. A `#[macro_export]` macro. It always resolves at the crate root regardless of which module
    defines it; that's a language constraint, not a choice (e.g. `retroglyph-core`'s `dev_only!`,

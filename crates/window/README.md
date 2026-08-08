@@ -159,7 +159,8 @@ assert_eq!((config.width(), config.height()), (80, 80));
 Hand a real `Presenter` (e.g. `retroglyph-software`'s `SoftwareRenderer`) and a `config` like this
 to [`run_windowed`]/[`run_app`] to actually open a window and drive the event loop.
 
-[`Presenter`]: https://docs.rs/retroglyph-window/latest/retroglyph_window/presenter/trait.Presenter.html
+[`Presenter`]:
+  https://docs.rs/retroglyph-window/latest/retroglyph_window/presenter/trait.Presenter.html
 [`WindowConfig::fit`]:
   https://docs.rs/retroglyph-window/latest/retroglyph_window/winit/struct.WindowConfig.html#method.fit
 [`run_windowed`]:
