@@ -4,25 +4,25 @@
 [![docs.rs](https://img.shields.io/docsrs/retroglyph-recorder)](https://docs.rs/retroglyph-recorder)
 [![license](https://img.shields.io/crates/l/retroglyph-recorder.svg)](https://github.com/crates-lurey-io/retroglyph/blob/main/LICENSE)
 
-Input recording & replay for [retroglyph](https://github.com/crates-lurey-io/retroglyph): record a
-real session's input stream and replay it through a live `App`, re-executing real application logic
-against recorded input rather than repainting recorded pixels. A bug report that replays itself into
-a regression test, with no hand-transcription.
+Recording & replay for [retroglyph](https://github.com/crates-lurey-io/retroglyph). Two recorders,
+covering "what happened" and "what was shown":
 
 - [`InputRecorder<B>`] wraps any backend and taps its input stream, so a real session can be
   captured to a `.rgrec` file (line-delimited JSON, one event per line, diffs and reviews like
-  source).
-- [`replay_live`] drives a saved recording forward into a live `Terminal`/`App`, once, at recorded
-  pace: "watch it happen" on screen.
-- `retroglyph-core`'s own `testing` feature (`TestHarness::replay`/`InputRecording`) covers driving
-  a recording back through a headless `App` in a test, with faithful (not coarse) timing -- no
-  wall-clock sleeping, no real backend needed. This crate builds `.rgrec` and the record/live-replay
-  path on top of that same `InputRecording`.
-- [`install_panic_recorder`] auto-saves an in-progress recording if the process panics, so a crash
-  doesn't lose the input that led to it.
-
-Not here: rendering a recording to an asciicast/GIF, or capturing raw terminal frames rather than
-input events -- that's the (separate, not-yet-built) frame recorder.
+  source). Replay it through a live `App` with [`replay_live`] (once, at recorded pace: "watch it
+  happen" on screen) or through a headless `App` in a test with `retroglyph-core`'s own
+  `TestHarness::replay`/`InputRecording` (faithful, not coarse, timing; no wall-clock sleeping, no
+  real backend needed) -- re-executing real application logic against recorded input, rather than
+  repainting recorded pixels. A bug report that replays itself into a regression test, with no
+  hand-transcription. [`install_panic_recorder`] auto-saves an in-progress recording if the process
+  panics, so a crash doesn't lose the input that led to it.
+- [`FrameRecorder<B>`] wraps any backend and taps its `Output::draw_layers` diff stream, buffering
+  owned frames. [`write_cast`] exports them as
+  [asciicast v3](https://docs.asciinema.org/manual/asciicast/v3/) newline-delimited JSON, so the
+  existing external ecosystem (`agg`, `asciinema-player`, `svg-term`) renders it -- this crate never
+  builds a GIF encoder or an interactive player. With the `pty` feature, `capture_pty` is a second
+  capture source (a real pseudo-terminal, for `vhs`-like real-terminal fidelity) feeding the same
+  `write_cast` path.
 
 ## Quick start
 

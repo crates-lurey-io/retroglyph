@@ -104,6 +104,14 @@ wasm-headless = []
 # `wasm_entry!` prefer `software`, then `wasm-headless`, then this).
 wasm-terminal = ["dep:retroglyph-terminal-wasm"]
 
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# `--record <path>` (`launch::<E>()`): wraps whichever native, text-oriented backend
+# (crossterm, or the headless-stdout fallback) is running in `FrameRecorder`, writing an
+# asciicast `.cast` on quit. Not wired into the windowed (software/gl/wgpu) backends -- those
+# present pixels, not `DrawCell` text/glyph diffs, and `write_cast`'s ANSI export has nothing
+# meaningful to say about a pixel frame. `wasm32` has no filesystem to write a `.cast` to either.
+retroglyph-recorder = { path = "../crates/recorder", version = "0.1.0" }
+
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "=0.2.126"
 console_error_panic_hook = "0.1"

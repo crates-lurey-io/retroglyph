@@ -18,6 +18,7 @@
 
 - [Choose a backend](./how-to/choose-a-backend.md)
 - [Test a game](./how-to/test-a-game.md)
+- [Record and replay](./how-to/record-and-replay.md)
 - [Handle resize](./how-to/handle-resize.md)
 - [Use a tileset](./how-to/use-a-tileset.md)
 - [Run in a browser](./how-to/run-in-a-browser.md)
