@@ -27,7 +27,7 @@ cargo add retroglyph-wgpu --features default-font
 
 ```rust,no_run
 use retroglyph_core::color::{Color, Style};
-use retroglyph_wgpu::WgpuBackendBuilder;
+use retroglyph_wgpu::config::WgpuBackendBuilder;
 use retroglyph_window::winit::{WindowConfig, run_windowed};
 
 fn main() {
