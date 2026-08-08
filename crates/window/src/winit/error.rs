@@ -33,3 +33,32 @@ impl From<::winit::error::EventLoopError> for EventLoopError {
         Self(err)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::EventLoopError;
+
+    // `RecreationAttempt` is the one raw `winit::error::EventLoopError` variant with no private
+    // fields, so it's the only one constructible outside `winit` itself.
+    fn recreation_attempt() -> EventLoopError {
+        EventLoopError::from(::winit::error::EventLoopError::RecreationAttempt)
+    }
+
+    #[test]
+    fn display_matches_the_wrapped_winit_error() {
+        assert_eq!(
+            recreation_attempt().to_string(),
+            ::winit::error::EventLoopError::RecreationAttempt.to_string()
+        );
+    }
+
+    #[test]
+    fn source_reaches_the_wrapped_winit_error() {
+        let err = recreation_attempt();
+        let source = std::error::Error::source(&err).expect("wraps a source");
+        assert_eq!(
+            source.to_string(),
+            ::winit::error::EventLoopError::RecreationAttempt.to_string()
+        );
+    }
+}
