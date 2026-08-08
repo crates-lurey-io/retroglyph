@@ -87,6 +87,7 @@ impl WeightedFill {
 
     /// Draws one demo row: a caption above a `split_h` of `row` using `constraints`, with each
     /// resulting pane labeled by the entry in `labels` at the same index.
+    // ANCHOR: layout
     fn draw_row(
         surface: &mut Surface<'_>,
         row: Rect,
@@ -102,6 +103,7 @@ impl WeightedFill {
             Self::draw_pane(surface, *pane, label);
         }
     }
+    // ANCHOR_END: layout
 
     /// Draws this frame (the driver presents).
     #[allow(clippy::unused_self)]

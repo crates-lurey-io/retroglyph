@@ -94,6 +94,7 @@ fn handle_event(
 /// `draw_ping_button`/`10_widgets_interaction`'s `draw_button`, except the four hand-threaded
 /// `theme.*` style calls those examples make are replaced here by the one `.theme(theme)` call
 /// this whole feature exists to add.
+// ANCHOR: theme-button
 fn draw_toggle_button(ui: &mut Ui<'_, '_, WidgetId>, rect: Rect, theme: Theme, dark: &mut bool) {
     let label = if *dark {
         "Switch to Light"
@@ -105,6 +106,7 @@ fn draw_toggle_button(ui: &mut Ui<'_, '_, WidgetId>, rect: Rect, theme: Theme, d
         *dark = !*dark;
     }
 }
+// ANCHOR_END: theme-button
 
 /// Draws one frame.
 fn draw(
@@ -122,6 +124,7 @@ fn draw(
     );
 
     let panel_area = Rect::new(0, 1, 50, 24);
+    // ANCHOR: theme-widgets
     let panel = Panel::new()
         .title(if *dark { "Theme: Dark" } else { "Theme: Light" })
         .theme(theme);
@@ -155,6 +158,7 @@ fn draw(
 
     let progress_area = Rect::new(inner.left(), inner.top() + 9, inner.width(), 1);
     ui.draw(progress_area, &ProgressBar::new(7, 10).theme(theme));
+    // ANCHOR_END: theme-widgets
 }
 
 impl Example for ThemeSwitch {

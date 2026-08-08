@@ -37,6 +37,6 @@ cargo run --example 03_a_map  # headless fallback, prints a few frames to stdout
 
 Arrow keys move `@`, blocked by the walls (`#`). `q` or `Escape` quits.
 
-This is the minimum viable tutorial. Chapter 4 (a camera and a world bigger than the screen),
-chapter 5 (a status bar and log with `retroglyph-widgets`), and chapter 6 (shipping the same program
-to a real terminal, a window, and a browser tab) continue from here.
+This is the minimum viable tutorial: the how-to section covers what comes next task by task,
+including drawing a status bar or log with `retroglyph-ui` widgets (see
+[Draw a panel](../how-to/draw-a-panel.md) and [Handle a click](../how-to/handle-a-click.md)).
