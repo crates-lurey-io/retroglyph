@@ -3,10 +3,12 @@ use retroglyph_core::color::{Color, Style};
 use retroglyph_core::grid::Rect;
 
 use super::window::visible_window;
-use super::{Measure, StatefulWidget};
+use super::{InteractiveWidget, Measure, StatefulWidget};
 use crate::Surface;
 use crate::align::Align;
 use crate::draw::fill_rect;
+use crate::interact::Response;
+use crate::interact::Sense;
 use crate::state::ListState;
 use crate::text::draw_clipped;
 use crate::theme::Theme;
@@ -32,6 +34,12 @@ use crate::theme::Theme;
 /// [`Table::theme`] had been called); set them with [`Table::header_style`],
 /// [`Table::row_style`], and [`Table::selected_style`]. `column_spacing` defaults to `1` (a
 /// single blank column between cells); set it with [`Table::column_spacing`].
+///
+/// As an [`InteractiveWidget`], a single id covers the whole table: a click selects the row
+/// under [`Response::pointer_pos`], resolved from this table's own row geometry (the header row
+/// plus `state.offset()`) the same way [`super::List`] resolves its own rows, and the wheel
+/// scrolls it via [`Response::scroll_delta`]/[`ListState::scroll_by`]. A click on the header row
+/// itself selects nothing.
 ///
 /// # Examples
 ///
@@ -140,10 +148,10 @@ impl<'a> Table<'a> {
     }
 }
 
-impl StatefulWidget for Table<'_> {
-    type State = ListState;
-
-    fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State) {
+impl Table<'_> {
+    /// The shared drawing routine both [`StatefulWidget::render`] and
+    /// [`InteractiveWidget::render`] use.
+    fn draw(&self, surface: &mut Surface<'_>, state: &ListState) {
         let (width, height) = (surface.width(), surface.height());
         if width == 0 || height == 0 {
             return;
@@ -187,6 +195,57 @@ impl StatefulWidget for Table<'_> {
                 },
             );
         }
+    }
+
+    /// The row index at `pos`, given `state`'s current scroll offset, or `None` if `pos` falls
+    /// on the header row or past the last row (not clamped to the last row).
+    fn index_at(
+        &self,
+        area: Rect,
+        state: &ListState,
+        pos: retroglyph_core::grid::Pos,
+    ) -> Option<usize> {
+        let row = pos.y.checked_sub(area.top())?.checked_sub(1)?; // row 0 is the header
+        let index = state.offset() + usize::from(row);
+        (index < self.rows.len()).then_some(index)
+    }
+}
+
+impl StatefulWidget for Table<'_> {
+    type State = ListState;
+
+    fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State) {
+        self.draw(surface, state);
+    }
+}
+
+impl<Id> InteractiveWidget<Id> for Table<'_> {
+    type State = ListState;
+
+    /// A single id covers the whole table: clicking resolves which row via
+    /// [`Response::pointer_pos`] and this table's own row geometry, rather than each row
+    /// registering its own id.
+    fn sense(&self) -> Sense {
+        Sense::click() | Sense::SCROLL | Sense::HOVER
+    }
+
+    fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State, response: Response<Id>) {
+        let area = surface.area();
+
+        // A click past the last row (or on the header row) selects nothing: it's neither
+        // clamped to the last row nor left as whatever was selected before.
+        if response.clicked()
+            && let Some(pos) = response.pointer_pos()
+            && let Some(index) = self.index_at(area, state, pos)
+        {
+            state.select(Some(index));
+        }
+        let scroll_delta = response.scroll_delta();
+        if scroll_delta != 0 {
+            state.scroll_by(scroll_delta);
+        }
+
+        self.draw(surface, state);
     }
 }
 
@@ -261,7 +320,7 @@ mod tests {
         let mut grid = Grid::new(20, 3);
         let mut state = ListState::new();
         state.select(Some(1));
-        table.render(&mut Surface::new(&mut grid, area, 0), &mut state);
+        StatefulWidget::render(&table, &mut Surface::new(&mut grid, area, 0), &mut state);
 
         // Row 1 ("Bravo") is highlighted; row 0 ("Alpha") is not.
         let highlighted_bg = grid[Pos::new(0, 2)].style().background();
@@ -279,7 +338,7 @@ mod tests {
 
         let mut grid = Grid::new(20, 3);
         let mut state = ListState::new(); // nothing selected
-        table.render(&mut Surface::new(&mut grid, area, 0), &mut state);
+        StatefulWidget::render(&table, &mut Surface::new(&mut grid, area, 0), &mut state);
 
         let row0_bg = grid[Pos::new(0, 1)].style().background();
         let row1_bg = grid[Pos::new(0, 2)].style().background();
@@ -307,7 +366,7 @@ mod tests {
         let mut grid = Grid::new(20, 3);
         let mut state = ListState::new();
         state.set_offset(2); // window is [Charlie, Delta]
-        table.render(&mut Surface::new(&mut grid, area, 0), &mut state);
+        StatefulWidget::render(&table, &mut Surface::new(&mut grid, area, 0), &mut state);
 
         // Row 1 is "Charlie", row 2 is "Delta"; neither "Alpha" nor "Bravo"
         // (offset 0/1) are drawn anywhere.
@@ -328,7 +387,7 @@ mod tests {
         let mut state = ListState::new();
         state.select(Some(0)); // "Alpha"
         state.set_offset(2); // but the window starts at "Charlie"
-        table.render(&mut Surface::new(&mut grid, area, 0), &mut state);
+        StatefulWidget::render(&table, &mut Surface::new(&mut grid, area, 0), &mut state);
 
         let row0_bg = grid[Pos::new(0, 1)].style().background();
         let row1_bg = grid[Pos::new(0, 2)].style().background();
@@ -356,7 +415,7 @@ mod tests {
 
         let mut grid = Grid::new(20, 2);
         let mut state = ListState::new();
-        table.render(&mut Surface::new(&mut grid, area, 0), &mut state);
+        StatefulWidget::render(&table, &mut Surface::new(&mut grid, area, 0), &mut state);
 
         assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Theme::DARK.fg);
         assert_eq!(
@@ -376,7 +435,7 @@ mod tests {
 
         let mut grid = Grid::new(20, 2);
         let mut state = ListState::new();
-        table.render(&mut Surface::new(&mut grid, area, 0), &mut state);
+        StatefulWidget::render(&table, &mut Surface::new(&mut grid, area, 0), &mut state);
 
         assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Color::RED);
     }
@@ -393,7 +452,7 @@ mod tests {
         let mut grid = Grid::new(20, 3);
         let mut state = ListState::new();
         state.select(Some(1));
-        table.render(&mut Surface::new(&mut grid, area, 0), &mut state);
+        StatefulWidget::render(&table, &mut Surface::new(&mut grid, area, 0), &mut state);
 
         assert_eq!(grid[Pos::new(0, 2)].style().foreground(), Color::GREEN);
         assert_eq!(grid[Pos::new(0, 2)].style().background(), Color::BLUE);
@@ -410,7 +469,7 @@ mod tests {
         let mut grid = Grid::new(20, 3);
         let mut state = ListState::new();
         state.select(Some(1));
-        table.render(&mut Surface::new(&mut grid, area, 0), &mut state);
+        StatefulWidget::render(&table, &mut Surface::new(&mut grid, area, 0), &mut state);
 
         assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Theme::DARK.fg);
         assert_eq!(
@@ -439,7 +498,7 @@ mod tests {
 
         let mut grid = Grid::new(20, 2);
         let mut state = ListState::new();
-        table.render(&mut Surface::new(&mut grid, area, 0), &mut state);
+        StatefulWidget::render(&table, &mut Surface::new(&mut grid, area, 0), &mut state);
 
         assert_eq!(grid[Pos::new(0, 0)].style().foreground(), Theme::DARK.fg);
         assert_eq!(grid[Pos::new(0, 0)].style().background(), Color::Default);
@@ -457,7 +516,7 @@ mod tests {
 
         let mut grid = Grid::new(20, 1);
         let mut state = ListState::new();
-        table.render(&mut Surface::new(&mut grid, area, 0), &mut state);
+        StatefulWidget::render(&table, &mut Surface::new(&mut grid, area, 0), &mut state);
 
         // Default spacing (1) would put "B" at column 2; spacing 3 pushes
         // it out to column 4.
@@ -506,7 +565,7 @@ mod tests {
         let mut state = ListState::new();
         state.select(Some(3)); // "Delta", off the front of the default window
         state.ensure_visible(2);
-        table.render(&mut Surface::new(&mut grid, area, 0), &mut state);
+        StatefulWidget::render(&table, &mut Surface::new(&mut grid, area, 0), &mut state);
 
         // ensure_visible moved the window to [2, 4): "Charlie" then "Delta",
         // with "Delta" (the selection) highlighted on the last visible row.
@@ -514,5 +573,109 @@ mod tests {
         let highlighted_bg = grid[Pos::new(0, 2)].style().background();
         let plain_bg = grid[Pos::new(0, 1)].style().background();
         assert_ne!(highlighted_bg, plain_bg);
+    }
+
+    #[test]
+    fn click_selects_the_row_under_the_pointer() {
+        let area = Rect::new(0, 0, 20, 3);
+        let headers = ["Name"];
+        let widths = [10u16];
+        let rows = rows(&["Alpha", "Bravo"]);
+        let rows = row_refs(&rows);
+        let table = Table::new(&headers, &widths, &rows);
+        let mut state = ListState::new();
+
+        let response: Response<()> = Response {
+            hovered: true,
+            clicked: true,
+            pointer_pos: Some(Pos::new(2, 2)), // row 1 of the table (below the header) -> "Bravo"
+            ..Response::default()
+        };
+        let mut grid = Grid::new(20, 3);
+        InteractiveWidget::render(
+            &table,
+            &mut Surface::new(&mut grid, area, 0),
+            &mut state,
+            response,
+        );
+        assert_eq!(state.selected(), Some(1));
+    }
+
+    #[test]
+    fn click_selects_the_row_under_the_pointer_with_a_scroll_offset() {
+        let area = Rect::new(0, 0, 20, 3); // 2 visible rows below the header
+        let headers = ["Name"];
+        let widths = [10u16];
+        let rows = rows(&["Alpha", "Bravo", "Charlie", "Delta"]);
+        let rows = row_refs(&rows);
+        let table = Table::new(&headers, &widths, &rows);
+        let mut state = ListState::new();
+        state.set_offset(2); // window is [Charlie, Delta]
+
+        let response: Response<()> = Response {
+            hovered: true,
+            clicked: true,
+            pointer_pos: Some(Pos::new(2, 2)), // row 1 of the window -> "Delta" (index 3)
+            ..Response::default()
+        };
+        let mut grid = Grid::new(20, 3);
+        InteractiveWidget::render(
+            &table,
+            &mut Surface::new(&mut grid, area, 0),
+            &mut state,
+            response,
+        );
+        assert_eq!(state.selected(), Some(3));
+    }
+
+    #[test]
+    fn click_on_the_header_row_selects_nothing() {
+        let area = Rect::new(0, 0, 20, 3);
+        let headers = ["Name"];
+        let widths = [10u16];
+        let rows = rows(&["Alpha", "Bravo"]);
+        let rows = row_refs(&rows);
+        let table = Table::new(&headers, &widths, &rows);
+        let mut state = ListState::new();
+        state.select(Some(0));
+
+        let response: Response<()> = Response {
+            hovered: true,
+            clicked: true,
+            pointer_pos: Some(Pos::new(2, 0)), // the header row itself
+            ..Response::default()
+        };
+        let mut grid = Grid::new(20, 3);
+        InteractiveWidget::render(
+            &table,
+            &mut Surface::new(&mut grid, area, 0),
+            &mut state,
+            response,
+        );
+        assert_eq!(state.selected(), Some(0)); // unchanged
+    }
+
+    #[test]
+    fn wheel_scroll_moves_the_offset() {
+        let area = Rect::new(0, 0, 20, 3);
+        let headers = ["Name"];
+        let widths = [10u16];
+        let rows = rows(&["Alpha", "Bravo", "Charlie", "Delta"]);
+        let rows = row_refs(&rows);
+        let table = Table::new(&headers, &widths, &rows);
+        let mut state = ListState::new();
+
+        let response: Response<()> = Response {
+            scroll_delta: 2,
+            ..Response::default()
+        };
+        let mut grid = Grid::new(20, 3);
+        InteractiveWidget::render(
+            &table,
+            &mut Surface::new(&mut grid, area, 0),
+            &mut state,
+            response,
+        );
+        assert_eq!(state.offset(), 2);
     }
 }
