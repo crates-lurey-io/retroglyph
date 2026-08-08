@@ -206,7 +206,7 @@ fn renderer(cols: u16, rows: u16, scale: u16) -> WgpuRenderer {
 
 /// A software renderer over the same grid, the CPU parity reference.
 fn software(cols: u16, rows: u16, scale: u16) -> retroglyph_software::SoftwareRenderer {
-    retroglyph_software::SoftwareBackendBuilder::new()
+    retroglyph_software::config::SoftwareBackendBuilder::new()
         .grid_size(cols, rows)
         .scale(scale)
         .build()
@@ -641,7 +641,7 @@ mod sprites {
             .tileset(opts())
             .build()
             .expect("tileset builds");
-        let cpu = retroglyph_software::SoftwareBackendBuilder::new()
+        let cpu = retroglyph_software::config::SoftwareBackendBuilder::new()
             .grid_size(cols, rows)
             .scale(scale)
             .tileset(opts())

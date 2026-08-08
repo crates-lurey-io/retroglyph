@@ -34,7 +34,7 @@ use retroglyph_core::backend::Output;
 use retroglyph_core::color::{Color, Style};
 use retroglyph_core::grid::Pos;
 use retroglyph_core::tile::Tile;
-use retroglyph_software::SoftwareBackendBuilder;
+use retroglyph_software::config::SoftwareBackendBuilder;
 use retroglyph_window::font::unscii16;
 use std::cell::RefCell;
 

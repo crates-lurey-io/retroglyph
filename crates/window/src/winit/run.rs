@@ -420,7 +420,7 @@ where
 ///
 /// ```no_run
 /// use retroglyph_core::event::Event;
-/// use retroglyph_software::SoftwareBackendBuilder;
+/// use retroglyph_software::config::SoftwareBackendBuilder;
 /// use retroglyph_window::winit::{WindowConfig, run_windowed_with_proxy};
 /// use std::time::Duration;
 ///
@@ -506,7 +506,7 @@ where
 /// # Examples
 ///
 /// ```no_run
-/// use retroglyph_software::SoftwareBackendBuilder;
+/// use retroglyph_software::config::SoftwareBackendBuilder;
 /// use retroglyph_window::winit::{WindowConfig, run_windowed_with_typed_proxy};
 /// use std::time::Duration;
 ///

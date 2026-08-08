@@ -32,14 +32,14 @@ cargo add retroglyph-software --features default-font
 Most apps open a real window via `retroglyph-window`'s `run_app`/`run_windowed` (see the
 [workspace README](https://github.com/crates-lurey-io/retroglyph#readme) for that quick start).
 Without a window,
-[`into_renderer`](https://docs.rs/retroglyph-software/latest/retroglyph_software/struct.SoftwareBackend.html#method.into_renderer)
+[`into_renderer`](https://docs.rs/retroglyph-software/latest/retroglyph_software/config/struct.SoftwareBackend.html#method.into_renderer)
 renders straight into an in-memory pixel buffer: useful for pixel-level tests:
 
 ```rust
 use retroglyph_core::backend::Backend;
 use retroglyph_core::color::{Color, Style};
 use retroglyph_core::terminal::Terminal;
-use retroglyph_software::SoftwareBackendBuilder;
+use retroglyph_software::config::SoftwareBackendBuilder;
 
 let renderer = SoftwareBackendBuilder::new()
     .grid_size(1, 1)

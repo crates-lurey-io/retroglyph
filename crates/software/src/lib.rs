@@ -96,12 +96,12 @@ pub use retroglyph_window::{sprite_cache, tileset};
 // module-swap pattern std uses for `std::sys`.
 #[cfg(not(target_arch = "wasm32"))]
 #[path = "surface_native.rs"]
-mod surface;
+pub mod surface;
 #[cfg(target_arch = "wasm32")]
 #[path = "surface_wasm.rs"]
-mod surface;
+pub mod surface;
 
-pub use surface::SurfaceError;
+use surface::SurfaceError;
 use surface::WindowSurface;
 
 // Compile the code blocks in this crate's own README as doctests so its quick start is
@@ -118,13 +118,15 @@ use retroglyph_core::color::Color;
 
 // The bitmap font lives in `retroglyph-window`'s winit-free `font` module (both graphical
 // backends already depend on that crate for `Presenter`), so `retroglyph-gl` shares the exact
-// same glyph source. Re-exported here for ergonomics (the builder's `font()` takes either);
-// `unscii16` etc. are reached through `retroglyph_window::font` directly.
-pub use config::{SoftwareBackend, SoftwareBackendBuilder, SoftwareBackendError};
+// same glyph source. Re-exported here for ergonomics (the builder's `font()` takes either),
+// sparing a consumer an extra direct dependency on `retroglyph-window` just for this type, the
+// same rationale as `retroglyph-core`'s kept `HasSize` re-export; `unscii16` etc. are reached
+// through `retroglyph_window::font` directly.
 pub use retroglyph_window::font::{BitmapFont, FontChain};
 
 #[cfg(feature = "tilesets")]
 use alpha_blend::rgba::U8x4Rgba;
+use config::{SoftwareBackend, SoftwareBackendError};
 use grixy::buf::GridBuf;
 use grixy::ops::GridWrite;
 use grixy::ops::layout::{LinearLayout, RowMajor};
@@ -641,7 +643,7 @@ impl SoftwareBackend {
     /// use retroglyph_core::grid::Pos;
     /// use retroglyph_core::backend::DrawCell;
     /// use retroglyph_core::color::Color;
-    /// use retroglyph_software::SoftwareBackendBuilder;
+    /// use retroglyph_software::config::SoftwareBackendBuilder;
     ///
     /// let mut renderer = SoftwareBackendBuilder::new()
     ///     .grid_size(1, 1)
@@ -664,7 +666,8 @@ impl SoftwareBackend {
     ///
     /// Returns [`SoftwareBackendError::NoFont`] if no font is set, or
     /// [`SoftwareBackendError::MixedGlyphSizes`] if the font chain's fonts disagree on their
-    /// glyph size (both only reachable if [`SoftwareBackendBuilder::build`] was bypassed),
+    /// glyph size (both only reachable if
+    /// [`SoftwareBackendBuilder::build`](config::SoftwareBackendBuilder::build) was bypassed),
     /// [`SoftwareBackendError::ZeroScale`] if `scale` is `0` (likewise only reachable if `build`
     /// was bypassed, since a caller mutated the field after construction),
     /// [`SoftwareBackendError::ZeroGrid`] if `cols` or `rows` is `0`, and
@@ -1431,6 +1434,7 @@ fn resolve_color(color: Color, default: (u8, u8, u8)) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use config::SoftwareBackendBuilder;
     use retroglyph_core::color::Color;
     use retroglyph_core::color::Style;
     use retroglyph_core::grid::{Pos, Size};
@@ -2454,6 +2458,7 @@ mod tests {
 #[cfg(all(test, feature = "tilesets"))]
 mod span_tests {
     use super::*;
+    use config::SoftwareBackendBuilder;
     use retroglyph_core::color::Color;
     use retroglyph_core::color::Style;
     use retroglyph_core::grid::Grid;
@@ -3000,6 +3005,7 @@ mod span_tests {
 #[cfg(all(test, feature = "default-font"))]
 mod font_chain_tests {
     use super::*;
+    use config::SoftwareBackendBuilder;
     use retroglyph_core::color::Color;
     use retroglyph_core::color::Style;
     use retroglyph_core::grid::Pos;
