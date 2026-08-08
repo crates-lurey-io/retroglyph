@@ -4,7 +4,7 @@ use retroglyph_core::grid::Pos;
 
 /// The pixel geometry of a fixed cell grid: a glyph size and an integer scale.
 ///
-/// The single code embodiment of [`Presenter::cell_size`](crate::Presenter::cell_size)'s
+/// The single code embodiment of [`Presenter::cell_size`](crate::presenter::Presenter::cell_size)'s
 /// contract: physical pixels, `glyph x scale`, never DPI-auto-scaled.
 ///
 /// Every graphical backend stores one of these and returns [`cell_size`](Self::cell_size) from

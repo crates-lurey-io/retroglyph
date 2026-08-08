@@ -24,14 +24,14 @@
 #![allow(clippy::redundant_pub_crate)]
 
 use crate::error::SurfaceError;
-use retroglyph_window::WindowHandle;
+use retroglyph_window::presenter::WindowHandle;
 use std::sync::Arc;
 #[cfg(target_arch = "wasm32")]
 use std::{cell::RefCell, rc::Rc};
 
 /// The wgpu instance, adapter, device, and queue.
 ///
-/// Created once per [`init_surface`](retroglyph_window::Presenter::init_surface). The `wgpu`
+/// Created once per [`init_surface`](retroglyph_window::presenter::Presenter::init_surface). The `wgpu`
 /// handles are all reference-counted internally, so cloning one out to pass around is cheap;
 /// this type exists to keep them together and to own the instance, which the surface's lifetime
 /// depends on.
@@ -117,7 +117,7 @@ impl GpuContext {
     /// way [`pollster::block_on`] does on native. So this defers instead of blocking:
     /// [`wasm_bindgen_futures::spawn_local`] drives the adapter/device request to completion on the
     /// browser's own microtask queue, writing its result into the shared slot [`PendingGpu`] wraps.
-    /// The caller ([`Presenter::present`](retroglyph_window::Presenter::present)) polls that slot
+    /// The caller ([`Presenter::present`](retroglyph_window::presenter::Presenter::present)) polls that slot
     /// each frame and draws nothing until it resolves, so the first frames after startup are blank.
     ///
     /// # Errors
@@ -405,7 +405,7 @@ pub(crate) enum WindowedResult {
     /// The device and configured surface are ready to use.
     ///
     /// Never constructed by [`GpuContext::windowed`] on wasm32, which always defers (see
-    /// [`present`](retroglyph_window::Presenter::present) matching this variant once
+    /// [`present`](retroglyph_window::presenter::Presenter::present) matching this variant once
     /// [`PendingGpu::poll`] resolves instead); `allow(dead_code)`-exempted for the same reason
     /// [`Pending`](Self::Pending) is on native, so the enum keeps one shape on every target.
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
@@ -421,7 +421,7 @@ pub(crate) enum WindowedResult {
 }
 
 /// A slot the deferred wasm32 adapter/device request writes its result into, and the caller polls
-/// each frame ([`Presenter::present`](retroglyph_window::Presenter::present)) until it resolves.
+/// each frame ([`Presenter::present`](retroglyph_window::presenter::Presenter::present)) until it resolves.
 ///
 /// `Rc<RefCell<_>>`, not `Arc<Mutex<_>>`: wasm32 in a browser main thread is single-threaded, and
 /// `wasm_bindgen_futures::spawn_local` requires `'static` futures but never moves them across a

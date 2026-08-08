@@ -17,8 +17,8 @@
 //!   |  .build()
 //!   v
 //! GlRenderer
-//!   implements retroglyph_window::Presenter (an Output supertrait)
-//!   wrapped by retroglyph_window::WindowBackend to become a full Backend
+//!   implements retroglyph_window::presenter::Presenter (an Output supertrait)
+//!   wrapped by retroglyph_window::backend::WindowBackend to become a full Backend
 //!   (WindowBackend owns the input event queue and the no-op Cursor)
 //!   |
 //!   |  init_surface(window) -> GlContext (glutin native / WebGL2 wasm) + GlResources
@@ -138,10 +138,11 @@ use retroglyph_core::grid::HasSize;
 use retroglyph_core::grid::Size;
 use retroglyph_core::tile::Tile;
 use retroglyph_window::atlas::GlyphAtlas;
+use retroglyph_window::geometry::CellGeometry;
 use retroglyph_window::palette::{DEFAULT_BG, DEFAULT_FG};
+use retroglyph_window::presenter::{Presenter, WindowHandle, cell_art_glyph};
 #[cfg(feature = "tilesets")]
 use retroglyph_window::sprite_cache::SpriteTint;
-use retroglyph_window::{CellGeometry, Presenter, WindowHandle, cell_art_glyph};
 use shaders::GlslFlavor;
 #[cfg(feature = "tilesets")]
 use sprites::{SpriteInstance, SpriteSet, SpriteSlot};
@@ -153,7 +154,7 @@ use std::sync::Arc;
 struct ReadmeDoctests;
 
 /// The live GL renderer: a [`Presenter`], wrapped in
-/// [`WindowBackend`](retroglyph_window::WindowBackend) to form a full
+/// [`WindowBackend`](retroglyph_window::backend::WindowBackend) to form a full
 /// [`Backend`](retroglyph_core::backend::Backend) for the windowing loop.
 ///
 /// It does not implement [`Input`](retroglyph_core::backend::Input) or

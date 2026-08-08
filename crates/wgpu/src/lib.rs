@@ -15,8 +15,8 @@
 //!   |  .build()
 //!   v
 //! WgpuRenderer
-//!   implements retroglyph_window::Presenter (an Output supertrait)
-//!   wrapped by retroglyph_window::WindowBackend to become a full Backend
+//!   implements retroglyph_window::presenter::Presenter (an Output supertrait)
+//!   wrapped by retroglyph_window::backend::WindowBackend to become a full Backend
 //!   (WindowBackend owns the input event queue and the no-op Cursor)
 //!   |
 //!   |  init_surface(window) -> wgpu Device + Queue + Surface, then GpuResources
@@ -189,10 +189,11 @@ use retroglyph_core::grid::HasSize;
 use retroglyph_core::grid::Size;
 use retroglyph_core::tile::Tile;
 use retroglyph_window::atlas::GlyphAtlas;
+use retroglyph_window::geometry::CellGeometry;
 use retroglyph_window::palette::{DEFAULT_BG, DEFAULT_FG};
+use retroglyph_window::presenter::{Presenter, WindowHandle, cell_art_glyph};
 #[cfg(feature = "tilesets")]
 use retroglyph_window::sprite_cache::SpriteTint;
-use retroglyph_window::{CellGeometry, Presenter, WindowHandle, cell_art_glyph};
 #[cfg(feature = "tilesets")]
 use sprite_set::{SpriteInstance, SpriteSet, SpriteSlot};
 use std::sync::Arc;
@@ -203,7 +204,7 @@ use std::sync::Arc;
 struct ReadmeDoctests;
 
 /// The live wgpu renderer: a [`Presenter`], wrapped in
-/// [`WindowBackend`](retroglyph_window::WindowBackend) to form a full
+/// [`WindowBackend`](retroglyph_window::backend::WindowBackend) to form a full
 /// [`Backend`](retroglyph_core::backend::Backend) for the windowing loop.
 ///
 /// It does not implement [`Input`](retroglyph_core::backend::Input) or
@@ -1155,7 +1156,7 @@ mod compositing_tests {
 
     #[test]
     fn present_without_a_device_is_a_no_op() {
-        use retroglyph_window::Presenter as _;
+        use retroglyph_window::presenter::Presenter as _;
         let mut r = WgpuBackendBuilder::new()
             .grid_size(2, 1)
             .build()

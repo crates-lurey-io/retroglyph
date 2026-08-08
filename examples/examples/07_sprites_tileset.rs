@@ -351,7 +351,7 @@ impl Example for SpritesTileset {
     /// override, generic over `B: PresenterBuilder`, customizes every backend the example is
     /// built with (retroglyph#1192).
     #[cfg(any(feature = "software", feature = "gl", feature = "wgpu"))]
-    fn configure<B: retroglyph_window::PresenterBuilder>(builder: B) -> B {
+    fn configure<B: retroglyph_window::presenter_builder::PresenterBuilder>(builder: B) -> B {
         tilesets().into_iter().fold(builder, B::tileset)
     }
 

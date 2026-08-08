@@ -8,7 +8,7 @@
 //! This module is the dependency-free glyph-source layer both `retroglyph-software` (CPU
 //! rasterizer) and `retroglyph-gl` (GPU atlas) build on, so their text output stays
 //! pixel-identical. It lives here (rather than in a standalone crate) because both consumers
-//! already depend on `retroglyph-window` for [`Presenter`](crate::Presenter), and it needs none of
+//! already depend on `retroglyph-window` for [`Presenter`](crate::presenter::Presenter), and it needs none of
 //! winit: it is available with `default-features = false`. Enable the `default-font` feature for
 //! the embedded Unscii 16 font ([`unscii16::FONT`]); leave it off to supply your own via
 //! [`BitmapFont::new`].

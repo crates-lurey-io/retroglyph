@@ -81,10 +81,10 @@ pub trait Example: Default + Sized + 'static {
 
     /// Customize a windowed backend's builder before it's built.
     ///
-    /// Generic over [`PresenterBuilder`](retroglyph_window::PresenterBuilder) rather than one
+    /// Generic over [`PresenterBuilder`](retroglyph_window::presenter_builder::PresenterBuilder) rather than one
     /// method per backend crate: `SoftwareBackendBuilder`, `GlBackendBuilder`, and
     /// `WgpuBackendBuilder` are different types from different crates, but
-    /// [`PresenterBuilder`](retroglyph_window::PresenterBuilder) names the shape they share, so one
+    /// [`PresenterBuilder`](retroglyph_window::presenter_builder::PresenterBuilder) names the shape they share, so one
     /// override here customizes every windowed backend the example is built with instead of one
     /// per crate (retroglyph#1192). An example that registers a tileset needs it on every
     /// graphical backend it supports, or a WebGL2/wgpu variant renders bitmap glyphs where the
@@ -96,7 +96,7 @@ pub trait Example: Default + Sized + 'static {
     /// windowed drivers thread through to the example, the same way [`init`](Self::init) is the
     /// one customization point for backend-dependent startup state.
     #[cfg(any(feature = "software", feature = "gl", feature = "wgpu"))]
-    fn configure<B: retroglyph_window::PresenterBuilder>(builder: B) -> B {
+    fn configure<B: retroglyph_window::presenter_builder::PresenterBuilder>(builder: B) -> B {
         builder
     }
 
@@ -358,14 +358,14 @@ impl<B: Backend, E: Example> App<B> for CrosstermToggleApp<E> {
 #[cfg(any(feature = "software", feature = "gl", feature = "wgpu"))]
 const TARGET_FPS: Option<u32> = Some(60);
 
-/// Drives a already-configured [`PresenterBuilder`](retroglyph_window::PresenterBuilder) to
+/// Drives a already-configured [`PresenterBuilder`](retroglyph_window::presenter_builder::PresenterBuilder) to
 /// completion: builds its presenter, wires up the perf overlay and wasm toggle button, and hands
 /// both to `retroglyph-window`'s winit `App` driver.
 ///
 /// Shared by [`run_software_with`], [`run_gl`], and [`run_wgpu`] -- the one driver behind all
 /// three, generic over `B: PresenterBuilder` (retroglyph#1192). `backend_label` becomes the perf
 /// overlay's backend readout and the panic message's backend name; it is the one thing that still
-/// varies per caller, since [`PresenterBuilder`](retroglyph_window::PresenterBuilder) has no
+/// varies per caller, since [`PresenterBuilder`](retroglyph_window::presenter_builder::PresenterBuilder) has no
 /// associated name of its own.
 ///
 /// Deliberately does not call [`Example::configure`]: the caller applies that (or not) before
@@ -376,7 +376,7 @@ const TARGET_FPS: Option<u32> = Some(60);
 ///
 /// Panics if `builder` fails to build its presenter, or if the event loop fails to start.
 #[cfg(any(feature = "software", feature = "gl", feature = "wgpu"))]
-fn run_windowed<E: Example, B: retroglyph_window::PresenterBuilder>(
+fn run_windowed<E: Example, B: retroglyph_window::presenter_builder::PresenterBuilder>(
     builder: B,
     backend_label: &'static str,
 ) {
@@ -599,7 +599,7 @@ pub fn render_perf_overlay_rgb<E: Example>(
     toggles: u32,
 ) -> (u32, u32, Vec<u8>) {
     use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyModifiers};
-    use retroglyph_window::Presenter;
+    use retroglyph_window::presenter::Presenter;
 
     let renderer = E::configure(
         retroglyph_software::SoftwareBackendBuilder::new()

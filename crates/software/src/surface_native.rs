@@ -11,7 +11,7 @@
 // module-per-platform pattern, and `pub(crate)` is the honest choice.
 #![allow(clippy::redundant_pub_crate)]
 
-use retroglyph_window::WindowHandle;
+use retroglyph_window::presenter::WindowHandle;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
@@ -21,7 +21,7 @@ use std::sync::Arc;
 /// `surface` (softbuffer requires it), but is only stored, not read. The
 /// handle type is `Arc<dyn WindowHandle>` (raw-window-handle), not a winit
 /// type: this crate rasterizes and presents, and any windowing library that
-/// yields raw handles can drive it (see `retroglyph_window::Presenter`).
+/// yields raw handles can drive it (see `retroglyph_window::presenter::Presenter`).
 pub(crate) struct WindowSurface {
     _context: softbuffer::Context<Arc<dyn WindowHandle>>,
     surface: softbuffer::Surface<Arc<dyn WindowHandle>, Arc<dyn WindowHandle>>,
@@ -53,7 +53,7 @@ impl core::fmt::Display for SurfaceError {
 // `Lost`/`Outdated`/`Timeout` discrimination the way `wgpu::SurfaceError` does, so every present
 // failure here is treated as potentially transient, matching this crate's existing (pre-trait)
 // behavior.
-impl retroglyph_window::RecoverableError for SurfaceError {}
+impl retroglyph_window::presenter::RecoverableError for SurfaceError {}
 
 impl std::error::Error for SurfaceError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {

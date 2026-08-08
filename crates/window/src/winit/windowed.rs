@@ -30,7 +30,7 @@ use crate::winit::run::{WindowConfig, run_app_on};
 /// use retroglyph_core::app::{App, Flow, Frame, Launch, RunOptions};
 /// use retroglyph_core::backend::Backend;
 /// use retroglyph_core::terminal::Terminal;
-/// use retroglyph_window::PresenterBuilder;
+/// use retroglyph_window::presenter_builder::PresenterBuilder;
 /// use retroglyph_window::winit::Windowed;
 ///
 /// struct MyGame;

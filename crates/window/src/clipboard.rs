@@ -3,8 +3,8 @@
 //! Windowed apps have no equivalent of the terminal backends' bracketed-paste path (see
 //! `crates/crossterm/src/lib.rs`'s `Event::Paste` handling) for pulling text *out* of the
 //! clipboard on demand, nor any way to push text *into* it (e.g. a "copy" keybinding). This
-//! module fills that gap with a small [`Clipboard`] trait plus a native, `arboard`-backed
-//! [`SystemClipboard`] implementation.
+//! module fills that gap with a small [`Clipboard`](crate::clipboard::Clipboard) trait plus a
+//! native, `arboard`-backed [`SystemClipboard`](crate::clipboard::SystemClipboard) implementation.
 //!
 //! Kept out of [`retroglyph_core::backend::Backend`]: clipboard access has no notion in the
 //! terminal backends this workspace also supports (`crossterm`, `software`'s headless test
@@ -13,9 +13,10 @@
 //!
 //! # Testing
 //!
-//! The real OS clipboard ([`SystemClipboard`]) cannot be exercised headlessly in CI (no display
-//! server / clipboard manager is guaranteed to be running), so it has no automated test coverage
-//! here; it needs manual verification on each target platform instead. [`Clipboard`] is a plain
+//! The real OS clipboard ([`SystemClipboard`](crate::clipboard::SystemClipboard)) cannot be
+//! exercised headlessly in CI (no display server / clipboard manager is guaranteed to be
+//! running), so it has no automated test coverage here; it needs manual verification on each
+//! target platform instead. [`Clipboard`](crate::clipboard::Clipboard) is a plain
 //! trait specifically so app code (and this module's own tests) can substitute an in-memory fake
 //! in its place; see the `tests` module below for an example.
 
@@ -29,7 +30,7 @@ use std::fmt;
 /// # Examples
 ///
 /// ```
-/// use retroglyph_window::{Clipboard, ClipboardError};
+/// use retroglyph_window::clipboard::{Clipboard, ClipboardError};
 ///
 /// #[derive(Default)]
 /// struct FakeClipboard {

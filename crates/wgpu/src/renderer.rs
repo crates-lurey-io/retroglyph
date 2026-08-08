@@ -20,7 +20,7 @@
 //!
 //! Merging them into one quad per cell, compositing `fg` over `bg` in the fragment shader, is the
 //! obvious simplification and it does not work here. A tile's `dx`/`dy` shift its glyph within and
-//! *past* its cell, and [`Presenter`](retroglyph_window::Presenter)'s spill contract requires that
+//! *past* its cell, and [`Presenter`](retroglyph_window::presenter::Presenter)'s spill contract requires that
 //! spill to land on neighbours uniformly in all four directions while the background stays pinned
 //! to the unshifted cell. One quad couples the two: shift it and the background shifts with the
 //! glyph; leave it unshifted and the glyph clips at the cell edge instead of spilling. Laying down
@@ -505,7 +505,7 @@ impl GpuResources {
     /// down every background before any glyph is what lets an offset glyph spill past its cell
     /// edge into a neighbour in all four directions; interleaving them per cell would let a later
     /// cell's background overwrite an earlier neighbour's spill. That is the two-pass mechanism of
-    /// the sub-cell offset contract documented on [`Presenter`](retroglyph_window::Presenter),
+    /// the sub-cell offset contract documented on [`Presenter`](retroglyph_window::presenter::Presenter),
     /// shared with `retroglyph-software`.
     ///
     /// Compositing layers in one pass is what makes an empty cell in a higher layer transparent:
