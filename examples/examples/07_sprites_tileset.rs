@@ -14,7 +14,7 @@
 //!
 //! The chest (`assets/chest.png`, one 32x32 sprite) is four cells wide and
 //! two tall, drawn with a single
-//! [`Surface::put_span`](retroglyph_core::surface::Surface::put_span) call that
+//! [`Surface::put_span`](retroglyph::surface::Surface::put_span) call that
 //! carries its own text fallback:
 //!
 //! ```text
@@ -26,25 +26,25 @@
 //! seven are drawn by cell backends and suppressed by pixel backends, which
 //! blit one sprite across the whole footprint instead. Same one call, no
 //! capability check, no `cfg`. Opening the chest hit-tests with
-//! [`Grid::span_owner`](retroglyph_core::grid::Grid::span_owner), so stepping on
+//! [`Grid::span_owner`](retroglyph::grid::Grid::span_owner), so stepping on
 //! any of the eight cells counts, with no rectangle arithmetic in the
 //! example.
 //!
 //! ## Tinting one sprite into many
 //!
 //! The room has one floor sprite and one wall sprite, and every cell of the room draws the same
-//! two. A [`Tint`](retroglyph_core::color::Tint) recolours them per cell, so the light radius around
+//! two. A [`Tint`](retroglyph::color::Tint) recolours them per cell, so the light radius around
 //! the player is a falloff over that one pair of sprites rather than a sheet of pre-shaded
 //! variants:
 //!
-//! - [`Tint::Multiply`](retroglyph_core::color::Tint::Multiply) scales the room's sprites toward black
+//! - [`Tint::Multiply`](retroglyph::color::Tint::Multiply) scales the room's sprites toward black
 //!   with distance from the player. Multiply preserves the artwork's own shading, which is what
 //!   makes it right for lighting.
-//! - [`Tint::Mix`](retroglyph_core::color::Tint::Mix) blends the chest toward white while the player
+//! - [`Tint::Mix`](retroglyph::color::Tint::Mix) blends the chest toward white while the player
 //!   stands on it, so it reads as "press to open". Multiply can only darken, so it cannot
 //!   express a highlight at all.
 //!
-//! Both go through [`Surface::with_tint`](retroglyph_core::surface::Surface::with_tint), which applies to
+//! Both go through [`Surface::with_tint`](retroglyph::surface::Surface::with_tint), which applies to
 //! sprites only. On a cell backend there is no sprite to recolour, so the room renders in its
 //! own style exactly as it did before, with no `cfg` and no capability check (retroglyph#537).
 //!
@@ -66,11 +66,11 @@
 //! Keys: arrow keys move the player around the room, collecting coins and opening the chest.
 //! `q` or `Escape` quits, or close the window.
 
-use retroglyph_core::backend::Backend;
-use retroglyph_core::color::{Style, Tint};
-use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::grid::{Pos, Rect};
-use retroglyph_core::terminal::Terminal;
+use retroglyph::backend::Backend;
+use retroglyph::color::{Style, Tint};
+use retroglyph::event::{Event, KeyCode};
+use retroglyph::grid::{Pos, Rect};
+use retroglyph::terminal::Terminal;
 use retroglyph_examples::Example;
 
 /// The room's interior (floor + player + coins), in grid cells. The wall
@@ -99,7 +99,7 @@ const CHEST_ART: [&str; 2] = ["[==]", "|__|"];
 /// this" while the player can still act on it.
 ///
 /// Hit-testing which cell actually *owns* the chest still goes through
-/// [`Grid::span_owner`](retroglyph_core::grid::Grid::span_owner); this is only about drawing.
+/// [`Grid::span_owner`](retroglyph::grid::Grid::span_owner); this is only about drawing.
 const CHEST_REACH: Rect = Rect::new(CHEST.x - 1, CHEST.y - 1, 6, 4);
 
 /// The layer the chest and the other collectables live on.
@@ -164,7 +164,7 @@ impl SpritesTileset {
     /// Drains pending input: arrow keys move the player (clamped to the
     /// room's floor); `q`/`Escape` quits.
     ///
-    /// Gated on [`KeyEvent::is_down`](retroglyph_core::event::KeyEvent::is_down): a backend that
+    /// Gated on [`KeyEvent::is_down`](retroglyph::event::KeyEvent::is_down): a backend that
     /// reports both press and release as separate [`Event::Key`]s (crossterm's kitty keyboard
     /// protocol, and the software backend's real key-up events) would otherwise run each match
     /// arm's action twice per physical key tap -- once on press, once on release -- since
@@ -318,7 +318,7 @@ impl SpritesTileset {
 /// The first sheet is the one-cell room tiles; the second is the chest, a single 32x32 sprite
 /// that covers the 4x2 cells [`CHEST_ART`] spans. Nothing in the tileset says how many cells a
 /// sprite occupies -- that is declared per draw call, by
-/// [`Surface::put_span`](retroglyph_core::surface::Surface::put_span).
+/// [`Surface::put_span`](retroglyph::surface::Surface::put_span).
 // ANCHOR: tilesets
 #[cfg(any(feature = "software", feature = "gl", feature = "wgpu"))]
 fn tilesets() -> [retroglyph_window::tileset::TilesetOptions; 2] {
@@ -351,14 +351,14 @@ impl Example for SpritesTileset {
     /// override, generic over `B: PresenterBuilder`, customizes every backend the example is
     /// built with (retroglyph#1192).
     #[cfg(any(feature = "software", feature = "gl", feature = "wgpu"))]
-    fn configure<B: retroglyph_window::presenter_builder::PresenterBuilder>(builder: B) -> B {
+    fn configure<B: retroglyph::PresenterBuilder>(builder: B) -> B {
         tilesets().into_iter().fold(builder, B::tileset)
     }
 
     fn tick<B: Backend>(
         &mut self,
         term: &mut Terminal<B>,
-        _frame: &retroglyph_core::app::Frame,
+        _frame: &retroglyph::app::Frame,
     ) -> bool {
         if !self.handle_events(term) {
             return false;

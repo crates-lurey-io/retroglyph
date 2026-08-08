@@ -1,14 +1,14 @@
 //! 24: Settings form
 //!
 //! Every other widget example in this gallery proves one widget in isolation. This one proves
-//! [`FocusRing`](retroglyph_ui::interact::FocusRing) (composed into [`Interaction`] the way every
+//! [`FocusRing`](retroglyph::ui::interact::FocusRing) (composed into [`Interaction`] the way every
 //! other interactive example uses it) actually holds up once more than one `Id` variant is
 //! competing for it: an inventory [`List`] with a draggable [`Scrollbar`] on the left, two
 //! [`TextInput`] fields and a [`Button`] on the right, all sharing one `Interaction<FieldId>`.
 //! Tab/Shift+Tab cycles all five in draw order, clicking any of them focuses it, and Enter saves
 //! regardless of which one is focused.
 //!
-//! `TextInput` does implement [`InteractiveWidget`](retroglyph_ui::widget::InteractiveWidget)
+//! `TextInput` does implement [`InteractiveWidget`](retroglyph::ui::widget::InteractiveWidget)
 //! (see `retroglyph#1331`), the same as `List`, `Scrollbar`, and `Button`, but each field here is
 //! still wired by hand via [`Ui::region`] rather than `Ui::show_stateful`: this form draws a
 //! focus-highlighted [`Panel`] border around each field, and `TextInput`'s own impl only owns the
@@ -27,23 +27,23 @@
 //! directly. Up/Down moves the inventory selection while it's focused. Type to edit whichever
 //! text field is focused. Enter saves. Escape quits, or close the window.
 
-use retroglyph_core::app::Frame;
-use retroglyph_core::backend::Backend;
-use retroglyph_core::color::Style;
-use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::grid::Rect;
-use retroglyph_core::terminal::Terminal;
+use retroglyph::app::Frame;
+use retroglyph::backend::Backend;
+use retroglyph::color::Style;
+use retroglyph::event::{Event, KeyCode};
+use retroglyph::grid::Rect;
+use retroglyph::terminal::Terminal;
+use retroglyph::ui::interact::{Interaction, Sense};
+use retroglyph::ui::layout::{Constraint, split_h, split_v};
+use retroglyph::ui::state::{ListState, ScrollState, TextInputState};
+use retroglyph::ui::theme::Theme;
+use retroglyph::ui::ui::Ui;
+use retroglyph::ui::widget::{Button, List, Panel, Scrollbar, StatefulWidget, TextInput, Widget};
 use retroglyph_examples::Example;
-use retroglyph_ui::interact::{Interaction, Sense};
-use retroglyph_ui::layout::{Constraint, split_h, split_v};
-use retroglyph_ui::state::{ListState, ScrollState, TextInputState};
-use retroglyph_ui::theme::Theme;
-use retroglyph_ui::ui::Ui;
-use retroglyph_ui::widget::{Button, List, Panel, Scrollbar, StatefulWidget, TextInput, Widget};
 
 /// Identifies every focusable/clickable widget for the one shared [`Interaction`]'s hit-testing
 /// and focus ring. Draw order below (`Items`, `ItemsScroll`, `Name`, `Notes`, `Save`) is Tab
-/// order: [`FocusRing`](retroglyph_ui::interact::FocusRing) walks whatever order things were
+/// order: [`FocusRing`](retroglyph::ui::interact::FocusRing) walks whatever order things were
 /// registered in, not this enum's declaration order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FieldId {
@@ -96,7 +96,7 @@ impl Default for SettingsForm {
 }
 
 /// Draws one bordered `TextInput` field, highlighting its border when focused. `ui.show_stateful`
-/// would draw `TextInput`'s own [`retroglyph_ui::widget::InteractiveWidget`] impl directly, but
+/// would draw `TextInput`'s own [`retroglyph::ui::widget::InteractiveWidget`] impl directly, but
 /// that impl only owns the field's own area, not a wrapping border, so this hand-rolls what
 /// `ui.show_stateful` does for one automatically: [`Ui::region`] registers `area`/`id` with
 /// `Sense::click()` (hit-testing, focus-ring membership, and click-to-focus) and hands back a

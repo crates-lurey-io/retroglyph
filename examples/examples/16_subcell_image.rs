@@ -2,7 +2,7 @@
 //!
 //! [`quantize_half_block`], [`quantize_quadrant`], and [`quantize_sextant`] posterize small
 //! blocks of raw pixels to the best-matching Unicode block-element glyph: retroglyph's
-//! "render a raster image as text, no tileset required" utility (see `retroglyph_core::symbols`
+//! "render a raster image as text, no tileset required" utility (see `retroglyph::symbols`
 //! for the algorithm). This example renders the same procedural scene (concentric color rings,
 //! computed on the fly, no image file) through all three fidelities side by side, sampling more
 //! source pixels per cell as fidelity increases:
@@ -21,12 +21,12 @@
 //!
 //! Keys: `q` or `Escape` quits, or close the window.
 
-use retroglyph_core::backend::Backend;
-use retroglyph_core::color::Style;
-use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::surface::Surface;
-use retroglyph_core::symbols::{Pixel, quantize_half_block, quantize_quadrant, quantize_sextant};
-use retroglyph_core::terminal::Terminal;
+use retroglyph::backend::Backend;
+use retroglyph::color::Style;
+use retroglyph::event::{Event, KeyCode};
+use retroglyph::surface::Surface;
+use retroglyph::symbols::{Pixel, quantize_half_block, quantize_quadrant, quantize_sextant};
+use retroglyph::terminal::Terminal;
 use retroglyph_examples::Example;
 
 /// Width/height (in cells) of each of the three panels.
@@ -192,7 +192,7 @@ impl Example for SubcellImage {
     fn tick<B: Backend>(
         &mut self,
         term: &mut Terminal<B>,
-        _frame: &retroglyph_core::app::Frame,
+        _frame: &retroglyph::app::Frame,
     ) -> bool {
         if !self.handle_events(term) {
             return false;

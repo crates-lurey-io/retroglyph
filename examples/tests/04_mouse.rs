@@ -19,9 +19,9 @@ mod support;
 mod mouse;
 
 use mouse::Mouse;
-use retroglyph_core::event::{Event, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
-use retroglyph_core::grid::Pos;
-use retroglyph_core::testing::TestHarness;
+use retroglyph::TestHarness;
+use retroglyph::event::{Event, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use retroglyph::grid::Pos;
 use retroglyph_examples::Example;
 use support::TestApp;
 

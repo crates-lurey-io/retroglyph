@@ -28,7 +28,7 @@
 //!
 //! At or above [`BP_SIDEBAR`] columns, an info sidebar opens: coordinates, the biome/landmark
 //! under the reticle, elevation, a live minimap (rendered at double vertical resolution via
-//! [`retroglyph_core::symbols::quantize_half_block`], the same subcell technique
+//! [`retroglyph::symbols::quantize_half_block`], the same subcell technique
 //! `16_subcell_image` uses for raster images, applied here to a proc-gen color field instead) and
 //! a glyph legend. Below it, chrome collapses to a single status line so the map still reads on a
 //! narrow terminal.
@@ -238,9 +238,9 @@ mod world {
 
     use std::collections::HashMap;
 
-    use retroglyph_core::color::{Color, Style};
-    use retroglyph_core::grid::Pos;
-    use retroglyph_core::symbols::{Glyph, Pixel, quantize_half_block};
+    use retroglyph::color::{Color, Style};
+    use retroglyph::grid::Pos;
+    use retroglyph::symbols::{Glyph, Pixel, quantize_half_block};
 
     use super::noise::{fbm, hash01, ridge, warped_fbm};
 
@@ -955,7 +955,7 @@ mod world {
         }
 
         /// One minimap cell at `(col, row)` of a `cols`x`rows` minimap, doubled to `rows * 2`
-        /// vertical samples via [`quantize_half_block`] -- see `retroglyph_core::symbols` -- so a
+        /// vertical samples via [`quantize_half_block`] -- see `retroglyph::symbols` -- so a
         /// tiny sidebar minimap still resolves roughly twice the vertical detail a plain
         /// one-glyph-per-cell sampling would show.
         #[must_use]
@@ -2090,22 +2090,18 @@ mod world {
 }
 
 use hexal::{Direction, OddR, OffsetHex};
-use retroglyph_core::app::Frame;
-use retroglyph_core::backend::Backend;
-use retroglyph_core::color::{Color, Style};
-use retroglyph_core::event::{Event, KeyCode, KeyModifiers, MouseButton, MouseEventKind};
-use retroglyph_core::grid::{HasSize, Pos, Rect, Size};
-use retroglyph_core::terminal::Terminal;
+use retroglyph::app::Frame;
+use retroglyph::backend::Backend;
+use retroglyph::color::{Color, Style};
+use retroglyph::event::{Event, KeyCode, KeyModifiers, MouseButton, MouseEventKind};
+use retroglyph::grid::{HasSize, Pos, Rect, Size};
+use retroglyph::terminal::Terminal;
+use retroglyph::ui::Surface;
+use retroglyph::ui::camera::Camera;
+use retroglyph::ui::layout::{Constraint, split_h};
+use retroglyph::ui::text::truncate;
+use retroglyph::ui::widget::{Panel, Widget};
 use retroglyph_examples::Example;
-use retroglyph_ui::camera::Camera;
-
-use retroglyph_ui::layout::{Constraint, split_h};
-
-use retroglyph_ui::text::truncate;
-
-use retroglyph_ui::widget::{Panel, Widget};
-
-use retroglyph_ui::Surface;
 
 use world::{TILE_H, TILE_W, TileMap, World};
 pub use world::{WORLD_H, WORLD_W};

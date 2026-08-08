@@ -21,11 +21,11 @@ mod support;
 mod menu_example;
 
 use menu_example::MenuDemo;
-use retroglyph_core::event::{
+use retroglyph::TestHarness;
+use retroglyph::event::{
     Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
 };
-use retroglyph_core::grid::Pos;
-use retroglyph_core::testing::TestHarness;
+use retroglyph::grid::Pos;
 use retroglyph_examples::Example;
 use support::TestApp;
 

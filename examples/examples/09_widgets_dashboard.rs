@@ -23,20 +23,20 @@
 //! Tab to focus, then Enter/Space) the "Ping" button. `q` or `Escape` quits, or close the
 //! window.
 
-use retroglyph_core::app::Frame;
-use retroglyph_core::backend::Backend;
-use retroglyph_core::color::Style;
-use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::grid::Rect;
-use retroglyph_core::terminal::Terminal;
+use retroglyph::app::Frame;
+use retroglyph::backend::Backend;
+use retroglyph::color::Style;
+use retroglyph::event::{Event, KeyCode};
+use retroglyph::grid::Rect;
+use retroglyph::terminal::Terminal;
+use retroglyph::ui::interact::Interaction;
+use retroglyph::ui::layout::{Constraint, split_h, split_v};
+use retroglyph::ui::state::ListState;
+use retroglyph::ui::style::{BoxStyle, Sides};
+use retroglyph::ui::theme::Theme;
+use retroglyph::ui::ui::Ui;
+use retroglyph::ui::widget::{Button, Gauge, List, Sparkline, Table, Tabs};
 use retroglyph_examples::Example;
-use retroglyph_ui::interact::Interaction;
-use retroglyph_ui::layout::{Constraint, split_h, split_v};
-use retroglyph_ui::state::ListState;
-use retroglyph_ui::style::{BoxStyle, Sides};
-use retroglyph_ui::theme::Theme;
-use retroglyph_ui::ui::Ui;
-use retroglyph_ui::widget::{Button, Gauge, List, Sparkline, Table, Tabs};
 
 /// Identifies the dashboard's one interactive widget for [`Interaction`]'s hit-testing and focus
 /// ring -- see `10_widgets_interaction` for a fuller demonstration of the same machinery.
@@ -105,7 +105,7 @@ impl Default for Dashboard {
 /// Handles one already-drained event: Left/Right switch the active tab; Up/Down move whichever
 /// list the active tab shows; `q`/`Escape` quits.
 ///
-/// Gated on [`KeyEvent::is_down`](retroglyph_core::event::KeyEvent::is_down) -- see
+/// Gated on [`KeyEvent::is_down`](retroglyph::event::KeyEvent::is_down) -- see
 /// `07_sprites_tileset.rs`'s `handle_events` doc comment for why: without it, a backend that
 /// reports both press and release as separate events would move the selection twice per key tap.
 fn handle_event(

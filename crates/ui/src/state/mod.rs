@@ -8,10 +8,12 @@
 
 mod list;
 mod menu;
+mod menu_bar;
 mod scroll;
 mod text_input;
 
 pub use list::{ListState, SelectionWrap};
 pub use menu::MenuState;
+pub use menu_bar::MenuBarState;
 pub use scroll::{ScrollPhysics, ScrollState};
 pub use text_input::TextInputState;

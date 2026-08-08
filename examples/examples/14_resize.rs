@@ -33,15 +33,14 @@
 //! Resize the terminal (crossterm) or window (software) to see it adapt live. Keys: `q` or
 //! `Escape` quits.
 
-use retroglyph_core::app::Frame;
-use retroglyph_core::backend::Backend;
-use retroglyph_core::color::{AnsiColor, Color, Style};
-use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::terminal::Terminal;
+use retroglyph::app::Frame;
+use retroglyph::backend::Backend;
+use retroglyph::color::{AnsiColor, Color, Style};
+use retroglyph::event::{Event, KeyCode};
+use retroglyph::terminal::Terminal;
+use retroglyph::ui::align::Align;
+use retroglyph::ui::text::draw_clipped;
 use retroglyph_examples::Example;
-use retroglyph_ui::align::Align;
-
-use retroglyph_ui::text::draw_clipped;
 
 /// State for the resize example (none needed: every frame is drawn fresh from `term.area()`).
 #[derive(Default)]
