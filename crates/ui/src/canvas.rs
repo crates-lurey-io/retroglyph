@@ -410,6 +410,9 @@ impl BrailleCanvas {
 
 #[cfg(test)]
 mod tests {
+    use alloc::vec;
+    use alloc::vec::Vec;
+
     use super::{BrailleCanvas, Glyph, HalfBlockCanvas, QuadrantCanvas, SextantCanvas, braille};
     use retroglyph_core::color::Color;
     use retroglyph_core::symbols::{HALF_BLOCKS, QUADRANTS};
