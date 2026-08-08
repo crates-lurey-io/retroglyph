@@ -128,7 +128,7 @@ struct ReadmeDoctests;
 struct WorkspaceReadmeDoctests;
 
 pub use retroglyph_core::{
-    app, color, event, frames, grid, layout, surface, symbols, terminal, text, tile,
+    app, backend, color, event, frames, grid, layout, surface, symbols, terminal, text, tile,
 };
 
 /// The trait a backend's own builder implements to be driven end to end by
