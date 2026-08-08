@@ -67,6 +67,32 @@ fn headless_snapshot_click_increments() {
     insta::assert_snapshot!(drive(&[&[down, up], &[]]));
 }
 
+/// Regression test for retroglyph#1262: `TestHarness::click` queues Down and Up as two entries,
+/// so [`TestHarness::step`] (unlike this file's own `drive`, which pushes a whole batch straight
+/// onto the backend before one `step`) lands them in two separate `Interaction::frame` calls, one
+/// frame later than `drive`'s single-frame batch above -- costing a third, event-free frame before
+/// `resolved_release` is observed. `run`/`settle` must run that trailing frame themselves, or a
+/// click queued through the documented `TestHarness::click` + `run` pairing is never resolved.
+#[test]
+fn harness_click_resolves_via_run() {
+    let mut harness = TestHarness::new(50, 25);
+    let mut app = TestApp(WidgetsInteraction::init(harness.term_mut()));
+
+    // Registers the buttons' hitboxes for this click to land on.
+    harness.step(&mut app);
+
+    harness.click(5, 4);
+    harness.run(&mut app);
+
+    // `Headless::format_view` renders every space glyph as `·` for visibility, including the
+    // one `format!("Count: {count}")` prints.
+    assert!(
+        harness.view().contains("Count:\u{b7}1"),
+        "click queued via TestHarness::click + run should resolve, got:\n{}",
+        harness.view()
+    );
+}
+
 #[test]
 fn headless_snapshot_keyboard_focus_activate_and_reset() {
     // Frame 1: no input, just registers the buttons in the focus ring for frame 2's Tab to

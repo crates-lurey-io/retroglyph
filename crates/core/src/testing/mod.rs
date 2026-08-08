@@ -45,11 +45,11 @@ pub const STEP_DELTA: Duration = Duration::from_millis(16);
 /// Default step budget for [`TestHarness::run`](crate::testing::TestHarness::run) before it treats a
 /// non-draining event queue as a stuck app and panics.
 ///
-/// Sized to comfortably clear any single queued gesture (a click is two events, the two-frame rule
-/// costs a frame each), with headroom, while still failing fast on an app that never drains its
-/// input. The exact value is picked by feel, not measured; a test with a legitimately long settle
-/// should call [`settle`](crate::testing::TestHarness::settle) with a larger budget rather than
-/// raise this shared default.
+/// Sized to comfortably clear any single queued gesture (a click is two events plus the trailing
+/// event-free frame the two-frame rule costs), with headroom, while still failing fast on an app
+/// that never drains its input. The exact value is picked by feel, not measured; a test with a
+/// legitimately long settle should call [`settle`](crate::testing::TestHarness::settle) with a
+/// larger budget rather than raise this shared default.
 pub const DEFAULT_MAX_STEPS: u32 = 64;
 
 /// Drives an [`App`](crate::app::App) against a [`Headless`](crate::backend::Headless) backend: queues synthetic input, steps frames, and
@@ -59,10 +59,14 @@ pub const DEFAULT_MAX_STEPS: u32 = 64;
 ///
 /// A press and a release queued together resolve a frame later than the same gesture arriving
 /// from real input, because hit-testing (e.g. `retroglyph-ui`' `Interaction`) snapshots the
-/// *previous* frame's pointer state before this frame's queued events are applied. [`click`](
-/// Self::click) queues both events for you, but resolving them still costs two frames: call
-/// [`run`](Self::run) or [`settle`](Self::settle) after queuing input, not a single
-/// [`step`](Self::step).
+/// *previous* frame's pointer state before this frame's queued events are applied, and because
+/// [`step`](Self::step) drains at most one queued event per call, `click`'s Down and Up land in
+/// two separate frames rather than one, costing a third, event-free frame before that snapshot
+/// catches up: `resolved_press` from Down's frame latches `active` on Up's frame, and only the
+/// frame after *that* sees `resolved_release`. [`click`](Self::click) queues both events for you;
+/// [`run`](Self::run) and [`settle`](Self::settle) already run that trailing event-free frame, so
+/// call one of those after queuing input rather than a fixed number of manual
+/// [`step`](Self::step) calls.
 ///
 /// # Presenting
 ///
@@ -83,7 +87,11 @@ pub const DEFAULT_MAX_STEPS: u32 = 64;
 ///
 /// impl<B: Backend> App<B> for Counter {
 ///     fn update(&mut self, term: &mut Terminal<B>, frame: &Frame) -> Flow {
-///         if term.has_input() {
+///         // Draining (not just `has_input`, which leaves the event buffered) matters here:
+///         // `run` follows the queue's last event with a trailing event-free frame (see "the
+///         // two-frame rule" above), and an undrained event would still be visible to
+///         // `has_input` on that next frame too, double-counting it.
+///         if term.drain_events().count() > 0 {
 ///             self.0 += 1;
 ///         }
 ///         term.surface()
@@ -227,12 +235,17 @@ impl TestHarness {
         flow
     }
 
-    /// Runs [`step`](Self::step) until the event queue is empty (with at least one frame run),
-    /// stopping early on [`Flow::Exit`](crate::app::Flow::Exit), bounded by `max_steps`.
+    /// Runs [`step`](Self::step) until the event queue is empty *and* one further event-free
+    /// frame has run past that (with at least one frame run total), stopping early on
+    /// [`Flow::Exit`](crate::app::Flow::Exit), bounded by `max_steps`.
     ///
     /// This is the "run until settled" primitive: queuing input only stages it, `settle` resolves
-    /// the two-frame rule (see [`TestHarness`](crate::testing::TestHarness)) instead of requiring two manual `step` calls per
-    /// gesture.
+    /// the two-frame rule (see [`TestHarness`](crate::testing::TestHarness)) instead of requiring
+    /// manual `step` calls per gesture. The trailing event-free frame matters because hit-testing
+    /// (e.g. `retroglyph-ui`'s `Interaction`) reads a one-shot flag latched by the *previous*
+    /// frame's input: stopping the instant the queue empties (right after the last queued event's
+    /// own frame) would return before that flag is ever observed, leaving a queued click's
+    /// `clicked()` structurally unreachable through this API.
     ///
     /// # Errors
     ///
@@ -245,11 +258,24 @@ impl TestHarness {
         max_steps: u32,
     ) -> Result<u32, RunError> {
         let mut steps = 0;
+        let mut ran_trailing_frame = false;
         loop {
             let flow = self.step(app);
             steps += 1;
-            if flow == Flow::Exit || self.queued.is_empty() {
+            if flow == Flow::Exit {
                 return Ok(steps);
+            }
+            if self.queued.is_empty() {
+                // The queue draining doesn't mean the app has resolved everything it saw: one
+                // more event-free frame is what lets a one-shot flag latched by the last queued
+                // event's own frame (e.g. `resolved_release`) finally be observed. Run exactly one
+                // before stopping, rather than stopping the instant the queue empties.
+                if ran_trailing_frame {
+                    return Ok(steps);
+                }
+                ran_trailing_frame = true;
+            } else {
+                ran_trailing_frame = false;
             }
             if steps >= max_steps {
                 return Err(RunError::ExceededMaxSteps { max_steps });
