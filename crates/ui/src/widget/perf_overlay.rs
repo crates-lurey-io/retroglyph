@@ -8,7 +8,7 @@ use retroglyph_core::grid::Rect;
 
 use super::{AnimatedWidget, Panel, Sparkline, Text, Widget};
 use crate::Surface;
-use crate::Theme;
+use crate::theme::Theme;
 
 /// A bordered panel showing live [`FrameStats`].
 ///
@@ -16,10 +16,10 @@ use crate::Theme;
 /// metric rows (`VSync` state, resolution, render backend details, ...), and a scrolling
 /// frame-time [`Sparkline`].
 ///
-/// The richer counterpart to [`DefaultPerfRenderer`](crate::DefaultPerfRenderer): composed
+/// The richer counterpart to [`DefaultPerfRenderer`](crate::perf::DefaultPerfRenderer): composed
 /// entirely from existing widgets ([`Panel`], [`Text`], [`Sparkline`]), it draws through
 /// [`Surface`] like every other widget in this crate, so it already works on every backend. Hand
-/// it to [`PerfOverlayApp::with_closure`](crate::PerfOverlayApp::with_closure) as a closure to use
+/// it to [`PerfOverlayApp::with_closure`](crate::perf::PerfOverlayApp::with_closure) as a closure to use
 /// it instead of the built-in renderer:
 ///
 /// ```
@@ -29,7 +29,8 @@ use crate::Theme;
 /// use retroglyph_core::backend::{Backend, Headless};
 /// use retroglyph_core::grid::Size;
 /// use retroglyph_core::terminal::Terminal;
-/// use retroglyph_ui::{PerfOverlay, PerfOverlayApp, Widget};
+/// use retroglyph_ui::perf::PerfOverlayApp;
+/// use retroglyph_ui::widget::{PerfOverlay, Widget};
 ///
 /// struct MyGame;
 /// impl<B: Backend> App<B> for MyGame {
@@ -51,8 +52,8 @@ use crate::Theme;
 /// ```
 ///
 /// `N` must match the [`FrameStats`] window it's built from; this crate's
-/// [`PerfOverlayApp`](crate::PerfOverlayApp) always uses 120 samples
-/// ([`FRAME_HISTORY`](crate::FRAME_HISTORY)), the default here too.
+/// [`PerfOverlayApp`](crate::perf::PerfOverlayApp) always uses 120 samples
+/// ([`FRAME_HISTORY`](crate::perf::FRAME_HISTORY)), the default here too.
 ///
 /// # As an [`AnimatedWidget`]
 ///
@@ -61,7 +62,7 @@ use crate::Theme;
 /// `state: &mut FrameStats` argument needs to *record into* the same data a draw call reads --
 /// an immutable borrow baked into `self` and a mutable one for `state` can't coexist. Use
 /// [`AnimatedPerfOverlay`] instead for a call site that owns one [`FrameStats`] field and wants to
-/// record and draw in a single call, with no [`PerfOverlayApp`](crate::PerfOverlayApp) decorator
+/// record and draw in a single call, with no [`PerfOverlayApp`](crate::perf::PerfOverlayApp) decorator
 /// wrapping the app.
 ///
 /// Rows beyond the panel's available interior height are silently dropped: the readout row
@@ -259,9 +260,9 @@ fn millis(duration: core::time::Duration) -> f32 {
 /// same call. `AnimatedPerfOverlay` holds no stats reference of its own, only the same
 /// backend/title/metrics/style knobs [`PerfOverlay`] has, so there's nothing to alias.
 ///
-/// Replaces routing a `Duration` through [`PerfOverlayApp`](crate::PerfOverlayApp) just to reach
+/// Replaces routing a `Duration` through [`PerfOverlayApp`](crate::perf::PerfOverlayApp) just to reach
 /// this widget: an app that owns one [`FrameStats`] field can record into it and draw in a single
-/// call, no decorator wrapping the app at all. [`PerfOverlayApp`](crate::PerfOverlayApp) remains
+/// call, no decorator wrapping the app at all. [`PerfOverlayApp`](crate::perf::PerfOverlayApp) remains
 /// the right choice for an app that also wants its toggle-key handling, mode cycling, and event
 /// draining done generically, across any wrapped [`App`](retroglyph_core::app::App). This is only for
 /// the (now unblocked) case that doesn't need any of that.
@@ -276,7 +277,7 @@ fn millis(duration: core::time::Duration) -> f32 {
 /// use retroglyph_core::frames::FrameStats;
 /// use retroglyph_core::grid::Rect;
 /// use retroglyph_core::terminal::Terminal;
-/// use retroglyph_ui::{AnimatedPerfOverlay, AnimatedWidget};
+/// use retroglyph_ui::widget::{AnimatedPerfOverlay, AnimatedWidget};
 ///
 /// struct MyGame {
 ///     stats: FrameStats,

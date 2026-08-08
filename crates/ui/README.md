@@ -61,7 +61,8 @@ cargo add retroglyph-core retroglyph-ui
 
 ```rust
 use retroglyph_core::grid::{Grid, Rect};
-use retroglyph_ui::{Gauge, Surface, Widget};
+use retroglyph_core::surface::Surface;
+use retroglyph_ui::widget::{Gauge, Widget};
 
 let area = Rect::new(0, 0, 20, 1);
 let mut grid = Grid::new(20, 1);
@@ -75,7 +76,8 @@ area and an id once and gets both hit-testing and drawing from it:
 ```rust
 use retroglyph_core::grid::{Grid, Rect};
 use retroglyph_core::surface::Surface;
-use retroglyph_ui::{Button, Interaction};
+use retroglyph_ui::interact::Interaction;
+use retroglyph_ui::widget::Button;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum WidgetId {
@@ -97,7 +99,8 @@ A control that exists but can't be used right now ("Save" with no game loaded, s
 ```rust
 use retroglyph_core::grid::{Grid, Rect};
 use retroglyph_core::surface::Surface;
-use retroglyph_ui::{Button, Interaction};
+use retroglyph_ui::interact::Interaction;
+use retroglyph_ui::widget::Button;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum WidgetId {

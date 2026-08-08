@@ -5,7 +5,7 @@ use retroglyph_core::color::{Color, Style};
 
 use super::{Widget, bar};
 use crate::Surface;
-use crate::Theme;
+use crate::theme::Theme;
 
 /// A labeled gauge: a `label`, then a bar filling `ratio` (0.0-1.0) of the
 /// remaining width, colored by [`super::Meter`], with a trailing percentage.
@@ -23,7 +23,8 @@ use crate::Theme;
 ///
 /// ```
 /// use retroglyph_core::grid::{Grid, Rect};
-/// use retroglyph_ui::{Gauge, Surface, Widget};
+/// use retroglyph_ui::widget::{Gauge, Widget};
+/// use retroglyph_ui::Surface;
 ///
 /// let area = Rect::new(0, 0, 20, 1);
 /// let mut grid = Grid::new(20, 1);

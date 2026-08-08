@@ -2,8 +2,8 @@
 //! functions (not [`widget::Scrollbar`](crate::widget::Scrollbar) methods)
 //! because they have legitimate standalone callers that never draw anything:
 //! e.g. hit-testing a click/drag against the thumb via
-//! [`Interaction::interact`](crate::Interaction::interact) with
-//! [`Sense::DRAG`](crate::Sense::DRAG), independently of (and possibly
+//! [`Interaction::interact`](crate::interact::Interaction::interact) with
+//! [`Sense::DRAG`](crate::interact::Sense::DRAG), independently of (and possibly
 //! before) ever rendering a [`widget::Scrollbar`](crate::widget::Scrollbar).
 //! This module has no dependency on (or awareness of) [`crate::interact`],
 //! and stays that way on purpose.

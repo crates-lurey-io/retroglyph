@@ -16,7 +16,7 @@ use retroglyph_core::color::Color;
 /// # Examples
 ///
 /// ```
-/// use retroglyph_ui::Meter;
+/// use retroglyph_ui::widget::Meter;
 ///
 /// let meter = Meter::new(0.9);
 /// assert_ne!(meter.color(), Meter::new(0.1).color());

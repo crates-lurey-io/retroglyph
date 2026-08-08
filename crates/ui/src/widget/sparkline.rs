@@ -21,13 +21,14 @@ use crate::Surface;
 /// [`super::Table`], and [`super::Button`], `Sparkline` has no `theme()`/
 /// `theme_on()` pair: [`Meter`] already gives its bars a semantic
 /// green-to-red color, and a fixed [`Sparkline::style`] override has no
-/// single [`Theme`](crate::Theme) role to map onto either.
+/// single [`Theme`](crate::theme::Theme) role to map onto either.
 ///
 /// # Examples
 ///
 /// ```
 /// use retroglyph_core::grid::{Grid, Rect};
-/// use retroglyph_ui::{Surface, Sparkline, Widget};
+/// use retroglyph_ui::widget::{Sparkline, Widget};
+/// use retroglyph_ui::Surface;
 ///
 /// let samples = [1.0, 3.0, 2.0, 4.0, 1.5];
 /// let mut grid = Grid::new(10, 1);

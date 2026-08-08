@@ -37,7 +37,11 @@ use retroglyph_core::grid::{Grid, Rect};
 use retroglyph_core::terminal::Terminal;
 use retroglyph_core::tile::Tile;
 use retroglyph_examples::Example;
-use retroglyph_ui::{Constraint, Easing, Panel, Tween, Widget, split_h, split_v};
+use retroglyph_ui::animate::{Easing, Tween};
+
+use retroglyph_ui::layout::{Constraint, split_h, split_v};
+
+use retroglyph_ui::widget::{Panel, Widget};
 
 /// The level, hand-designed to be solvable with the two boxes pushed one at a time: `#` wall,
 /// `.` floor, `o` goal, `$` a box (on plain floor), `@` the player's start. Both `o` cells are

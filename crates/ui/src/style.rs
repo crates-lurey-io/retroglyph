@@ -120,7 +120,7 @@ impl Sides {
 /// ```
 /// use retroglyph_core::color::Style;
 /// use retroglyph_core::grid::Pos;
-/// use retroglyph_ui::{BoxStyle, Sides};
+/// use retroglyph_ui::style::{BoxStyle, Sides};
 ///
 /// let grid = BoxStyle::new(Style::new())
 ///     .border(true)

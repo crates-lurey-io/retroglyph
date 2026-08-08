@@ -3,12 +3,12 @@ use retroglyph_core::app::Frame;
 use retroglyph_core::color::{Color, Style};
 
 use super::{AnimatedWidget, InteractiveWidget, Widget};
-use crate::Response;
-use crate::ScrollState;
-use crate::Sense;
 use crate::Surface;
-use crate::Theme;
 use crate::draw::{offset_for_pos, thumb_geometry};
+use crate::interact::Response;
+use crate::interact::Sense;
+use crate::state::ScrollState;
+use crate::theme::Theme;
 
 /// A vertical scrollbar (typically one cell wide) covering `total_len`
 /// items in a `visible_len`-row viewport.
@@ -25,8 +25,8 @@ use crate::draw::{offset_for_pos, thumb_geometry};
 /// As a plain [`Widget`], `Scrollbar` is purely a display: `offset` is whatever the caller last
 /// set, unaffected by the pointer. [`InteractiveWidget`]'s `type State = ScrollState` makes it
 /// draggable and wheel-scrollable instead: `sense()` is
-/// <code>[Sense::drag]() | [Sense::CLICK](crate::Sense::CLICK) |
-/// [Sense::SCROLL](crate::Sense::SCROLL)</code>, and its `render` reads the thumb's position from
+/// <code>[Sense::drag]() | [Sense::CLICK](crate::interact::Sense::CLICK) |
+/// [Sense::SCROLL](crate::interact::Sense::SCROLL)</code>, and its `render` reads the thumb's position from
 /// `state.integer_offset()`, drives a drag via [`offset_for_pos`]/[`ScrollState::update_drag`]/
 /// [`ScrollState::end_drag`] using [`Response::pointer_pos`], and applies wheel input via
 /// [`ScrollState::apply`].
@@ -35,7 +35,8 @@ use crate::draw::{offset_for_pos, thumb_geometry};
 ///
 /// ```
 /// use retroglyph_core::grid::{Grid, Rect};
-/// use retroglyph_ui::{Scrollbar, Surface, Widget};
+/// use retroglyph_ui::widget::{Scrollbar, Widget};
+/// use retroglyph_ui::Surface;
 ///
 /// let area = Rect::new(0, 0, 1, 10);
 /// let mut grid = Grid::new(1, 10);
@@ -203,9 +204,9 @@ impl AnimatedWidget for Scrollbar {
     type State = ScrollState;
 
     /// Ticks `state`'s momentum/rubber-band physics forward by `frame.delta` (a no-op while
-    /// [`ScrollState::dragging`](crate::ScrollState::dragging) is `true`, per [`ScrollState::tick`]'s
+    /// [`ScrollState::dragging`](crate::state::ScrollState::dragging) is `true`, per [`ScrollState::tick`]'s
     /// own docs), then draws the thumb at the resulting
-    /// [`integer_offset`](crate::ScrollState::integer_offset): the [`Widget::render`] this type
+    /// [`integer_offset`](crate::state::ScrollState::integer_offset): the [`Widget::render`] this type
     /// already has, just with `self.offset` replaced by `state`'s current one. `max_offset` is
     /// `total_len - visible_len` (floored at `0`), matching [`thumb_geometry`]'s own definition, so
     /// the physics and the drawn thumb position are always in terms of the same bound.
@@ -382,7 +383,7 @@ mod tests {
             Event, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
         };
 
-        use crate::Interaction;
+        use crate::interact::Interaction;
 
         #[derive(Clone, Copy, PartialEq, Eq)]
         enum Id {

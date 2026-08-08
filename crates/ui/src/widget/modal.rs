@@ -4,9 +4,10 @@ use retroglyph_core::grid::Rect;
 
 use super::{BorderType, Panel, Widget};
 use crate::Surface;
+use crate::align::Align;
 use crate::layout::centered_rect;
 use crate::style::Sides;
-use crate::{Align, Theme};
+use crate::theme::Theme;
 
 /// A bordered, filled box centered in a screen [`Rect`].
 ///
@@ -37,7 +38,8 @@ use crate::{Align, Theme};
 /// ```
 /// use retroglyph_core::grid::{Grid, Rect};
 /// use retroglyph_core::surface::Layer;
-/// use retroglyph_ui::{Modal, Surface};
+/// use retroglyph_ui::widget::Modal;
+/// use retroglyph_ui::Surface;
 ///
 /// let screen = Rect::new(0, 0, 20, 10);
 /// let mut grid = Grid::new(20, 10);

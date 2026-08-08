@@ -4,9 +4,9 @@
 /// Horizontal alignment of one line of text within the columns it's rendered
 /// into.
 ///
-/// A builder knob on the single-line text widgets ([`Text`](crate::Text),
-/// [`PrintLine`](crate::PrintLine)) and on the titles of [`Panel`](crate::Panel)
-/// and [`Modal`](crate::Modal). Text widgets default to `Left` (their
+/// A builder knob on the single-line text widgets ([`Text`](crate::widget::Text),
+/// [`PrintLine`](crate::widget::PrintLine)) and on the titles of [`Panel`](crate::widget::Panel)
+/// and [`Modal`](crate::widget::Modal). Text widgets default to `Left` (their
 /// long-standing behavior); panel/modal titles default to `Center` (theirs).
 ///
 /// A plain re-export of [`retroglyph_core::layout::HAlign`], not a separate type: `core::align`

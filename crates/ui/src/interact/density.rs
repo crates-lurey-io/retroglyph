@@ -7,9 +7,9 @@ use retroglyph_core::grid::Size;
 /// It exists so an app choosing between a phone-sized and a desktop-sized
 /// layout has one place to ask "how big should this button/row/slider be",
 /// rather than inventing its own ad hoc breakpoint constants per widget. An
-/// [`InteractiveWidget`](crate::InteractiveWidget) reads
+/// [`InteractiveWidget`](crate::widget::InteractiveWidget) reads
 /// [`min_target_size`](Self::min_target_size) the same way it reads
-/// [`sense`](crate::InteractiveWidget::sense); [`for_width`](Self::for_width) is the other
+/// [`sense`](crate::widget::InteractiveWidget::sense); [`for_width`](Self::for_width) is the other
 /// half, turning a terminal width into a `Density` in the first place.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

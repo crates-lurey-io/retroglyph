@@ -1,6 +1,6 @@
 //! A scrolling viewport into a world larger than the screen.
 //!
-//! [`Camera`] is pure geometry: it converts between world coordinates (cells in
+//! [`Camera`](crate::camera::Camera) is pure geometry: it converts between world coordinates (cells in
 //! some large space) and screen coordinates (cells in a [`Rect`](retroglyph_core::grid::Rect) on the
 //! terminal), and reports which world cells are currently visible. It holds no
 //! rendering opinion, so it works with any drawing style and is testable
@@ -38,7 +38,7 @@
 //! <https://main.retroglyph.dev/examples/12_dungeon_scroll/terminal/>.
 //!
 //! [`Grid::from_charmap`](retroglyph_core::grid::Grid::from_charmap) builds a styled grid from an ASCII map or
-//! level string, one tile per character; combined with a [`Camera`] and multi-layer compositing,
+//! level string, one tile per character; combined with a [`Camera`](crate::camera::Camera) and multi-layer compositing,
 //! this is how a scrolling roguelike loads and follows a map larger than the screen (see the
 //! `11_sokoban` example for `from_charmap` itself, and `15_outpost_dashboard` for a `Camera` used
 //! alongside a UI).
@@ -47,7 +47,7 @@
 //!
 //! ```
 //! use retroglyph_core::grid::{Pos, Rect, Size};
-//! use retroglyph_ui::Camera;
+//! use retroglyph_ui::camera::Camera;
 //!
 //! // A 10x10 viewport onto a 100x100 world.
 //! let mut cam = Camera::new(Rect::new(0, 0, 10, 10), Size::new(100, 100));
@@ -127,7 +127,7 @@ impl Camera {
     ///
     /// ```
     /// use retroglyph_core::grid::{Pos, Rect, Size};
-    /// use retroglyph_ui::Camera;
+    /// use retroglyph_ui::camera::Camera;
     ///
     /// let mut cam = Camera::new(Rect::new(0, 0, 10, 10), Size::new(100, 100));
     /// cam.center_on(Pos::new(50, 50));
@@ -168,7 +168,7 @@ impl Camera {
     ///
     /// ```
     /// use retroglyph_core::grid::{Pos, Rect, Size};
-    /// use retroglyph_ui::Camera;
+    /// use retroglyph_ui::camera::Camera;
     ///
     /// // A 20x20 viewport at (2, 2) over a 5x5 world: the effective viewport shrinks to 5x5
     /// // and centers within the given rect, instead of pinning to (2, 2).
@@ -222,7 +222,7 @@ impl Camera {
     ///
     /// ```
     /// use retroglyph_core::grid::{Pos, Rect, Size};
-    /// use retroglyph_ui::Camera;
+    /// use retroglyph_ui::camera::Camera;
     ///
     /// let mut cam = Camera::new(Rect::new(0, 0, 10, 10), Size::new(100, 100));
     /// cam.set_origin(Pos::new(50, 50));
@@ -258,7 +258,7 @@ impl Camera {
     ///
     /// ```
     /// use retroglyph_core::grid::{Pos, Rect, Size};
-    /// use retroglyph_ui::Camera;
+    /// use retroglyph_ui::camera::Camera;
     ///
     /// let mut cam = Camera::new(Rect::new(0, 0, 10, 10), Size::new(100, 100));
     /// cam.scroll_by(5, 3);

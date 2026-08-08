@@ -28,7 +28,15 @@ use retroglyph_core::event::{Event, KeyCode};
 use retroglyph_core::grid::Rect;
 use retroglyph_core::terminal::Terminal;
 use retroglyph_examples::Example;
-use retroglyph_ui::{Button, Interaction, List, ListState, Panel, ProgressBar, Tabs, Theme, Ui};
+use retroglyph_ui::interact::Interaction;
+
+use retroglyph_ui::state::ListState;
+
+use retroglyph_ui::theme::Theme;
+
+use retroglyph_ui::ui::Ui;
+
+use retroglyph_ui::widget::{Button, List, Panel, ProgressBar, Tabs};
 
 /// Identifies the demo's one interactive widget for [`Interaction`]'s hit-testing and focus ring.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

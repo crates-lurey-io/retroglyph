@@ -21,20 +21,20 @@ rustdoc-args = ["--cfg", "docsrs"]
 [features]
 default = ["std"]
 # Forwards `retroglyph-core`'s `dev` feature, which forces development diagnostics on in a build
-# that would otherwise compile them out (see [`retroglyph_core::dev`]).
+# that would otherwise compile them out (see [`retroglyph_core::dev`](retroglyph_core::dev)).
 dev = ["retroglyph-core/dev"]
 # Forwards to `retroglyph-core`'s `egc` feature.
 #
-# Upgrades [`Paragraph`]'s word-wrap (always available) to grapheme-cluster-aware correctness.
+# Upgrades [`Paragraph`](crate::widget::Paragraph)'s word-wrap (always available) to grapheme-cluster-aware correctness.
 egc = ["retroglyph-core/egc"]
 # Uses `retroglyph-core`'s `libm` feature (the `no_std` float backend: easing curves and
 # tweens, scrollbar geometry, gauge/sparkline/bar percentage rounding, scroll momentum decay)
 # instead of `std`'s own float intrinsics. See `std` below; a build needs exactly one of the two.
 libm = ["retroglyph-core/libm"]
-# Adds `Serialize`/`Deserialize` impls for [`Theme`] and `Density`, forwarding to
+# Adds `Serialize`/`Deserialize` impls for [`Theme`](crate::theme::Theme) and `Density`, forwarding to
 # `retroglyph-core`'s `serde` feature.
 #
-# [`Theme`] round-trips through `Color`'s own `serde` impl.
+# [`Theme`](crate::theme::Theme) round-trips through `Color`'s own `serde` impl.
 serde = ["dep:serde", "retroglyph-core/serde"]
 # Enables `retroglyph-core/std`, whose float intrinsics back this crate's own float use (see
 # `libm` above for the `no_std` alternative).

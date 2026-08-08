@@ -8,7 +8,7 @@ use retroglyph_core::grid::Rect;
 
 use super::FRAME_HISTORY;
 use crate::Surface;
-use crate::Theme;
+use crate::theme::Theme;
 
 /// Draws a [`super::PerfOverlayApp`]'s stats into a rectangular area of a [`Surface`].
 ///

@@ -16,11 +16,11 @@ struct Binding<Id, Action> {
 }
 
 /// Maps key combinations to app-defined `Action`s, the same way
-/// [`HitTester`](crate::HitTester) maps a pointer position to a widget id.
+/// [`HitTester`](crate::interact::HitTester) maps a pointer position to a widget id.
 ///
 /// A lookup table an app consults, not something that owns input handling.
 /// Bindings are either global (fire regardless of focus) or scoped to a
-/// single [`FocusRing`](crate::FocusRing) id (fire only while that id holds
+/// single [`FocusRing`](crate::interact::FocusRing) id (fire only while that id holds
 /// focus); [`resolve`](Self::resolve) checks the scoped binding first, so a
 /// widget can shadow a global shortcut for the same key while it's focused.
 ///
@@ -31,14 +31,14 @@ struct Binding<Id, Action> {
 /// flat `Action` enum. `Shortcuts` is for the simple case: one key, always
 /// the same `Action`, wherever it's in scope. Bindings are a fixed table set
 /// up once (there's no per-frame `begin_frame`/registration step like
-/// [`FocusRing`](crate::FocusRing)'s, a key combination either exists or
+/// [`FocusRing`](crate::interact::FocusRing)'s, a key combination either exists or
 /// it doesn't, regardless of what happened to be drawn this frame).
 ///
 /// # Examples
 ///
 /// ```
 /// use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyModifiers};
-/// use retroglyph_ui::Shortcuts;
+/// use retroglyph_ui::interact::Shortcuts;
 ///
 /// #[derive(Clone, Copy, PartialEq, Eq)]
 /// enum Id {
@@ -104,7 +104,7 @@ impl<Id: Copy + PartialEq, Action: Copy> Shortcuts<Id, Action> {
     }
 
     /// Resolves `event` against `focused` (typically
-    /// [`FocusRing::focused`](crate::FocusRing::focused)).
+    /// [`FocusRing::focused`](crate::interact::FocusRing::focused)).
     ///
     /// `None` for anything but a key-down event. Otherwise: the first
     /// registered binding scoped to `focused` with a matching

@@ -4,14 +4,14 @@ use retroglyph_core::grid::Rect;
 
 use super::window::visible_window;
 use super::{HighlightSpacing, InteractiveWidget, ListDirection, Measure, StatefulWidget};
-use crate::Align;
-use crate::ListState;
-use crate::Response;
-use crate::Sense;
 use crate::Surface;
-use crate::Theme;
+use crate::align::Align;
 use crate::draw::fill_rect;
+use crate::interact::Response;
+use crate::interact::Sense;
+use crate::state::ListState;
 use crate::text::draw_clipped;
+use crate::theme::Theme;
 
 /// A scrollable, single-column list of plain-text items with a [`ListState`]-driven highlighted
 /// item: `Table`'s single-column sibling, sharing its windowing and selection story.
@@ -46,7 +46,9 @@ use crate::text::draw_clipped;
 ///
 /// ```
 /// use retroglyph_core::grid::{Grid, Rect};
-/// use retroglyph_ui::{List, ListState, StatefulWidget, Surface};
+/// use retroglyph_ui::state::ListState;
+/// use retroglyph_ui::widget::{List, StatefulWidget};
+/// use retroglyph_ui::Surface;
 ///
 /// let items = ["Alpha", "Bravo", "Charlie"];
 /// let mut state = ListState::new();

@@ -15,7 +15,7 @@ impl Camera {
     ///
     /// ```
     /// use retroglyph_core::grid::{Pos, Rect, Size};
-    /// use retroglyph_ui::Camera;
+    /// use retroglyph_ui::camera::Camera;
     ///
     /// // A 10x10 viewport near the bottom-right corner of a 12x12 world: the origin clamps
     /// // to (2, 2), so the visible rect is narrower than the viewport rather than reading
@@ -70,7 +70,7 @@ impl Camera {
     ///
     /// ```
     /// use retroglyph_core::grid::{Pos, Rect, Size};
-    /// use retroglyph_ui::Camera;
+    /// use retroglyph_ui::camera::Camera;
     ///
     /// let mut cam = Camera::new(Rect::new(0, 0, 10, 10), Size::new(100, 100));
     /// cam.center_on(Pos::new(50, 50));
@@ -119,7 +119,7 @@ impl Camera {
     /// use retroglyph_core::color::Style;
     /// use retroglyph_core::grid::{Grid, Pos, Rect, Size};
     /// use retroglyph_core::surface::Surface;
-    /// use retroglyph_ui::Camera;
+    /// use retroglyph_ui::camera::Camera;
     ///
     /// let mut grid = Grid::new(20, 20);
     /// let mut root = Surface::new(&mut grid, Rect::new(0, 0, 20, 20), 0);
@@ -144,7 +144,7 @@ impl Camera {
     /// use retroglyph_core::color::Style;
     /// use retroglyph_core::grid::{Grid, Pos, Rect, Size};
     /// use retroglyph_core::surface::Surface;
-    /// use retroglyph_ui::Camera;
+    /// use retroglyph_ui::camera::Camera;
     ///
     /// let mut grid = Grid::new(20, 20);
     /// let mut root = Surface::new(&mut grid, Rect::new(0, 0, 20, 20), 0);
@@ -180,7 +180,7 @@ impl Camera {
     ///
     /// ```
     /// use retroglyph_core::grid::{Pos, Rect, Size};
-    /// use retroglyph_ui::Camera;
+    /// use retroglyph_ui::camera::Camera;
     ///
     /// let mut cam = Camera::new(Rect::new(5, 5, 10, 10), Size::new(100, 100));
     /// cam.center_on(Pos::new(50, 50));
@@ -222,7 +222,7 @@ impl Camera {
     ///
     /// ```
     /// use retroglyph_core::grid::{Pos, Rect, Size};
-    /// use retroglyph_ui::Camera;
+    /// use retroglyph_ui::camera::Camera;
     ///
     /// let mut cam = Camera::new(Rect::new(5, 5, 10, 10), Size::new(100, 100));
     /// cam.center_on(Pos::new(50, 50));

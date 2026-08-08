@@ -3,7 +3,7 @@
 //! retroglyph#316 asks for this to "keep the no-retained-tree hit test cheap as widget counts
 //! grow": [`HitTester::topmost_at`] scans its registrations back-to-front with a linear `rev().
 //! find()`, and a full [`Interaction`] frame additionally re-registers every widget's rect (and,
-//! for focusable widgets, its position in the [`FocusRing`](retroglyph_ui::FocusRing)) once
+//! for focusable widgets, its position in the [`FocusRing`](retroglyph_ui::interact::FocusRing)) once
 //! per [`Interaction::interact`] call. Both are deliberately O(n) by design (see `HitTester`'s
 //! doc comment on why a plain draw-ordered `Vec` beats a spatial index at typical per-frame
 //! widget counts), but an intentional O(n) still needs a number: this benchmarks
@@ -22,7 +22,7 @@
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use retroglyph_core::grid::{Pos, Rect};
-use retroglyph_ui::{HitTester, Interaction, Sense};
+use retroglyph_ui::interact::{HitTester, Interaction, Sense};
 use std::hint::black_box;
 
 /// Builds a [`HitTester`] with `n` non-overlapping 10x1 rects stacked vertically, ids `0..n`.
