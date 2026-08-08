@@ -29,21 +29,9 @@ pub struct Meter {
 impl Meter {
     // Ramp endpoints, lerped through YELLOW at the midpoint (see `color`). Picked by eye for a
     // readable green/amber/red load ramp on a dark background; not measured against any palette.
-    const GREEN: Color = Color::Rgb {
-        r: 80,
-        g: 200,
-        b: 120,
-    };
-    const YELLOW: Color = Color::Rgb {
-        r: 220,
-        g: 200,
-        b: 90,
-    };
-    const RED: Color = Color::Rgb {
-        r: 220,
-        g: 90,
-        b: 90,
-    };
+    const GREEN: Color = Color::rgb(80, 200, 120);
+    const YELLOW: Color = Color::rgb(220, 200, 90);
+    const RED: Color = Color::rgb(220, 90, 90);
 
     /// A meter reading `ratio` (clamped to `0.0..=1.0` when colored).
     #[must_use]

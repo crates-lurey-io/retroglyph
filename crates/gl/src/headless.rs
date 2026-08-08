@@ -331,14 +331,6 @@ const GREEN: (u8, u8, u8) = (0x00, 0xFF, 0x00);
 const BLUE: (u8, u8, u8) = (0x00, 0x00, 0xFF);
 
 /// `(r, g, b)` -> a [`Color::Rgb`].
-const fn rgb(c: (u8, u8, u8)) -> Color {
-    Color::Rgb {
-        r: c.0,
-        g: c.1,
-        b: c.2,
-    }
-}
-
 /// `Presenter::geometry`/`cell_size` delegate to the renderer's internal `CellGeometry`, with no
 /// GL context required: unlike the render-correctness tests below, this doesn't gate on
 /// `RETROGLYPH_REQUIRE_GL`, so it always runs.
@@ -363,11 +355,21 @@ fn full_block_cell_is_all_foreground_blank_cell_is_all_background() {
     let cells = [
         (
             Pos::new(0, 0),
-            Tile::new('\u{2588}', Style::new().fg(rgb(RED)).bg(rgb(BLUE))),
+            Tile::new(
+                '\u{2588}',
+                Style::new()
+                    .fg(Color::rgb(RED.0, RED.1, RED.2))
+                    .bg(Color::rgb(BLUE.0, BLUE.1, BLUE.2)),
+            ),
         ),
         (
             Pos::new(1, 0),
-            Tile::new(' ', Style::new().fg(rgb(RED)).bg(rgb(GREEN))),
+            Tile::new(
+                ' ',
+                Style::new()
+                    .fg(Color::rgb(RED.0, RED.1, RED.2))
+                    .bg(Color::rgb(GREEN.0, GREEN.1, GREEN.2)),
+            ),
         ),
     ];
     paint(&mut r, &cells);
@@ -403,7 +405,12 @@ fn glyph_coverage_leaves_the_surface_opaque() {
         &mut r,
         &[(
             Pos::new(0, 0),
-            Tile::new('A', Style::new().fg(rgb(RED)).bg(rgb(BLUE))),
+            Tile::new(
+                'A',
+                Style::new()
+                    .fg(Color::rgb(RED.0, RED.1, RED.2))
+                    .bg(Color::rgb(BLUE.0, BLUE.1, BLUE.2)),
+            ),
         )],
     );
 
@@ -446,7 +453,12 @@ fn glyph_matches_font_coverage_fg_vs_bg() {
         &mut r,
         &[(
             Pos::new(0, 0),
-            Tile::new('A', Style::new().fg(rgb(RED)).bg(rgb(BLUE))),
+            Tile::new(
+                'A',
+                Style::new()
+                    .fg(Color::rgb(RED.0, RED.1, RED.2))
+                    .bg(Color::rgb(BLUE.0, BLUE.1, BLUE.2)),
+            ),
         )],
     );
 
@@ -540,11 +552,16 @@ fn sample_layered(cols: u16, rows: u16) -> Vec<(u8, Pos, Tile)> {
                 0 => Tile::default(),
                 // Occupied, default background: opaque, inherits the base background, erases the
                 // base glyph, draws its own.
-                1 => Tile::new('*', Style::new().fg(rgb(GREEN))),
+                1 => Tile::new('*', Style::new().fg(Color::rgb(GREEN.0, GREEN.1, GREEN.2))),
                 // Occupied space, default background: opaque erase with no visible glyph.
-                2 => Tile::new(' ', Style::new().fg(rgb(RED))),
+                2 => Tile::new(' ', Style::new().fg(Color::rgb(RED.0, RED.1, RED.2))),
                 // Occupied, own background.
-                _ => Tile::new('=', Style::new().fg(rgb(BLUE)).bg(rgb(GREEN))),
+                _ => Tile::new(
+                    '=',
+                    Style::new()
+                        .fg(Color::rgb(BLUE.0, BLUE.1, BLUE.2))
+                        .bg(Color::rgb(GREEN.0, GREEN.1, GREEN.2)),
+                ),
             };
             cells.push((1u8, Pos::new(x, y), tile));
         }
@@ -563,16 +580,16 @@ fn sample_grid(cols: u16, rows: u16) -> Vec<(Pos, Tile)> {
         for x in 0..cols {
             let i = usize::from(y) * usize::from(cols) + usize::from(x);
             let glyph = GLYPHS[i % GLYPHS.len()];
-            let fg = rgb((
+            let fg = Color::rgb(
                 (i.wrapping_mul(37)) as u8,
                 (i.wrapping_mul(91)) as u8,
                 (i.wrapping_mul(13)) as u8,
-            ));
-            let bg = rgb((
+            );
+            let bg = Color::rgb(
                 (i.wrapping_mul(17)) as u8,
                 (i.wrapping_mul(53)) as u8,
                 (i.wrapping_mul(200)) as u8,
-            ));
+            );
             cells.push((Pos::new(x, y), Tile::new(glyph, Style::new().fg(fg).bg(bg))));
         }
     }
@@ -668,12 +685,12 @@ fn sprite_cells_render_their_tileset_colors() {
             (
                 0,
                 Pos::new(0, 0),
-                Tile::new('A', Style::new().bg(rgb(BLUE))),
+                Tile::new('A', Style::new().bg(Color::rgb(BLUE.0, BLUE.1, BLUE.2))),
             ),
             (
                 0,
                 Pos::new(1, 0),
-                Tile::new('B', Style::new().bg(rgb(BLUE))),
+                Tile::new('B', Style::new().bg(Color::rgb(BLUE.0, BLUE.1, BLUE.2))),
             ),
         ],
     );
@@ -750,7 +767,7 @@ fn a_tinted_sprite_matches_what_sprite_tint_apply_computes() {
             &[(
                 0,
                 Pos::new(0, 0),
-                Tile::new('A', Style::new().bg(rgb(BLUE))),
+                Tile::new('A', Style::new().bg(Color::rgb(BLUE.0, BLUE.1, BLUE.2))),
             )],
             tint,
         );
@@ -821,8 +838,14 @@ fn multicell_span_covers_every_cell_of_its_footprint() {
         .expect("gl renderer with tileset");
 
     let mut grid = Grid::new(2, 1);
-    grid.write_span(0, 0, 0, &["S#"], Style::new().bg(rgb(BLUE)))
-        .expect("2x1 span fits");
+    grid.write_span(
+        0,
+        0,
+        0,
+        &["S#"],
+        Style::new().bg(Color::rgb(BLUE.0, BLUE.1, BLUE.2)),
+    )
+    .expect("2x1 span fits");
     paint_layers(&mut r, &span_scene(&grid));
 
     let frame = render_to_frame(&ctx, &r).expect("render");
@@ -922,13 +945,23 @@ fn matches_software_backend_for_multicell_spans() {
     let mut grid = Grid::new(cols, rows);
     for y in 0..rows {
         for x in 0..cols {
-            grid.put_tile(0, (x, y), Tile::new('.', Style::new().bg(rgb(BLUE))));
+            grid.put_tile(
+                0,
+                (x, y),
+                Tile::new('.', Style::new().bg(Color::rgb(BLUE.0, BLUE.1, BLUE.2))),
+            );
         }
     }
     // A 3x1 span (art centred in it) and a 2x2 span, both with fallback glyphs a cell backend
     // would print and a pixel backend must not.
-    grid.write_span(0, 0, 0, &["S=-"], Style::new().bg(rgb(GREEN)))
-        .expect("3x1 span fits");
+    grid.write_span(
+        0,
+        0,
+        0,
+        &["S=-"],
+        Style::new().bg(Color::rgb(GREEN.0, GREEN.1, GREEN.2)),
+    )
+    .expect("3x1 span fits");
     grid.write_span(0, 4, 0, &["S=", "[]"], Style::new())
         .expect("2x2 span fits");
     let scene = span_scene(&grid);
@@ -975,7 +1008,11 @@ fn matches_software_backend_for_a_span_covered_cells_default_background() {
     let mut grid = Grid::new(cols, rows);
     for x in 0..cols {
         let bg = if x % 2 == 0 { RED } else { GREEN };
-        grid.put_tile(0, (x, 0), Tile::new('.', Style::new().bg(rgb(bg))));
+        grid.put_tile(
+            0,
+            (x, 0),
+            Tile::new('.', Style::new().bg(Color::rgb(bg.0, bg.1, bg.2))),
+        );
     }
     // A 2-wide span with a `Default` background over columns 0 (red) and 1 (green).
     grid.write_span(1, 0, 0, &["C="], Style::new())

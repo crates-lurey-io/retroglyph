@@ -35,11 +35,7 @@ fn terminal_with_layers(cols: u16, rows: u16, layers: u8) -> Terminal<Headless> 
     let mut term = Terminal::new(Headless::new(cols, rows));
     let mut rng = fastrand::Rng::with_seed(42);
     for layer in 0..layers {
-        let style = Style::new().fg(Color::Rgb {
-            r: rng.u8(..),
-            g: rng.u8(..),
-            b: rng.u8(..),
-        });
+        let style = Style::new().fg(Color::rgb(rng.u8(..), rng.u8(..), rng.u8(..)));
         let glyph = char::from_u32(u32::from(b'A') + u32::from(layer)).unwrap_or('?');
         for y in 0..rows {
             for x in 0..cols {

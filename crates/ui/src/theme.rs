@@ -50,51 +50,15 @@ pub struct Theme {
 impl Theme {
     /// A dark palette: light text on a near-black background.
     pub const DARK: Self = Self {
-        bg: Color::Rgb {
-            r: 16,
-            g: 16,
-            b: 24,
-        },
-        panel_bg: Color::Rgb {
-            r: 22,
-            g: 22,
-            b: 32,
-        },
-        border: Color::Rgb {
-            r: 70,
-            g: 74,
-            b: 96,
-        },
-        title_bg: Color::Rgb {
-            r: 30,
-            g: 32,
-            b: 48,
-        },
-        fg: Color::Rgb {
-            r: 190,
-            g: 192,
-            b: 208,
-        },
-        accent: Color::Rgb {
-            r: 90,
-            g: 170,
-            b: 250,
-        },
-        hover_bg: Color::Rgb {
-            r: 40,
-            g: 44,
-            b: 64,
-        },
-        press_bg: Color::Rgb {
-            r: 60,
-            g: 110,
-            b: 170,
-        },
-        dim: Color::Rgb {
-            r: 110,
-            g: 112,
-            b: 130,
-        },
+        bg: Color::rgb(16, 16, 24),
+        panel_bg: Color::rgb(22, 22, 32),
+        border: Color::rgb(70, 74, 96),
+        title_bg: Color::rgb(30, 32, 48),
+        fg: Color::rgb(190, 192, 208),
+        accent: Color::rgb(90, 170, 250),
+        hover_bg: Color::rgb(40, 44, 64),
+        press_bg: Color::rgb(60, 110, 170),
+        dim: Color::rgb(110, 112, 130),
     };
 
     /// A light palette: dark text on a near-white background. Same role
@@ -109,51 +73,15 @@ impl Theme {
     /// pair has to be distinct at a glance with no sub-pixel anti-aliasing
     /// to soften the edges.
     pub const LIGHT: Self = Self {
-        bg: Color::Rgb {
-            r: 240,
-            g: 240,
-            b: 246,
-        },
-        panel_bg: Color::Rgb {
-            r: 255,
-            g: 255,
-            b: 255,
-        },
-        border: Color::Rgb {
-            r: 160,
-            g: 164,
-            b: 180,
-        },
-        title_bg: Color::Rgb {
-            r: 224,
-            g: 226,
-            b: 240,
-        },
-        fg: Color::Rgb {
-            r: 20,
-            g: 22,
-            b: 32,
-        },
-        accent: Color::Rgb {
-            r: 20,
-            g: 100,
-            b: 210,
-        },
-        hover_bg: Color::Rgb {
-            r: 230,
-            g: 236,
-            b: 248,
-        },
-        press_bg: Color::Rgb {
-            r: 160,
-            g: 194,
-            b: 240,
-        },
-        dim: Color::Rgb {
-            r: 130,
-            g: 132,
-            b: 150,
-        },
+        bg: Color::rgb(240, 240, 246),
+        panel_bg: Color::rgb(255, 255, 255),
+        border: Color::rgb(160, 164, 180),
+        title_bg: Color::rgb(224, 226, 240),
+        fg: Color::rgb(20, 22, 32),
+        accent: Color::rgb(20, 100, 210),
+        hover_bg: Color::rgb(230, 236, 248),
+        press_bg: Color::rgb(160, 194, 240),
+        dim: Color::rgb(130, 132, 150),
     };
 
     /// The background for an interactive widget in `response`'s current state, over `base`

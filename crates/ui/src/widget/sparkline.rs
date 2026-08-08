@@ -200,11 +200,7 @@ mod tests {
 
         let area = Rect::new(0, 0, 3, 1);
         let mut grid = Grid::new(3, 1);
-        let accent = Style::new().fg(Color::Rgb {
-            r: 90,
-            g: 170,
-            b: 250,
-        });
+        let accent = Style::new().fg(Color::rgb(90, 170, 250));
         Sparkline::new(&[1.0, 4.0, 2.0])
             .style(accent)
             .render(&mut Surface::new(&mut grid, area, 0));
@@ -245,11 +241,7 @@ mod tests {
         fn white_to_red(ratio: f32) -> Color {
             Color::lerp(Color::WHITE, Color::RED, ratio)
         }
-        let accent = Style::new().fg(Color::Rgb {
-            r: 90,
-            g: 170,
-            b: 250,
-        });
+        let accent = Style::new().fg(Color::rgb(90, 170, 250));
 
         let area = Rect::new(0, 0, 3, 1);
         let mut grid = Grid::new(3, 1);

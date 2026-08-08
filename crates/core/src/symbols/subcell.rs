@@ -46,8 +46,8 @@
 //! let white = (255, 255, 255);
 //! let glyph = quantize_quadrant([white, black, black, black]);
 //! assert_eq!(glyph.ch, '▘'); // top-left quadrant
-//! assert_eq!(glyph.fg, retroglyph_core::color::Color::Rgb { r: 255, g: 255, b: 255 });
-//! assert_eq!(glyph.bg, retroglyph_core::color::Color::Rgb { r: 0, g: 0, b: 0 });
+//! assert_eq!(glyph.fg, retroglyph_core::color::Color::rgb(255, 255, 255));
+//! assert_eq!(glyph.bg, retroglyph_core::color::Color::rgb(0, 0, 0));
 //! ```
 
 use crate::color::Color;
@@ -152,16 +152,8 @@ fn posterize(pixels: &[Pixel], table: &[char]) -> Glyph {
     let bg = average(pixels, !best_pattern & full_mask).unwrap_or(overall);
     Glyph {
         ch: table[best_pattern],
-        fg: Color::Rgb {
-            r: fg.0,
-            g: fg.1,
-            b: fg.2,
-        },
-        bg: Color::Rgb {
-            r: bg.0,
-            g: bg.1,
-            b: bg.2,
-        },
+        fg: Color::rgb(fg.0, fg.1, fg.2),
+        bg: Color::rgb(bg.0, bg.1, bg.2),
     }
 }
 
@@ -285,14 +277,7 @@ mod tests {
         // never has to special-case a uniform block before styling with it.
         let glyph = quantize_half_block([WHITE, WHITE]);
         assert_eq!(glyph.ch, ' ');
-        assert_eq!(
-            glyph.bg,
-            Color::Rgb {
-                r: 255,
-                g: 255,
-                b: 255
-            }
-        );
+        assert_eq!(glyph.bg, Color::rgb(255, 255, 255));
         assert_eq!(glyph.fg, glyph.bg);
     }
 
@@ -300,15 +285,8 @@ mod tests {
     fn half_block_top_bottom_split() {
         let glyph = quantize_half_block([WHITE, BLACK]);
         assert_eq!(glyph.ch, '▀');
-        assert_eq!(
-            glyph.fg,
-            Color::Rgb {
-                r: 255,
-                g: 255,
-                b: 255
-            }
-        );
-        assert_eq!(glyph.bg, Color::Rgb { r: 0, g: 0, b: 0 });
+        assert_eq!(glyph.fg, Color::rgb(255, 255, 255));
+        assert_eq!(glyph.bg, Color::rgb(0, 0, 0));
     }
 
     #[test]
@@ -322,7 +300,7 @@ mod tests {
     fn quadrant_uniform_color_picks_space_with_that_color() {
         let glyph = quantize_quadrant([RED, RED, RED, RED]);
         assert_eq!(glyph.ch, ' ');
-        assert_eq!(glyph.bg, Color::Rgb { r: 200, g: 0, b: 0 });
+        assert_eq!(glyph.bg, Color::rgb(200, 0, 0));
         assert_eq!(glyph.fg, glyph.bg);
     }
 
@@ -338,15 +316,8 @@ mod tests {
     fn sextant_single_pixel_set() {
         let glyph = quantize_sextant([BLACK, BLACK, BLACK, BLACK, WHITE, BLACK]);
         assert_eq!(glyph.ch, '🬏'); // bottom-left sextant only (bit 4)
-        assert_eq!(
-            glyph.fg,
-            Color::Rgb {
-                r: 255,
-                g: 255,
-                b: 255
-            }
-        );
-        assert_eq!(glyph.bg, Color::Rgb { r: 0, g: 0, b: 0 });
+        assert_eq!(glyph.fg, Color::rgb(255, 255, 255));
+        assert_eq!(glyph.bg, Color::rgb(0, 0, 0));
     }
 
     #[test]

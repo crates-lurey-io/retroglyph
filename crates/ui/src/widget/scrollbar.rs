@@ -233,8 +233,8 @@ mod tests {
     fn draws_a_plain_track_with_no_thumb_when_nothing_to_scroll() {
         let area = Rect::new(0, 0, 1, 5);
         let mut grid = Grid::new(1, 5);
-        let track = Style::new().bg(Color::Rgb { r: 1, g: 1, b: 1 });
-        let thumb = Style::new().bg(Color::Rgb { r: 2, g: 2, b: 2 });
+        let track = Style::new().bg(Color::rgb(1, 1, 1));
+        let thumb = Style::new().bg(Color::rgb(2, 2, 2));
         let scrollbar = Scrollbar::new(3, 5).track_style(track).thumb_style(thumb);
         Widget::render(&scrollbar, &mut Surface::new(&mut grid, area, 0));
         for y in 0..5 {
@@ -249,8 +249,8 @@ mod tests {
     fn draws_the_thumb_over_the_track() {
         let area = Rect::new(0, 0, 1, 10);
         let mut grid = Grid::new(1, 10);
-        let track = Style::new().bg(Color::Rgb { r: 1, g: 1, b: 1 });
-        let thumb = Style::new().bg(Color::Rgb { r: 2, g: 2, b: 2 });
+        let track = Style::new().bg(Color::rgb(1, 1, 1));
+        let thumb = Style::new().bg(Color::rgb(2, 2, 2));
         let scrollbar = Scrollbar::new(20, 5)
             .offset(0)
             .track_style(track)
@@ -308,8 +308,8 @@ mod tests {
     fn offset_defaults_to_zero() {
         let area = Rect::new(0, 0, 1, 10);
         let mut grid = Grid::new(1, 10);
-        let track = Style::new().bg(Color::Rgb { r: 1, g: 1, b: 1 });
-        let thumb = Style::new().bg(Color::Rgb { r: 2, g: 2, b: 2 });
+        let track = Style::new().bg(Color::rgb(1, 1, 1));
+        let thumb = Style::new().bg(Color::rgb(2, 2, 2));
         let scrollbar = Scrollbar::new(20, 5).track_style(track).thumb_style(thumb);
         Widget::render(&scrollbar, &mut Surface::new(&mut grid, area, 0));
 

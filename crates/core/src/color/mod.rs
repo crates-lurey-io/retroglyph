@@ -34,7 +34,7 @@ pub use tint::Tint;
 /// use retroglyph_core::color::Color;
 ///
 /// let named = Color::GREEN;
-/// let rgb = Color::Rgb { r: 255, g: 0, b: 0 };
+/// let rgb = Color::rgb(255, 0, 0);
 /// let indexed = Color::Indexed(42);
 /// assert_ne!(named, rgb);
 /// assert_ne!(rgb, indexed);

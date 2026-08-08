@@ -60,14 +60,6 @@ const RED: (u8, u8, u8) = (0xFF, 0x00, 0x00);
 const BLUE: (u8, u8, u8) = (0x00, 0x00, 0xFF);
 
 /// `(r, g, b)` -> a [`Color::Rgb`].
-const fn rgb(c: (u8, u8, u8)) -> Color {
-    Color::Rgb {
-        r: c.0,
-        g: c.1,
-        b: c.2,
-    }
-}
-
 /// A [`WindowHandle`] that never yields a real handle.
 ///
 /// The wasm `GlContext::new` locates its canvas through the DOM and ignores the window argument
@@ -182,7 +174,12 @@ async fn context_loss_is_recovered_by_rebuilding_on_restore() {
         .init_surface(handle)
         .expect("init_surface acquires the WebGL2 context");
 
-    let full_block = Tile::new('\u{2588}', Style::new().fg(rgb(RED)).bg(rgb(BLUE)));
+    let full_block = Tile::new(
+        '\u{2588}',
+        Style::new()
+            .fg(Color::rgb(RED.0, RED.1, RED.2))
+            .bg(Color::rgb(BLUE.0, BLUE.1, BLUE.2)),
+    );
     renderer
         .draw(core::iter::once(DrawCell::new(Pos::new(0, 0), &full_block)))
         .expect("draw is infallible");

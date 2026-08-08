@@ -677,16 +677,8 @@ mod tests {
     #[test]
     fn mask_sheet_shades_a_grey_pixel_proportionally() {
         let mask = sprite_with(SheetColor::Mask);
-        let resolved = SpriteTint::resolve(
-            mask.color,
-            Color::Rgb {
-                r: 200,
-                g: 100,
-                b: 50,
-            },
-            Tint::None,
-            DEFAULT_FG,
-        );
+        let resolved =
+            SpriteTint::resolve(mask.color, Color::rgb(200, 100, 50), Tint::None, DEFAULT_FG);
 
         // Half-grey artwork lands on a proportionally darker shade of the foreground, which is
         // how a libtcod/Dwarf Fortress style tileset is authored.
@@ -722,12 +714,7 @@ mod tests {
     fn both_stages_apply_in_order_on_a_mask_sheet() {
         let mask = sprite_with(SheetColor::Mask);
         let flash = Tint::mix(255, 255, 255, 255);
-        let resolved = SpriteTint::resolve(
-            mask.color,
-            Color::Rgb { r: 255, g: 0, b: 0 },
-            flash,
-            DEFAULT_FG,
-        );
+        let resolved = SpriteTint::resolve(mask.color, Color::rgb(255, 0, 0), flash, DEFAULT_FG);
 
         // Mask first would give red; the flash then takes it all the way to white. The other
         // order would give red, which is why the order is part of the contract.

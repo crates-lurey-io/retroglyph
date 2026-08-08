@@ -417,9 +417,9 @@ mod tests {
     use retroglyph_core::color::Color;
     use retroglyph_core::symbols::{HALF_BLOCKS, QUADRANTS};
 
-    const RED: Color = Color::Rgb { r: 255, g: 0, b: 0 };
-    const BLUE: Color = Color::Rgb { r: 0, g: 0, b: 255 };
-    const BLACK: Color = Color::Rgb { r: 0, g: 0, b: 0 };
+    const RED: Color = Color::rgb(255, 0, 0);
+    const BLUE: Color = Color::rgb(0, 0, 255);
+    const BLACK: Color = Color::rgb(0, 0, 0);
 
     #[test]
     fn half_block_canvas_has_double_vertical_resolution() {

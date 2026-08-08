@@ -53,14 +53,7 @@ fn resolve_color(c: &mut Criterion) {
 
     let cases: &[(&str, Color)] = &[
         ("default", Color::Default),
-        (
-            "rgb",
-            Color::Rgb {
-                r: 12,
-                g: 200,
-                b: 44,
-            },
-        ),
+        ("rgb", Color::rgb(12, 200, 44)),
         ("ansi", Color::Ansi(AnsiColor::BrightGreen)),
         ("indexed", Color::Indexed(200)),
     ];
