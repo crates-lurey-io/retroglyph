@@ -597,6 +597,18 @@ mod tests {
     }
 
     #[test]
+    fn find_text_returns_none_for_an_empty_needle() {
+        let mut harness = TestHarness::new(12, 4);
+        let mut app = Labels { clicks: 0 };
+        harness.step(&mut app);
+
+        // An empty needle matches every row trivially (`str::find("")` returns `Some(0)`), which
+        // would make `find_text("")` report a match at `(0, 0)` regardless of the view's actual
+        // content; treating it as absent instead avoids that meaningless result.
+        assert_eq!(harness.find_text(""), None);
+    }
+
+    #[test]
     fn click_text_clicks_the_located_cell() {
         let mut harness = TestHarness::new(12, 4);
         let mut app = Labels { clicks: 0 };
