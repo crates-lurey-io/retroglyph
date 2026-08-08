@@ -518,7 +518,7 @@ fn wide_glyph_fill_rect_clips_a_rect_much_larger_than_the_area() {
     }
 }
 
-/// `fill_rect`, `clear`, and `clear_region` all route through `Grid::fill_region`, which must
+/// `fill_rect`, `clear`, and `clear_region` all route through `Grid::fill_rect`, which must
 /// clear any span the fill partially overwrites the same way the per-cell loop it replaced
 /// did, or the surviving span's anchor would keep claiming cells the fill just overwrote.
 #[test]
