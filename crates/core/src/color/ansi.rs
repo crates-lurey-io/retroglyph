@@ -22,7 +22,7 @@ use super::palette_oklab::PALETTE_OKLAB;
 /// ```
 /// use retroglyph_core::color::{Color, Quantize};
 ///
-/// let salmon = Color::Rgb { r: 250, g: 128, b: 114 };
+/// let salmon = Color::rgb(250, 128, 114);
 /// assert_eq!(salmon.to_indexed_with(Quantize::Perceptual), Color::Indexed(210));
 /// assert_eq!(salmon.to_indexed_with(Quantize::Euclidean), Color::Indexed(209));
 /// ```

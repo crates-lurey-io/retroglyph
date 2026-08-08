@@ -35,11 +35,7 @@ const WIDE_GLYPHS: [&str; 6] = ["宽", "文", "字", "😀", "🎉", "👨‍�
 /// Fills a grid with wide (2-column) graphemes via [`Grid::write_grapheme`], cycling through
 /// [`WIDE_GLYPHS`] so the benchmark isn't measuring a single memoized width lookup.
 fn wide_char_grid(cols: u16, rows: u16) -> Grid {
-    let style = Style::new().fg(Color::Rgb {
-        r: 200,
-        g: 200,
-        b: 0,
-    });
+    let style = Style::new().fg(Color::rgb(200, 200, 0));
     let mut grid = Grid::new(cols, rows);
     let mut glyph_index = 0usize;
     let mut x = 0u16;
@@ -57,11 +53,7 @@ fn wide_char_grid(cols: u16, rows: u16) -> Grid {
 /// Fills a grid with plain single-column ASCII glyphs, as a baseline for the wide-char frame
 /// above (same size, same style, only the glyph width and codepoint count differ).
 fn ascii_grid(cols: u16, rows: u16) -> Grid {
-    let style = Style::new().fg(Color::Rgb {
-        r: 200,
-        g: 200,
-        b: 0,
-    });
+    let style = Style::new().fg(Color::rgb(200, 200, 0));
     let mut grid = Grid::new(cols, rows);
     for y in 0..rows {
         for x in 0..cols {

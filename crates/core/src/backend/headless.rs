@@ -569,11 +569,7 @@ mod tests {
         let backend = Headless::new(2, 1);
         let mut term = Terminal::new(backend);
         term.draw(|s| {
-            s.put(
-                (0, 0),
-                'a',
-                Style::new().fg(Color::Rgb { r: 1, g: 2, b: 3 }),
-            );
+            s.put((0, 0), 'a', Style::new().fg(Color::rgb(1, 2, 3)));
             s.put((1, 0), 'b', Style::new().bg(Color::Indexed(200)));
         })
         .expect("draw failed");

@@ -97,7 +97,7 @@ impl core::fmt::Display for Color {
     /// assert_eq!(Color::Default.to_string(), "default");
     /// assert_eq!(Color::Ansi(AnsiColor::BrightRed).to_string(), "bright-red");
     /// assert_eq!(Color::Indexed(42).to_string(), "42");
-    /// assert_eq!(Color::Rgb { r: 255, g: 128, b: 0 }.to_string(), "#ff8000");
+    /// assert_eq!(Color::rgb(255, 128, 0).to_string(), "#ff8000");
     /// ```
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match *self {
@@ -141,8 +141,8 @@ impl core::str::FromStr for Color {
     /// assert_eq!("bright-red".parse(), Ok(Color::Ansi(AnsiColor::BrightRed)));
     /// assert_eq!("Bright Red".parse(), Ok(Color::Ansi(AnsiColor::BrightRed)));
     /// assert_eq!("42".parse(), Ok(Color::Indexed(42)));
-    /// assert_eq!("#ff8000".parse(), Ok(Color::Rgb { r: 255, g: 128, b: 0 }));
-    /// assert_eq!("#f80".parse(), Ok(Color::Rgb { r: 255, g: 136, b: 0 }));
+    /// assert_eq!("#ff8000".parse(), Ok(Color::rgb(255, 128, 0)));
+    /// assert_eq!("#f80".parse(), Ok(Color::rgb(255, 136, 0)));
     /// assert!("not-a-color".parse::<Color>().is_err());
     /// ```
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -234,15 +234,7 @@ mod tests {
             "bright-yellow"
         );
         assert_eq!(Color::Indexed(7).to_string(), "7");
-        assert_eq!(
-            Color::Rgb {
-                r: 255,
-                g: 128,
-                b: 0
-            }
-            .to_string(),
-            "#ff8000"
-        );
+        assert_eq!(Color::rgb(255, 128, 0).to_string(), "#ff8000");
     }
 
     #[test]
@@ -254,11 +246,7 @@ mod tests {
             Color::Ansi(AnsiColor::Black),
             Color::Ansi(AnsiColor::BrightMagenta),
             Color::Indexed(200),
-            Color::Rgb {
-                r: 18,
-                g: 52,
-                b: 86,
-            },
+            Color::rgb(18, 52, 86),
         ];
         for color in colors {
             let s = color.to_string();
@@ -273,22 +261,8 @@ mod tests {
         assert_eq!("BrightRed".parse(), Ok(Color::Ansi(AnsiColor::BrightRed)));
         assert_eq!("bright red".parse(), Ok(Color::Ansi(AnsiColor::BrightRed)));
         assert_eq!("bright_red".parse(), Ok(Color::Ansi(AnsiColor::BrightRed)));
-        assert_eq!(
-            "#F80".parse(),
-            Ok(Color::Rgb {
-                r: 255,
-                g: 136,
-                b: 0
-            })
-        );
-        assert_eq!(
-            " #ff8000 ".parse(),
-            Ok(Color::Rgb {
-                r: 255,
-                g: 128,
-                b: 0
-            })
-        );
+        assert_eq!("#F80".parse(), Ok(Color::rgb(255, 136, 0)));
+        assert_eq!(" #ff8000 ".parse(), Ok(Color::rgb(255, 128, 0)));
     }
 
     #[test]
@@ -314,11 +288,7 @@ mod tests {
             Color::Default,
             Color::Ansi(AnsiColor::BrightGreen),
             Color::Indexed(42),
-            Color::Rgb {
-                r: 255,
-                g: 0,
-                b: 255,
-            },
+            Color::rgb(255, 0, 255),
         ];
         for color in colors {
             let json = serde_json::to_string(&color)?;
@@ -326,11 +296,7 @@ mod tests {
         }
 
         assert_eq!(
-            serde_json::to_string(&Color::Rgb {
-                r: 255,
-                g: 0,
-                b: 255
-            })?,
+            serde_json::to_string(&Color::rgb(255, 0, 255))?,
             r##""#ff00ff""##
         );
         assert_eq!(

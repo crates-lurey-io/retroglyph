@@ -989,7 +989,7 @@ mod compositing_tests {
     use retroglyph_core::grid::Pos;
     use retroglyph_core::tile::Tile;
 
-    const RED: Color = Color::Rgb { r: 255, g: 0, b: 0 };
+    const RED: Color = Color::rgb(255, 0, 0);
 
     #[test]
     fn draw_records_sub_cell_offset_and_flags_in_the_base_layer() {
@@ -1184,7 +1184,7 @@ mod compositing_tests {
     fn draw_layers_resolves_a_span_covered_cells_default_background_at_its_own_column() {
         use retroglyph_core::grid::Grid;
 
-        const BLUE: Color = Color::Rgb { r: 0, g: 0, b: 255 };
+        const BLUE: Color = Color::rgb(0, 0, 255);
 
         let mut r = WgpuBackendBuilder::new()
             .grid_size(2, 1)

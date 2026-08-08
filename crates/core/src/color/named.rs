@@ -17,7 +17,7 @@ impl Color {
     /// use retroglyph_core::color::Color;
     ///
     /// let gold = Color::from_named("gold");
-    /// assert_eq!(gold, Some(Color::Rgb { r: 255, g: 215, b: 0 }));
+    /// assert_eq!(gold, Some(Color::rgb(255, 215, 0)));
     ///
     /// assert_eq!(Color::from_named("not-a-color"), None);
     /// ```
@@ -185,7 +185,7 @@ impl Color {
     /// use retroglyph_core::color::Color;
     ///
     /// let c = Color::from_hex("#ff8000")?;
-    /// assert_eq!(c, Color::Rgb { r: 255, g: 128, b: 0 });
+    /// assert_eq!(c, Color::rgb(255, 128, 0));
     ///
     /// assert_eq!(Color::from_hex("not-color"), None);
     /// # Some(())
@@ -206,20 +206,13 @@ mod tests {
     #[test]
     fn test_from_named_color() {
         let gold = Color::from_named("gold").expect("gold is a named color");
-        assert_eq!(
-            gold,
-            Color::Rgb {
-                r: 255,
-                g: 215,
-                b: 0
-            }
-        );
+        assert_eq!(gold, Color::rgb(255, 215, 0));
     }
 
     #[test]
     fn test_from_named_color_case_insensitive() {
         let red = Color::from_named("RED").expect("should match uppercase");
-        assert_eq!(red, Color::Rgb { r: 255, g: 0, b: 0 });
+        assert_eq!(red, Color::rgb(255, 0, 0));
     }
 
     #[test]
@@ -230,27 +223,13 @@ mod tests {
     #[test]
     fn test_from_hex_full() {
         let c = Color::from_hex("#ff8000").expect("valid hex");
-        assert_eq!(
-            c,
-            Color::Rgb {
-                r: 255,
-                g: 128,
-                b: 0
-            }
-        );
+        assert_eq!(c, Color::rgb(255, 128, 0));
     }
 
     #[test]
     fn test_from_hex_short() {
         let c = Color::from_hex("#f80").expect("valid short hex");
-        assert_eq!(
-            c,
-            Color::Rgb {
-                r: 255,
-                g: 136,
-                b: 0
-            }
-        );
+        assert_eq!(c, Color::rgb(255, 136, 0));
     }
 
     #[test]

@@ -131,7 +131,7 @@ impl std::error::Error for SoftwareBackendError {
 ///
 /// // Draw a red cell on layer 0.
 /// use retroglyph_core::tile::Tile;
-/// let tile = Tile::new(' ', Style::new().bg(Color::Rgb { r: 255, g: 0, b: 0 }));
+/// let tile = Tile::new(' ', Style::new().bg(Color::rgb(255, 0, 0)));
 /// renderer
 ///     .draw_layers([DrawCell::on_layer(0, Pos::new(0, 0), &tile)].into_iter())
 ///     .unwrap();
