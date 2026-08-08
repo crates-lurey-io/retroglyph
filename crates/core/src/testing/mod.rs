@@ -288,7 +288,7 @@ impl TestHarness {
         self.term.backend().format_view()
     }
 
-    /// The `(x, y)` of `needle`'s first occurrence in the current [`view`](Self::view), or
+    /// The [`Pos`] of `needle`'s first occurrence in the current [`view`](Self::view), or
     /// `None` if it doesn't appear.
     ///
     /// "First" is row-major: top row before bottom, left before right within a row. `needle` is
@@ -301,7 +301,7 @@ impl TestHarness {
     /// stand-in for a blank cell, so a multi-word `needle` (`"Save Game"`) matches the view's
     /// rendered `"Save·Game"` without the caller having to know about that substitution.
     #[must_use]
-    pub fn find_text(&self, needle: &str) -> Option<(u16, u16)> {
+    pub fn find_text(&self, needle: &str) -> Option<Pos> {
         if needle.is_empty() {
             return None;
         }
@@ -322,7 +322,7 @@ impl TestHarness {
                 // `u16` extent (`Headless::new`'s own parameters): `y` never exceeds the number
                 // of rows `format_view` emits, and `x` never exceeds one row's cell count.
                 #[allow(clippy::cast_possible_truncation)]
-                return Some((x as u16, y as u16));
+                return Some(Pos::new(x as u16, y as u16));
             }
         }
         None
@@ -333,14 +333,17 @@ impl TestHarness {
     /// See [`find_text`](Self::find_text) for what "first occurrence" means and its matching
     /// rules (row-major, single-row, `·`-for-space).
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if `needle` doesn't appear in the current view.
-    pub fn click_text(&mut self, needle: &str) {
-        let (x, y) = self
+    /// Returns [`ClickTextError::NotFound`] if `needle` doesn't appear in the current view.
+    pub fn click_text(&mut self, needle: &str) -> Result<(), ClickTextError> {
+        let pos = self
             .find_text(needle)
-            .unwrap_or_else(|| panic!("TestHarness::click_text: {needle:?} not found in view"));
-        self.click(x, y);
+            .ok_or_else(|| ClickTextError::NotFound {
+                needle: needle.into(),
+            })?;
+        self.click(pos.x, pos.y);
+        Ok(())
     }
 
     /// The underlying [`Terminal`](crate::terminal::Terminal), for anything not wrapped directly (cursor position,
@@ -380,6 +383,28 @@ impl fmt::Display for RunError {
 }
 
 impl core::error::Error for RunError {}
+
+/// Error returned by [`TestHarness::click_text`](crate::testing::TestHarness::click_text) when `needle` doesn't appear in the
+/// current [`view`](crate::testing::TestHarness::view).
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ClickTextError {
+    /// `needle` did not appear anywhere in [`TestHarness::view`](crate::testing::TestHarness::view) at the time of the call.
+    NotFound {
+        /// The text that was searched for.
+        needle: String,
+    },
+}
+
+impl fmt::Display for ClickTextError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NotFound { needle } => write!(f, "{needle:?} not found in view"),
+        }
+    }
+}
+
+impl core::error::Error for ClickTextError {}
 
 #[cfg(test)]
 mod tests {
@@ -573,7 +598,7 @@ mod tests {
         let mut app = Labels { clicks: 0 };
         harness.step(&mut app);
 
-        assert_eq!(harness.find_text("Quit"), Some((2, 1)));
+        assert_eq!(harness.find_text("Quit"), Some(Pos::new(2, 1)));
     }
 
     #[test]
@@ -584,7 +609,7 @@ mod tests {
 
         // `"Save Game"` never appears literally: `format_view` renders the space between the
         // words as `·`. This only passes if `find_text` accounts for that substitution itself.
-        assert_eq!(harness.find_text("Save Game"), Some((2, 2)));
+        assert_eq!(harness.find_text("Save Game"), Some(Pos::new(2, 2)));
     }
 
     #[test]
@@ -614,19 +639,19 @@ mod tests {
         let mut app = Labels { clicks: 0 };
         harness.step(&mut app);
 
-        harness.click_text("Quit");
+        harness.click_text("Quit").unwrap();
         harness.run(&mut app);
 
         assert_eq!(app.clicks, 1);
     }
 
     #[test]
-    #[should_panic(expected = "TestHarness::click_text: \"Cancel\" not found in view")]
-    fn click_text_panics_when_absent() {
+    fn click_text_errs_when_absent() {
         let mut harness = TestHarness::new(12, 4);
         let mut app = Labels { clicks: 0 };
         harness.step(&mut app);
 
-        harness.click_text("Cancel");
+        let err = harness.click_text("Cancel").unwrap_err();
+        assert_eq!(err.to_string(), "\"Cancel\" not found in view");
     }
 }
