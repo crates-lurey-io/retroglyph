@@ -43,8 +43,16 @@ pub struct Theme {
     pub hover_bg: Color,
     /// An interactive widget's background while pressed.
     pub press_bg: Color,
-    /// De-emphasized text (hints, secondary labels, disabled-looking text).
+    /// De-emphasized text (hints, secondary labels).
     pub dim: Color,
+    /// Foreground for a disabled interactive widget. Distinct from [`dim`](Self::dim): `dim`
+    /// marks idle-but-usable text as secondary, while `disabled` marks a widget the user
+    /// cannot interact with at all, and the two need to read differently at a glance.
+    pub disabled: Color,
+    /// Destructive/error emphasis: delete actions, validation failures, critical alerts.
+    pub danger: Color,
+    /// Positive/confirmation emphasis: completed states, successful actions.
+    pub success: Color,
 }
 
 impl Theme {
@@ -94,6 +102,21 @@ impl Theme {
             r: 110,
             g: 112,
             b: 130,
+        },
+        disabled: Color::Rgb {
+            r: 80,
+            g: 82,
+            b: 96,
+        },
+        danger: Color::Rgb {
+            r: 220,
+            g: 90,
+            b: 90,
+        },
+        success: Color::Rgb {
+            r: 80,
+            g: 200,
+            b: 120,
         },
     };
 
@@ -153,6 +176,21 @@ impl Theme {
             r: 130,
             g: 132,
             b: 150,
+        },
+        disabled: Color::Rgb {
+            r: 190,
+            g: 192,
+            b: 202,
+        },
+        danger: Color::Rgb {
+            r: 200,
+            g: 60,
+            b: 60,
+        },
+        success: Color::Rgb {
+            r: 30,
+            g: 140,
+            b: 75,
         },
     };
 
@@ -234,8 +272,8 @@ impl Theme {
     /// `base` is caller-supplied for the same reason as [`bg_for`](Self::bg_for): so this
     /// composes with widgets that already have their own backdrop.
     ///
-    /// This uses [`dim`](Self::dim) for the disabled foreground, same as idle; retroglyph has
-    /// no separate disabled color role yet.
+    /// This uses [`disabled`](Self::disabled) for the disabled foreground, distinct from
+    /// [`dim`](Self::dim)'s idle look.
     ///
     /// # Examples
     ///
@@ -254,7 +292,7 @@ impl Theme {
     #[must_use]
     pub fn style_for<Id>(&self, response: &Response<Id>, base: Color) -> Style {
         if response.disabled() {
-            return Style::new().fg(self.dim).bg(base);
+            return Style::new().fg(self.disabled).bg(base);
         }
         if response.pressed() {
             return Style::new().fg(self.accent).bg(self.press_bg);
@@ -363,6 +401,18 @@ mod tests {
     }
 
     #[test]
+    fn style_for_is_disabled_on_base_when_disabled() {
+        let theme = Theme::DARK;
+        let response: Response<()> = Response {
+            disabled: true,
+            ..Response::default()
+        };
+        let style = theme.style_for(&response, theme.panel_bg);
+        assert_eq!(style.foreground(), theme.disabled);
+        assert_eq!(style.background(), theme.panel_bg);
+    }
+
+    #[test]
     fn style_for_is_fg_on_hover_bg_when_hovered() {
         let theme = Theme::DARK;
         let response: Response<()> = Response {
@@ -424,8 +474,20 @@ mod tests {
             ..Response::default()
         };
         let style = theme.style_for(&response, theme.panel_bg);
-        assert_eq!(style.foreground(), theme.dim);
+        assert_eq!(style.foreground(), theme.disabled);
         assert_eq!(style.background(), theme.panel_bg);
+    }
+
+    #[test]
+    fn disabled_is_distinct_from_dim() {
+        assert_ne!(Theme::DARK.disabled, Theme::DARK.dim);
+        assert_ne!(Theme::LIGHT.disabled, Theme::LIGHT.dim);
+    }
+
+    #[test]
+    fn danger_and_success_are_distinct_per_theme() {
+        assert_ne!(Theme::DARK.danger, Theme::DARK.success);
+        assert_ne!(Theme::LIGHT.danger, Theme::LIGHT.success);
     }
 
     #[test]
