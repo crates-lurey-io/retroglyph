@@ -288,6 +288,58 @@ impl TestHarness {
         self.term.backend().format_view()
     }
 
+    /// The `(x, y)` of `needle`'s first occurrence in the current [`view`](Self::view), or
+    /// `None` if it doesn't appear.
+    ///
+    /// "First" is row-major: top row before bottom, left before right within a row. `needle` is
+    /// matched against a single row at a time (a label wrapped across rows by [`Headless::draw_text`](crate::backend::Headless)
+    /// won't match) and must consist of single-cell glyphs (a wide glyph's spacer cell, per
+    /// [`Headless::format_view`](crate::backend::Headless::format_view), renders blank, not as a second copy of the glyph, so a
+    /// `needle` containing one can never match).
+    ///
+    /// A space in `needle` is matched against [`format_view`](crate::backend::Headless::format_view)'s own `·`
+    /// stand-in for a blank cell, so a multi-word `needle` (`"Save Game"`) matches the view's
+    /// rendered `"Save·Game"` without the caller having to know about that substitution.
+    #[must_use]
+    pub fn find_text(&self, needle: &str) -> Option<(u16, u16)> {
+        if needle.is_empty() {
+            return None;
+        }
+        // `format_view` stands `·` in for a plain space so layout is visible in text diffs
+        // (`Headless::display_glyph`); matching against that convention here is what lets a
+        // caller pass a natural, space-separated label instead of pre-encoding it themselves.
+        let needle: String = needle.chars().map(|c| if c == ' ' { '·' } else { c }).collect();
+        for (y, row) in self.view().lines().enumerate() {
+            if let Some(byte_index) = row.find(needle.as_str()) {
+                // `str::find` returns a byte offset; the harness's coordinates are cell (char)
+                // indices, and every glyph `format_view` emits is one `char`, so counting chars
+                // up to that byte offset converts one to the other.
+                let x = row[..byte_index].chars().count();
+                // Both indices are bounded by the backend's own grid size, which is a `u16` x
+                // `u16` extent (`Headless::new`'s own parameters): `y` never exceeds the number
+                // of rows `format_view` emits, and `x` never exceeds one row's cell count.
+                #[allow(clippy::cast_possible_truncation)]
+                return Some((x as u16, y as u16));
+            }
+        }
+        None
+    }
+
+    /// [`click`](Self::click)s the first occurrence of `needle` in the current [`view`](Self::view).
+    ///
+    /// See [`find_text`](Self::find_text) for what "first occurrence" means and its matching
+    /// rules (row-major, single-row, `·`-for-space).
+    ///
+    /// # Panics
+    ///
+    /// Panics if `needle` doesn't appear in the current view.
+    pub fn click_text(&mut self, needle: &str) {
+        let (x, y) = self
+            .find_text(needle)
+            .unwrap_or_else(|| panic!("TestHarness::click_text: {needle:?} not found in view"));
+        self.click(x, y);
+    }
+
     /// The underlying [`Terminal`](crate::terminal::Terminal), for anything not wrapped directly (cursor position,
     /// [`Terminal::grid`](crate::terminal::Terminal::grid), a manual [`Terminal::draw`](crate::terminal::Terminal::draw) outside the `App` loop).
     #[must_use]
@@ -484,5 +536,82 @@ mod tests {
             err.to_string(),
             "TestHarness::settle did not drain its event queue within 5 steps"
         );
+    }
+
+    /// Draws two fixed labels, and (like [`Clicker`]) counts left-button-down events, so
+    /// [`click_text`](TestHarness::click_text) tests can assert it actually clicked, not merely
+    /// that it located the right cell.
+    struct Labels {
+        clicks: u32,
+    }
+
+    impl<B: Backend> App<B> for Labels {
+        fn update(&mut self, term: &mut Terminal<B>, _frame: &Frame) -> Flow {
+            for event in term.drain_events() {
+                if matches!(
+                    event,
+                    Event::Mouse(MouseEvent {
+                        kind: MouseEventKind::Down(MouseButton::Left),
+                        ..
+                    })
+                ) {
+                    self.clicks += 1;
+                }
+            }
+            term.surface().print((2, 1), "Quit", Style::default());
+            term.surface().print((2, 2), "Save Game", Style::default());
+            Flow::Continue
+        }
+    }
+
+    #[test]
+    fn find_text_locates_first_occurrence_row_major() {
+        let mut harness = TestHarness::new(12, 4);
+        let mut app = Labels { clicks: 0 };
+        harness.step(&mut app);
+
+        assert_eq!(harness.find_text("Quit"), Some((2, 1)));
+    }
+
+    #[test]
+    fn find_text_matches_a_space_against_the_view_middle_dot() {
+        let mut harness = TestHarness::new(12, 4);
+        let mut app = Labels { clicks: 0 };
+        harness.step(&mut app);
+
+        // `"Save Game"` never appears literally: `format_view` renders the space between the
+        // words as `·`. This only passes if `find_text` accounts for that substitution itself.
+        assert_eq!(harness.find_text("Save Game"), Some((2, 2)));
+    }
+
+    #[test]
+    fn find_text_returns_none_when_absent() {
+        let mut harness = TestHarness::new(12, 4);
+        let mut app = Labels { clicks: 0 };
+        harness.step(&mut app);
+
+        assert_eq!(harness.find_text("Cancel"), None);
+    }
+
+    #[test]
+    fn click_text_clicks_the_located_cell() {
+        let mut harness = TestHarness::new(12, 4);
+        let mut app = Labels { clicks: 0 };
+        harness.step(&mut app);
+
+        harness.click_text("Quit");
+        harness.run(&mut app);
+
+        assert_eq!(app.clicks, 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "TestHarness::click_text: \"Cancel\" not found in view")]
+    fn click_text_panics_when_absent() {
+        let mut harness = TestHarness::new(12, 4);
+        let mut app = Labels { clicks: 0 };
+        harness.step(&mut app);
+
+        harness.click_text("Cancel");
     }
 }
