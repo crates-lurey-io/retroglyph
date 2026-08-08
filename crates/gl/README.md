@@ -23,7 +23,7 @@ cargo add retroglyph-gl --features default-font
 ```no_run
 # #[cfg(not(target_arch = "wasm32"))]
 # fn main() {
-use retroglyph_gl::GlBackendBuilder;
+use retroglyph_gl::config::GlBackendBuilder;
 use retroglyph_window::winit::{WindowConfig, run_windowed};
 use retroglyph_core::color::Style;
 

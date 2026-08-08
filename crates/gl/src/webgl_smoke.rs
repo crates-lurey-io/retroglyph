@@ -39,7 +39,7 @@
     clippy::cast_sign_loss
 )]
 
-use crate::GlBackendBuilder;
+use crate::config::GlBackendBuilder;
 use crate::GlRenderer;
 use crate::shaders::GlslFlavor;
 use glow::HasContext as _;
