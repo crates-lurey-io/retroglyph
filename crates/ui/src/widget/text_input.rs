@@ -342,7 +342,9 @@ mod tests {
     fn min_size_pads_the_placeholder_by_two_columns_each_side() {
         // "Name" is 4 cols wide; padded to 8, past the 6-cell floor either density sets, so the
         // placeholder's own width should win over `min_target_size`.
-        let size = TextInput::new().placeholder("Name").min_size(Density::Mouse);
+        let size = TextInput::new()
+            .placeholder("Name")
+            .min_size(Density::Mouse);
         assert_eq!(size.width(), 8);
         assert_eq!(size.height(), 1);
     }

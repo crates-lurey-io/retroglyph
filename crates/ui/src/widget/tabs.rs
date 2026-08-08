@@ -553,7 +553,9 @@ mod tests {
         // "A" (1) + spacing (3) + "B" (1) = 5 cols, still under the 6-cell floor, so the floor
         // wins; this only proves the spacing was actually added into the sum before flooring.
         let titles = ["A", "B"];
-        let size = Tabs::new(&titles).column_spacing(3).min_size(Density::Mouse);
+        let size = Tabs::new(&titles)
+            .column_spacing(3)
+            .min_size(Density::Mouse);
         assert_eq!(size.width(), 6);
     }
 }
