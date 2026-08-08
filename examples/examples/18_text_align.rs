@@ -16,14 +16,14 @@
 //!
 //! Static display. Keys: `q` or `Escape` quits, or close the window.
 
-use retroglyph_core::backend::Backend;
-use retroglyph_core::color::{Color, Style};
-use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::grid::Rect;
-use retroglyph_core::terminal::Terminal;
-use retroglyph_core::text::{Line, Span};
+use retroglyph::backend::Backend;
+use retroglyph::color::{Color, Style};
+use retroglyph::event::{Event, KeyCode};
+use retroglyph::grid::Rect;
+use retroglyph::terminal::Terminal;
+use retroglyph::text::{Line, Span};
+use retroglyph::ui::{Align, Modal, Panel, PrintLine, Surface, Text, Widget};
 use retroglyph_examples::Example;
-use retroglyph_ui::{Align, Modal, Panel, PrintLine, Surface, Text, Widget};
 
 /// State for the text-alignment example (none needed: the layout never changes).
 #[derive(Default)]
@@ -122,7 +122,7 @@ impl Example for TextAlign {
     fn tick<B: Backend>(
         &mut self,
         term: &mut Terminal<B>,
-        _frame: &retroglyph_core::app::Frame,
+        _frame: &retroglyph::app::Frame,
     ) -> bool {
         if !self.handle_events(term) {
             return false;

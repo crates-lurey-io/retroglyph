@@ -19,20 +19,20 @@ mod support;
 mod overworld;
 
 use overworld::{Overworld, View, WORLD_H, WORLD_W};
-use retroglyph_core::backend::Headless;
-use retroglyph_core::event::{
+use retroglyph::TestHarness;
+use retroglyph::backend::Headless;
+use retroglyph::event::{
     Event, KeyCode, KeyEvent, KeyEventKind, KeyLocation, KeyModifiers, MouseButton, MouseEvent,
     MouseEventKind,
 };
-use retroglyph_core::terminal::Terminal;
-use retroglyph_core::testing::TestHarness;
+use retroglyph::terminal::Terminal;
 use retroglyph_examples::{Example, HEADLESS_FRAME_DELTA};
 use support::TestApp;
 
 const fn mouse(kind: MouseEventKind, x: u16, y: u16) -> Event {
     Event::Mouse(MouseEvent::new(
         kind,
-        retroglyph_core::grid::Pos { x, y },
+        retroglyph::grid::Pos { x, y },
         KeyModifiers::NONE,
     ))
 }

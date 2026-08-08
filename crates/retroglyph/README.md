@@ -74,6 +74,14 @@ Re-exports `retroglyph-gl` as `gl`: a GPU `Backend` via `glow` (OpenGL 3.3 nativ
 Also pulls in the curated windowed re-exports (`WindowConfig`, `PresenterBuilder`, `Windowed`,
 `WindowedLaunchError`, `run_app`, `run_app_on`).
 
+### `serde`
+
+⚪ Optional.
+
+Adds `Serialize`/`Deserialize` impls to the curated types that support them (`Color`, `Style`,
+geometry, ..., plus `ui::Theme`/`Density` when `ui` is also enabled). Forwards to
+`retroglyph-core`'s and `retroglyph-ui`'s own `serde` features; neither backend crate has one.
+
 ### `software`
 
 ⚪ Optional.
@@ -82,12 +90,30 @@ Re-exports `retroglyph-software` as `software`: a CPU pixel `Backend` via `softb
 in the curated windowed re-exports (`WindowConfig`, `PresenterBuilder`, `Windowed`,
 `WindowedLaunchError`, `run_app`, `run_app_on`).
 
+### `terminal-wasm`
+
+⚪ Optional.
+
+Re-exports `retroglyph-terminal-wasm` as `terminal_wasm`: a browser `Backend` driven by
+pushed/pulled ANSI I/O (e.g. xterm.js). Its `#[wasm_bindgen]` FFI module only compiles for
+`target_arch = "wasm32"`, but the crate (and this re-export) build portably otherwise.
+
 ### `testing`
 
 ⚪ Optional.
 
 Enables `TestHarness` and its error, the published headless `App` driver for testing your own `App`.
 Forwards to `retroglyph-core`'s own `testing` feature.
+
+### `tilesets`
+
+⚪ Optional.
+
+Forwards each enabled backend's own `tilesets` feature (PNG sprite/tileset loading), so a caller
+doesn't need to know which backend crate actually owns it. Mirrors `default-font` above; see
+`retroglyph_window::tileset` for the `TilesetOptions`/ `Codepage` config types that feature adds --
+reach for `retroglyph-window` directly for those, same as any other finer-grained windowed control
+this facade doesn't curate.
 
 ### `tracing`
 

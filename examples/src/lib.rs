@@ -16,7 +16,7 @@
 //!
 //! impl retroglyph_examples::Example for MyExample {
 //!     const NAME: &'static str = "my_example";
-//!     fn tick<B: retroglyph_core::backend::Backend>(&mut self, term: &mut retroglyph_core::terminal::Terminal<B>) -> bool { todo!() }
+//!     fn tick<B: retroglyph::backend::Backend>(&mut self, term: &mut retroglyph::terminal::Terminal<B>) -> bool { todo!() }
 //! }
 //!
 //! retroglyph_examples::example_main!(MyExample);

@@ -29,15 +29,15 @@
 
 use std::time::Duration;
 
-use retroglyph_core::app::Frame;
-use retroglyph_core::backend::Backend;
-use retroglyph_core::color::{AnsiColor, Color, Style};
-use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::grid::{Grid, Rect};
-use retroglyph_core::terminal::Terminal;
-use retroglyph_core::tile::Tile;
+use retroglyph::app::Frame;
+use retroglyph::backend::Backend;
+use retroglyph::color::{AnsiColor, Color, Style};
+use retroglyph::event::{Event, KeyCode};
+use retroglyph::grid::{Grid, Rect};
+use retroglyph::terminal::Terminal;
+use retroglyph::tile::Tile;
+use retroglyph::ui::{Constraint, Easing, Panel, Tween, Widget, split_h, split_v};
 use retroglyph_examples::Example;
-use retroglyph_ui::{Constraint, Easing, Panel, Tween, Widget, split_h, split_v};
 
 /// The level, hand-designed to be solvable with the two boxes pushed one at a time: `#` wall,
 /// `.` floor, `o` goal, `$` a box (on plain floor), `@` the player's start. Both `o` cells are
@@ -280,7 +280,7 @@ impl Sokoban {
 
     /// Drains pending input: arrows move/push, `u` undoes, `r` resets, `q`/`Escape` quits.
     ///
-    /// Gated on [`KeyEvent::is_down`](retroglyph_core::event::KeyEvent::is_down) -- see
+    /// Gated on [`KeyEvent::is_down`](retroglyph::event::KeyEvent::is_down) -- see
     /// `09_widgets_dashboard.rs`'s `handle_events` doc comment for why: without it, a backend
     /// reporting both press and release as separate events would move twice per key tap.
     fn handle_events<B: Backend>(&mut self, term: &mut Terminal<B>) -> bool {

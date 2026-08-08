@@ -18,14 +18,14 @@
 //! Keys: click a button, or Tab to it and press Enter/Space. `r` resets the counter regardless
 //! of focus (a [`Shortcuts`] global binding). `q` or `Escape` quits, or close the window.
 
-use retroglyph_core::app::Frame;
-use retroglyph_core::backend::Backend;
-use retroglyph_core::color::{Color, Style};
-use retroglyph_core::event::{Event, KeyCode, KeyModifiers};
-use retroglyph_core::grid::{HasSize, Rect};
-use retroglyph_core::terminal::Terminal;
+use retroglyph::app::Frame;
+use retroglyph::backend::Backend;
+use retroglyph::color::{Color, Style};
+use retroglyph::event::{Event, KeyCode, KeyModifiers};
+use retroglyph::grid::{HasSize, Rect};
+use retroglyph::terminal::Terminal;
+use retroglyph::ui::{Button, Density, Interaction, Shortcuts, Theme, Ui};
 use retroglyph_examples::Example;
-use retroglyph_ui::{Button, Density, Interaction, Shortcuts, Theme, Ui};
 
 /// Identifies each button for [`Interaction`]'s hit-testing and focus ring.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

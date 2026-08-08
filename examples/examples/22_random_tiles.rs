@@ -25,11 +25,11 @@
 //!
 //! Keys: `q` or `Escape` quits, or close the window.
 
-use retroglyph_core::backend::Backend;
-use retroglyph_core::color::{Color, Style};
-use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::grid::HasSize;
-use retroglyph_core::terminal::Terminal;
+use retroglyph::backend::Backend;
+use retroglyph::color::{Color, Style};
+use retroglyph::event::{Event, KeyCode};
+use retroglyph::grid::HasSize;
+use retroglyph::terminal::Terminal;
 use retroglyph_examples::Example;
 
 /// Curated glyph set: digits, uppercase letters, and a handful of symbol/punctuation glyphs
@@ -124,11 +124,7 @@ impl RandomTiles {
 impl Example for RandomTiles {
     const NAME: &'static str = "22_random_tiles";
 
-    fn tick<B: Backend>(
-        &mut self,
-        term: &mut Terminal<B>,
-        frame: &retroglyph_core::app::Frame,
-    ) -> bool {
+    fn tick<B: Backend>(&mut self, term: &mut Terminal<B>, frame: &retroglyph::app::Frame) -> bool {
         if !self.handle_events(term) {
             return false;
         }

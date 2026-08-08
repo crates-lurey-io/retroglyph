@@ -19,10 +19,10 @@ mod support;
 mod keyboard;
 
 use keyboard::Keyboard;
-use retroglyph_core::app::Frame;
-use retroglyph_core::backend::Headless;
-use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyModifiers};
-use retroglyph_core::terminal::Terminal;
+use retroglyph::app::Frame;
+use retroglyph::backend::Headless;
+use retroglyph::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+use retroglyph::terminal::Terminal;
 use retroglyph_examples::{Example, HEADLESS_FRAME_DELTA};
 
 /// Drives `E` through one synthetic key event per tick, returning each frame's

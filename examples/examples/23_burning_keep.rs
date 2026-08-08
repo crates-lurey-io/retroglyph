@@ -43,11 +43,11 @@
     clippy::cast_precision_loss
 )]
 
-use retroglyph_core::app::Frame;
-use retroglyph_core::backend::Backend;
-use retroglyph_core::color::{Color, Style};
-use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::terminal::Terminal;
+use retroglyph::app::Frame;
+use retroglyph::backend::Backend;
+use retroglyph::color::{Color, Style};
+use retroglyph::event::{Event, KeyCode};
+use retroglyph::terminal::Terminal;
 use retroglyph_examples::Example;
 use std::time::Duration;
 

@@ -9,7 +9,7 @@
 //! be invisible to the whole suite.
 //!
 //! The toggle key cycles `Off -> Compact -> Full -> Off`
-//! ([`retroglyph_ui::PerfOverlayMode`]); the PTY tests below only prove the first step of
+//! ([`retroglyph::ui::PerfOverlayMode`]); the PTY tests below only prove the first step of
 //! that cycle from both the hidden (`Off`) and visible (`Compact`) default starting states (real
 //! key presses through a live terminal are the thing worth end-to-end coverage, not an
 //! exhaustive re-walk of the state machine, which

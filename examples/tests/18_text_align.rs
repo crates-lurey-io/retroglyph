@@ -11,7 +11,7 @@
 //! additionally pin the per-span colors of the aligned `PrintLine` through the
 //! pixel and terminal-I/O render paths.
 //!
-//! [`Headless::format_view`]: retroglyph_core::backend::Headless::format_view
+//! [`Headless::format_view`]: retroglyph::backend::Headless::format_view
 
 #![allow(unreachable_pub)]
 

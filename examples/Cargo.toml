@@ -13,23 +13,25 @@ publish = false
 workspace = true
 
 [dependencies]
-retroglyph-core = { path = "../crates/core", version = "0.7.1" }
-# Unconditional, like `retroglyph-core`: widgets is backend-generic (no backend axis to gate it
-# on), and every Tier 2 example that uses it (09_widgets_dashboard, 10_widgets_interaction) needs
-# it on every backend feature combination this crate builds.
-retroglyph-ui = { path = "../crates/ui", version = "0.4.3" }
-retroglyph-crossterm = { path = "../crates/crossterm", version = "0.4.1", optional = true }
-retroglyph-software = { path = "../crates/software", version = "0.6.2", optional = true }
-retroglyph-gl = { path = "../crates/gl", version = "0.3.2", optional = true }
-retroglyph-wgpu = { path = "../crates/wgpu", version = "0.1.2", optional = true }
+# The curated facade (retroglyph#1308): everything below reaches through `retroglyph::...` --
+# `retroglyph::app`/`backend`/`color`/`event`/... (core's re-exported modules) and
+# `retroglyph::crossterm`/`software`/`gl`/`wgpu`/`terminal_wasm`/`ui` (whole-crate re-exports,
+# each behind its own feature). `default-features = false` because this crate picks its own
+# default (`ui` unconditional below, backends behind this crate's own feature flags) rather than
+# inheriting the facade's own `crossterm`+`ui` default.
+#
+# `ui` is unconditional, like `retroglyph-core` was: widgets is backend-generic (no backend axis
+# to gate it on), and every Tier 2 example that uses it (09_widgets_dashboard,
+# 10_widgets_interaction) needs it on every backend feature combination this crate builds.
+retroglyph = { path = "../crates/retroglyph", version = "0.1.1", default-features = false, features = [
+  "ui",
+] }
+# Needed directly, beyond `retroglyph`'s curated re-exports, for the concrete `Presenter` type
+# (examples/tests/support/mod.rs, 17_theme_switch.rs, src/launch.rs) and the `tileset` module's
+# `Codepage`/`TilesetOptions` (07_sprites_tileset.rs). Both are deliberately outside the facade's
+# curated windowed surface (see crates/retroglyph/src/lib.rs's own comment on that boundary), so
+# still reached the same way a real "finer-grained control" consumer would reach them.
 retroglyph-window = { path = "../crates/window", version = "0.5.2", optional = true }
-# Optional, wasm32-only in practice: see the `wasm-terminal` feature below.
-# Declared as a plain (non-target-gated) optional dependency because Cargo
-# features can't be restricted to a target; `wasm-terminal` is documented as
-# wasm32-only and the crate itself is a no-op off that target (its `Backend`
-# impl still compiles portably -- only its `#[wasm_bindgen]` FFI module is
-# `cfg(target_arch = "wasm32")`-gated).
-retroglyph-terminal-wasm = { path = "../crates/terminal-wasm", version = "0.3.2", optional = true }
 # Axial hex coordinates for 20_overworld's strategic hex-tile view: offset<->axial conversion,
 # neighbor directions, and hex distance. `no_std`, dependency-free, so it costs nothing on the
 # WASM builds.
@@ -45,37 +47,38 @@ web-time = "1"
 # An example selects a backend by enabling one of these. With none enabled,
 # every example still builds and runs against the Headless backend (used by
 # `bin/runner.rs`'s "Headless" option and `launch::<E>()`'s fallback arm).
-crossterm = ["dep:retroglyph-crossterm"]
-# Pulls in `retroglyph-software/default-font` unconditionally: unlike the
+crossterm = ["retroglyph/crossterm"]
+# Pulls in `retroglyph/default-font` unconditionally: unlike the
 # library itself (where an optional embedded font matters -- downstream
 # users may bring their own bitmap font), there's no example in this gallery
 # that benefits from a fontless software backend, so there's nothing to gain
 # from splitting that out into a separate flag here. `--features software`
 # alone is always enough to run.
-# `tilesets` is unconditional here for the same reason `default-font` is: only one example
-# (07_sprites_tileset) needs PNG sprite sheet loading, but `tools/build-wasm-example.sh` builds
-# this whole crate with one shared `software` feature flag per variant, not per example, so
-# there's no cheaper way to give that one example the capability without paying for it everywhere
-# `software` is enabled. The cost is `image`/`alpha-blend` becoming compile-time (not runtime)
-# dependencies of every software-backend build, not a per-example opt-in.
+# `tilesets` (`retroglyph`'s own forwarding feature, retroglyph#1308) is unconditional here for
+# the same reason `default-font` is: only one example (07_sprites_tileset) needs PNG sprite sheet
+# loading, but `tools/build-wasm-example.sh` builds this whole crate with one shared `software`
+# feature flag per variant, not per example, so there's no cheaper way to give that one example
+# the capability without paying for it everywhere `software` is enabled. The cost is
+# `image`/`alpha-blend` becoming compile-time (not runtime) dependencies of every software-backend
+# build, not a per-example opt-in. `dep:retroglyph-window`/`retroglyph-window/tilesets` bring in
+# the `Presenter` type and the `tileset` module's config types those same examples/tests need
+# directly (see the dependency's own doc comment above).
 software = [
-  "dep:retroglyph-software",
+  "retroglyph/software",
+  "retroglyph/default-font",
+  "retroglyph/tilesets",
   "dep:retroglyph-window",
-  "retroglyph-software/default-font",
-  "retroglyph-software/tilesets",
+  "retroglyph-window/tilesets",
 ]
 # The GPU (OpenGL/WebGL2) backend. A windowed backend like `software`, and mutually exclusive with
-# it in practice: `launch::<E>()` prefers `software`, then `gl`. Pulls in `default-font` for the
-# same reason `software` does (no fontless example in this gallery).
-# `tilesets` for the same reason `software` enables it: the wasm build script picks one feature
-# per variant for the whole crate, so the one example that needs sprite sheets can't opt in
-# alone. Without it the WebGL2 gallery variant renders bitmap glyphs where the software variant
-# renders sprites.
+# it in practice: `launch::<E>()` prefers `software`, then `gl`. Pulls in `default-font`/`tilesets`
+# for the same reasons `software` does.
 gl = [
-  "dep:retroglyph-gl",
+  "retroglyph/gl",
+  "retroglyph/default-font",
+  "retroglyph/tilesets",
   "dep:retroglyph-window",
-  "retroglyph-gl/default-font",
-  "retroglyph-gl/tilesets",
+  "retroglyph-window/tilesets",
 ]
 # The GPU (Vulkan/Metal/D3D12) backend via `wgpu`. A windowed backend like `software`/`gl`, and
 # mutually exclusive with both in practice: `launch::<E>()` prefers `software`, then `gl`, then
@@ -85,10 +88,11 @@ gl = [
 # support for it to run; `wgpu-template.html` detects the absence and says so rather than showing a
 # blank page.
 wgpu = [
-  "dep:retroglyph-wgpu",
+  "retroglyph/wgpu",
+  "retroglyph/default-font",
+  "retroglyph/tilesets",
   "dep:retroglyph-window",
-  "retroglyph-wgpu/default-font",
-  "retroglyph-wgpu/tilesets",
+  "retroglyph-window/tilesets",
 ]
 # WASM-only: drives a Terminal<Headless> from a browser requestAnimationFrame
 # loop instead of a canvas/window. See `wasm_entry!`'s wasm-headless branch.
@@ -102,7 +106,7 @@ wasm-headless = []
 # wasm-terminal branch. Mutually exclusive with `software`/`wasm-headless` in
 # practice (whichever the example binary is built with wins; `launch!`/
 # `wasm_entry!` prefer `software`, then `wasm-headless`, then this).
-wasm-terminal = ["dep:retroglyph-terminal-wasm"]
+wasm-terminal = ["retroglyph/terminal-wasm"]
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "=0.2.126"
@@ -122,8 +126,11 @@ web-sys = { version = "0.3", features = [
 insta = { version = "1.34", features = ["yaml"] }
 # TestHarness (retroglyph#1001): drives an example's Example::tick through the App contract
 # against Headless, replacing the hand-rolled push_event/tick/present loop most of
-# examples/tests/*.rs used to repeat.
-retroglyph-core = { path = "../crates/core", features = ["testing"] }
+# examples/tests/*.rs used to repeat. Unions with the `[dependencies]` entry above for test
+# builds, matching how every other crate here layers a dev-only feature onto its own dependency.
+# `default-features = false` here too: a dev-dependency's implicit `default-features = true`
+# would otherwise win the union and silently turn `crossterm` back on for every test build.
+retroglyph = { path = "../crates/retroglyph", default-features = false, features = ["testing"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 # PNG snapshots of the software (headless) renderer's pixel buffer.
