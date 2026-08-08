@@ -109,12 +109,12 @@ impl RandomTiles {
                     u8::try_from(CHANNEL_MIN + next_u32(s) % CHANNEL_SPAN)
                         .expect("96..256 fits in u8")
                 };
-                let fg = Color::Rgb {
-                    r: channel(&mut state),
-                    g: channel(&mut state),
-                    b: channel(&mut state),
-                };
-                let style = Style::new().fg(fg).bg(Color::Rgb { r: 0, g: 0, b: 0 });
+                let fg = Color::rgb(
+                    channel(&mut state),
+                    channel(&mut state),
+                    channel(&mut state),
+                );
+                let style = Style::new().fg(fg).bg(Color::rgb(0, 0, 0));
                 surface.put((x, y), glyph, style);
             }
         }

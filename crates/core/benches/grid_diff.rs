@@ -37,7 +37,7 @@ fn filled(cols: u16, rows: u16, glyph: char, fg: Color) -> Grid {
 fn sparse_pair(cols: u16, rows: u16, pct: u32) -> (Grid, Grid) {
     let old = filled(cols, rows, ' ', Color::Default);
     let mut new = filled(cols, rows, ' ', Color::Default);
-    let changed_style = Style::new().fg(Color::Rgb { r: 255, g: 0, b: 0 });
+    let changed_style = Style::new().fg(Color::rgb(255, 0, 0));
 
     let total = u32::from(cols) * u32::from(rows);
     let changes = total * pct / 100;
@@ -70,16 +70,7 @@ fn bench_size(c: &mut Criterion, cols: u16, rows: u16) {
 
     group.bench_function("full_repaint", |b| {
         let old = filled(cols, rows, ' ', Color::Default);
-        let new = filled(
-            cols,
-            rows,
-            'X',
-            Color::Rgb {
-                r: 255,
-                g: 255,
-                b: 255,
-            },
-        );
+        let new = filled(cols, rows, 'X', Color::rgb(255, 255, 255));
         b.iter(|| black_box(old.diff(&new).count()));
     });
 

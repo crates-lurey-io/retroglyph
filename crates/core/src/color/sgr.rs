@@ -109,11 +109,11 @@ mod tests {
             Some("48;5;200".to_owned())
         );
         assert_eq!(
-            sgr_color(Color::Rgb { r: 1, g: 2, b: 3 }, false),
+            sgr_color(Color::rgb(1, 2, 3), false),
             Some("38;2;1;2;3".to_owned())
         );
         assert_eq!(
-            sgr_color(Color::Rgb { r: 1, g: 2, b: 3 }, true),
+            sgr_color(Color::rgb(1, 2, 3), true),
             Some("48;2;1;2;3".to_owned())
         );
     }

@@ -48,7 +48,7 @@ fn filled(cols: u16, rows: u16, glyph: char, style: Style) -> Grid {
 fn sparse_pair(cols: u16, rows: u16, pct: u32) -> (Grid, Grid) {
     let old = filled(cols, rows, ' ', Style::default());
     let mut new = filled(cols, rows, ' ', Style::default());
-    let changed_style = Style::new().fg(Color::Rgb { r: 255, g: 0, b: 0 });
+    let changed_style = Style::new().fg(Color::rgb(255, 0, 0));
 
     let total = u32::from(cols) * u32::from(rows);
     let changes = total * pct / 100;
@@ -66,15 +66,11 @@ fn sparse_pair(cols: u16, rows: u16, pct: u32) -> (Grid, Grid) {
 /// diff-based renderer can never coalesce consecutive cells onto the same tracked SGR state.
 fn checkerboard(cols: u16, rows: u16) -> Grid {
     let style_a = Style::new()
-        .fg(Color::Rgb { r: 255, g: 0, b: 0 })
-        .bg(Color::Rgb { r: 0, g: 0, b: 255 });
+        .fg(Color::rgb(255, 0, 0))
+        .bg(Color::rgb(0, 0, 255));
     let style_b = Style::new()
-        .fg(Color::Rgb { r: 0, g: 255, b: 0 })
-        .bg(Color::Rgb {
-            r: 255,
-            g: 255,
-            b: 0,
-        });
+        .fg(Color::rgb(0, 255, 0))
+        .bg(Color::rgb(255, 255, 0));
     let mut grid = Grid::new(cols, rows);
     for y in 0..rows {
         for x in 0..cols {
@@ -112,16 +108,7 @@ fn bench_repaint_vs_sparse(c: &mut Criterion) {
     let mut group = c.benchmark_group("frame_render/full_vs_sparse_200x50");
 
     let old = filled(COLS, ROWS, ' ', Style::default());
-    let full_new = filled(
-        COLS,
-        ROWS,
-        'X',
-        Style::new().fg(Color::Rgb {
-            r: 255,
-            g: 255,
-            b: 255,
-        }),
-    );
+    let full_new = filled(COLS, ROWS, 'X', Style::new().fg(Color::rgb(255, 255, 255)));
     let bytes = render_diff(&old, &full_new, false).len() as u64;
     group.throughput(Throughput::Bytes(bytes));
     group.bench_function("full_repaint", |b| {
@@ -152,8 +139,8 @@ fn bench_sgr_churn(c: &mut Criterion) {
     });
 
     let uniform_style = Style::new()
-        .fg(Color::Rgb { r: 255, g: 0, b: 0 })
-        .bg(Color::Rgb { r: 0, g: 0, b: 255 });
+        .fg(Color::rgb(255, 0, 0))
+        .bg(Color::rgb(0, 0, 255));
     let coalesced = filled(COLS, ROWS, '#', uniform_style);
     let bytes = render_diff(&old, &coalesced, false).len() as u64;
     group.throughput(Throughput::Bytes(bytes));
@@ -170,16 +157,7 @@ fn bench_sgr_churn(c: &mut Criterion) {
 fn bench_plain_vs_escape(c: &mut Criterion) {
     let mut group = c.benchmark_group("frame_render/plain_vs_escape_200x50");
     let old = filled(COLS, ROWS, ' ', Style::default());
-    let new = filled(
-        COLS,
-        ROWS,
-        'X',
-        Style::new().fg(Color::Rgb {
-            r: 255,
-            g: 255,
-            b: 255,
-        }),
-    );
+    let new = filled(COLS, ROWS, 'X', Style::new().fg(Color::rgb(255, 255, 255)));
 
     let bytes = render_diff(&old, &new, false).len() as u64;
     group.throughput(Throughput::Bytes(bytes));

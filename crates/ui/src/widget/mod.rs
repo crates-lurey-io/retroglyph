@@ -194,8 +194,8 @@ pub trait Measure {
 /// "how small can you get". Kept separate on purpose; a widget can implement either, both, or
 /// neither.
 ///
-/// Interactive widgets ([`Button`], and eventually [`Tabs`]/[`Scrollbar`]/[`TextInput`]) are the
-/// intended implementors: [`Density::min_target_size`] exists specifically so a caller sizing a
+/// Interactive widgets ([`Button`], [`Tabs`], [`Scrollbar`], [`TextInput`]) are the intended
+/// implementors: [`Density::min_target_size`] exists specifically so a caller sizing a
 /// clickable/tappable control doesn't have to invent its own touch-target floor, and `min_size`
 /// is how a widget applies that floor to its own content.
 ///

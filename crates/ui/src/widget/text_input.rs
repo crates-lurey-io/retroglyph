@@ -3,10 +3,12 @@ use alloc::borrow::ToOwned as _;
 use alloc::string::String;
 
 use retroglyph_core::color::{Color, Style};
-use retroglyph_core::text::{split_at_width, width_usize};
+use retroglyph_core::grid::Size;
+use retroglyph_core::text::{split_at_width, width, width_usize};
 
-use super::{InteractiveWidget, StatefulWidget};
+use super::{InteractiveWidget, MinSize, StatefulWidget};
 use crate::Surface;
+use crate::interact::Density;
 use crate::interact::Response;
 use crate::interact::Sense;
 use crate::state::TextInputState;
@@ -194,6 +196,17 @@ impl TextInput<'_> {
     }
 }
 
+impl MinSize for TextInput<'_> {
+    /// [`placeholder`](TextInput::placeholder)'s display width (`0` with no placeholder set)
+    /// plus 2 columns of padding on each side, matching [`Button`](super::Button)'s own padding,
+    /// one row tall, floored at `density`'s [`min_target_size`](Density::min_target_size) so an
+    /// empty field still claims a usable click/tap target.
+    fn min_size(&self, density: Density) -> Size {
+        let content_width = self.placeholder.map_or(0, width).saturating_add(4);
+        Size::new(content_width, 1).max(density.min_target_size())
+    }
+}
+
 impl StatefulWidget for TextInput<'_> {
     type State = TextInputState;
 
@@ -237,7 +250,7 @@ fn glyph_at_column(s: &str, col: usize) -> Option<char> {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::grid::{Grid, Pos, Rect};
+    use retroglyph_core::grid::{Grid, HasSize as _, Pos, Rect};
 
     use super::*;
 
@@ -466,5 +479,30 @@ mod tests {
         let response = interaction.interact(area, Id::Name, sense);
         assert!(response.focused());
         interaction.end_frame();
+    }
+
+    #[test]
+    fn min_size_floors_an_empty_placeholder_at_the_density_minimum() {
+        // No placeholder set: content width is 0 + padding 4 = 4 cols, under either density's
+        // 6-cell floor.
+        let size = TextInput::new().min_size(Density::Mouse);
+        assert_eq!(size, Density::Mouse.min_target_size());
+    }
+
+    #[test]
+    fn min_size_pads_the_placeholder_by_two_columns_each_side() {
+        // "Name" is 4 cols wide; padded to 8, past the 6-cell floor either density sets, so the
+        // placeholder's own width should win over `min_target_size`.
+        let size = TextInput::new()
+            .placeholder("Name")
+            .min_size(Density::Mouse);
+        assert_eq!(size.width(), 8);
+        assert_eq!(size.height(), 1);
+    }
+
+    #[test]
+    fn min_size_grows_taller_for_touch_density() {
+        let size = TextInput::new().min_size(Density::Touch);
+        assert_eq!(size, Density::Touch.min_target_size());
     }
 }

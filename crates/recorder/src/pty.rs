@@ -206,7 +206,7 @@ const fn convert_color(color: vt100::Color) -> Color {
     match color {
         vt100::Color::Default => Color::Default,
         vt100::Color::Idx(index) => Color::Indexed(index),
-        vt100::Color::Rgb(r, g, b) => Color::Rgb { r, g, b },
+        vt100::Color::Rgb(r, g, b) => Color::rgb(r, g, b),
     }
 }
 

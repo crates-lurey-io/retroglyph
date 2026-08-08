@@ -37,11 +37,7 @@ pub(super) fn meter_fill_color(ratio: f32) -> Color {
 /// The unfilled portion of the bar. A dim, slightly-blue gray chosen to recede behind the
 /// ramp-colored filled portion (`filled_style` in [`render`]), so the eye reads bar *length*,
 /// not the track. The exact channel values were picked by eye, not measured; adjust freely.
-const EMPTY_BAR_COLOR: Color = Color::Rgb {
-    r: 50,
-    g: 50,
-    b: 60,
-};
+const EMPTY_BAR_COLOR: Color = Color::rgb(50, 50, 60);
 
 /// A fixed-capacity, stack-allocated [`fmt::Write`] sink for a widget's short trailing
 /// `readout` text (a `"87%"` percentage for [`super::Gauge`], a `"45/100"` current/max pair for

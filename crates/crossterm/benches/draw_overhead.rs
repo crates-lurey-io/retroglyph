@@ -41,11 +41,11 @@ fn frame(cols: u16, rows: u16) -> Vec<(Pos, Tile)> {
             let idx = usize::from(x) + usize::from(y) * usize::from(cols);
             let glyph = GLYPHS[idx % GLYPHS.len()];
             #[allow(clippy::cast_possible_truncation)]
-            let color = Color::Rgb {
-                r: (idx * 7 % 256) as u8,
-                g: (idx * 13 % 256) as u8,
-                b: (idx * 29 % 256) as u8,
-            };
+            let color = Color::rgb(
+                (idx * 7 % 256) as u8,
+                (idx * 13 % 256) as u8,
+                (idx * 29 % 256) as u8,
+            );
             cells.push((Pos { x, y }, Tile::new(glyph, Style::new().fg(color))));
         }
     }

@@ -13,6 +13,9 @@
 //! layer (in full, or a rectangular region); switch layers with
 //! [`on_layer`](crate::surface::Surface::on_layer). Or bypass the builder entirely and reach the [`Grid`](crate::grid::Grid)
 //! directly via [`grid_mut`](crate::surface::Surface::grid_mut).
+//!
+//! For why `Surface` uses `put_*`/`print_*` where `Grid` uses `put_*`/`write_*`, see
+//! ["Naming"](crate::grid#naming-put_write_print_) in the `grid` module docs.
 
 use crate::color::Tint;
 use crate::grid::{Grid, Rect};

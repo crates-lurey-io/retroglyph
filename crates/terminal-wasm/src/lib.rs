@@ -998,7 +998,7 @@ mod tests {
 
         let backend = TerminalWasm::new(10, 3);
         let mut term = Terminal::new(backend);
-        let style = Style::default().bg(Color::Rgb { r: 200, g: 0, b: 0 });
+        let style = Style::default().bg(Color::rgb(200, 0, 0));
         term.draw(|s| s.put((0, 0), 'X', style)).unwrap();
         let _ = term.backend_mut().take_output();
 

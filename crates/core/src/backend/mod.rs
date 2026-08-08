@@ -116,6 +116,34 @@ impl<'a> DrawCell<'a> {
     }
 }
 
+/// How a backend wants layers handed to [`Output::draw_layers`].
+///
+/// Replaces the independent `needs_full_frame`/`composites_layers` booleans this crate used
+/// before retroglyph#1278: those could express a combination no backend used and
+/// [`crate::terminal::Terminal::present`] never honored (`needs_full_frame() == true` paired
+/// with the default `composites_layers() == false`). Nesting `needs_full_frame` inside
+/// `PixelLayered` makes that combination unrepresentable instead of merely undocumented.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum Compositing {
+    /// Layers are flattened onto layer 0 before they reach the backend; one cell, one draw.
+    ///
+    /// [`crate::terminal::Terminal::present`] composites all allocated layers into one frame
+    /// itself, so layers 1+ still appear on every backend, not only pixel ones, and the backend
+    /// receives only the changed cells.
+    CellFlattened,
+    /// The backend composites layers itself (per pixel or quad), receiving the raw layered
+    /// stream from [`Output::draw_layers`].
+    PixelLayered {
+        /// If `true`, every [`Output::draw_layers`] call receives **all** cells from every
+        /// allocated layer, not just the changed ones, and the backend should clear its output
+        /// surface before drawing. Pixel-based backends need this because sub-cell offsets can
+        /// spill glyph pixels into adjacent cells: without a full redraw, orphaned pixels from
+        /// the previous frame linger.
+        needs_full_frame: bool,
+    },
+}
+
 /// Draws grid content to a display and reports its dimensions.
 ///
 /// This is the only one of the three backend facets ([`Output`](crate::backend::Output), [`Input`](crate::backend::Input), [`Cursor`](crate::backend::Cursor)) that's
@@ -167,7 +195,7 @@ pub trait Output {
     /// The default implementation forwards to [`draw_layers`](Self::draw_layers), which every
     /// backend implements. [`crate::terminal::Terminal::present`] never calls this method directly (it
     /// always goes through `draw_layers`, pre-flattened onto layer 0 for a backend that doesn't
-    /// composite; see [`composites_layers`](Self::composites_layers)), so overriding this is
+    /// composite; see [`compositing`](Self::compositing)), so overriding this is
     /// only worthwhile if a backend has a cheaper direct path for the known-single-layer case
     /// than its own `draw_layers` would take.
     ///
@@ -185,27 +213,19 @@ pub trait Output {
     /// Draw changed cells across all layers.
     ///
     /// [`crate::terminal::Terminal::present`] always calls this method, never [`draw`](Self::draw)
-    /// directly, for every backend. A backend that renders one glyph per cell and returns
-    /// `false` from [`composites_layers`](Self::composites_layers) (the default) receives a
-    /// stream `present` has already pre-flattened onto layer 0 (all allocated layers
-    /// composited into one frame first, so layers 1+ still appear on every backend, not only
-    /// pixel ones); implementing this is no different from what implementing single-layer
-    /// `draw` used to mean. A pixel/GPU backend that returns `true` from `composites_layers`
-    /// receives the real, multi-layer stream here and does its own compositing (per-pixel or
-    /// per-quad, plus sub-cell offsets and transparency as needed).
+    /// directly, for every backend. A backend that returns [`Compositing::CellFlattened`]
+    /// (the default, from [`compositing`](Self::compositing)) receives a stream `present` has
+    /// already pre-flattened onto layer 0 (all allocated layers composited into one frame first,
+    /// so layers 1+ still appear on every backend, not only pixel ones); implementing this is no
+    /// different from what implementing single-layer `draw` used to mean. A pixel/GPU backend
+    /// that returns [`Compositing::PixelLayered`] receives the real,
+    /// multi-layer stream here and does its own compositing (per-pixel or per-quad, plus
+    /// sub-cell offsets and transparency as needed).
     ///
-    /// When [`needs_full_frame`](Self::needs_full_frame) returns `true`, this
-    /// receives **all** cells from every allocated layer, and the backend
-    /// should clear its output surface before drawing.
-    ///
-    /// That promise holds only together with `composites_layers() == true`:
-    /// [`crate::terminal::Terminal::present`] only reads `needs_full_frame` inside its `composites_layers`
-    /// branch, so a backend
-    /// returning `true` here with the default (`false`) `composites_layers` never actually
-    /// receives a full frame, despite this doc's unconditional wording (retroglyph#763). No
-    /// backend in this workspace uses that combination; a future one that does should either
-    /// also return `true` from `composites_layers`, or treat `needs_full_frame` as dead until
-    /// `Terminal::present`'s dispatch is widened to honor it outside that branch too.
+    /// When [`compositing`](Self::compositing) returns `PixelLayered { needs_full_frame: true }`,
+    /// this receives **all** cells from every allocated layer, and the backend should clear its
+    /// output surface before drawing; `PixelLayered { needs_full_frame: false }` and
+    /// `CellFlattened` both receive only the changed cells.
     ///
     /// Items are the same [`DrawCell`](crate::backend::DrawCell) [`draw`](Self::draw) receives, read through
     /// [`DrawCell::layer`](crate::backend::DrawCell::layer) rather than a separate element.
@@ -223,33 +243,20 @@ pub trait Output {
     where
         I: Iterator<Item = DrawCell<'a>>;
 
-    /// Returns `true` if the backend needs the **entire** frame (all cells on
-    /// all layers) on every call to [`draw_layers`](Self::draw_layers), rather
-    /// than just the changed cells.
+    /// How this backend wants layers handed to [`draw_layers`](Self::draw_layers).
     ///
-    /// Pixel-based backends (e.g. `SoftwareRenderer`) need this because
-    /// sub-cell offsets can spill glyph pixels into adjacent cells: without
-    /// a full redraw, orphaned pixels from the previous frame linger.
-    ///
-    /// Only takes effect alongside [`composites_layers`](Self::composites_layers) returning
-    /// `true`: see [`draw_layers`](Self::draw_layers)'s docs for why a `true` here paired with
-    /// the default `composites_layers` does nothing.
-    ///
-    /// The default implementation returns `false`.
-    fn needs_full_frame(&self) -> bool {
-        false
-    }
-
-    /// Whether this backend composites layers itself (per pixel or quad),
-    /// receiving the raw layered stream from [`draw_layers`](Self::draw_layers).
-    ///
-    /// Backends that render one glyph per cell return `false` (the default) and
-    /// receive a pre-flattened, single-layer stream: [`crate::terminal::Terminal::present`]
-    /// composites all allocated layers into one frame first. This makes layers
-    /// 1+ appear on every backend, not only pixel backends. Pixel/GPU backends
-    /// return `true` and composite the layers themselves.
-    fn composites_layers(&self) -> bool {
-        false
+    /// Backends that render one glyph per cell return [`Compositing::CellFlattened`]
+    /// (the default) and receive a pre-flattened, single-layer stream:
+    /// [`crate::terminal::Terminal::present`] composites all allocated layers into one frame
+    /// first. This makes layers 1+ appear on every backend, not only pixel backends. Pixel/GPU
+    /// backends return [`Compositing::PixelLayered`] and composite the
+    /// layers themselves; its `needs_full_frame` field asks for **all** cells on every
+    /// [`draw_layers`](Self::draw_layers) call (all cells on all layers) rather than just the
+    /// changed ones, because pixel-based backends (e.g. `SoftwareRenderer`) can spill glyph
+    /// pixels from sub-cell offsets into adjacent cells: without a full redraw, orphaned pixels
+    /// from the previous frame linger.
+    fn compositing(&self) -> Compositing {
+        Compositing::CellFlattened
     }
 
     /// Flush buffered output to the display.
