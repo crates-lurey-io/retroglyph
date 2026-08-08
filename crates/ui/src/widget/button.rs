@@ -2,28 +2,34 @@
 use retroglyph_core::color::{Color, Style};
 
 use super::{InteractiveWidget, Widget};
-use crate::Align;
-use crate::Response;
-use crate::Sense;
 use crate::Surface;
-use crate::Theme;
+use crate::align::Align;
 use crate::draw::fill_rect;
+use crate::interact::Response;
+use crate::interact::Sense;
 use crate::text::draw_clipped;
+use crate::theme::Theme;
 
+// This paragraph crossed the `too_long_first_doc_paragraph` threshold once its
+// `Interaction::interact` link needed full qualification (retroglyph#1273); see the matching
+// comment above `animate` in `lib.rs` for the general shape of this noisy-lint mis-attribution.
+#[allow(clippy::too_long_first_doc_paragraph)]
 /// A filled, centered `label`, styled by a [`Response`] the caller resolves via
-/// [`Interaction::interact`](crate::Interaction::interact) (or, through [`InteractiveWidget`],
+/// [`Interaction::interact`](crate::interact::Interaction::interact) (or, through [`InteractiveWidget`],
 /// has resolved automatically).
 ///
 /// `Button` is pure presentation, not a new source of truth: it never calls `interact` itself and
 /// has no `Id` type parameter, unlike `Interaction<Id>`. The app still owns the `Interaction<Id>`
 /// context and decides the button's id: the same division of labor as every other widget here
 /// (state lives outside; the widget only reads it). [`InteractiveWidget::sense`] fixes the
-/// [`Sense`](crate::Sense) this button needs ([`Sense::click`](crate::Sense::click)), so a call
+/// [`Sense`](crate::interact::Sense) this button needs ([`Sense::click`](crate::interact::Sense::click)), so a call
 /// site can't mismatch it:
 ///
 /// ```
 /// use retroglyph_core::grid::{Grid, Rect};
-/// use retroglyph_ui::{Button, InteractiveWidget, Interaction, Surface};
+/// use retroglyph_ui::interact::Interaction;
+/// use retroglyph_ui::widget::{Button, InteractiveWidget};
+/// use retroglyph_ui::Surface;
 ///
 /// #[derive(Clone, Copy, PartialEq, Eq)]
 /// enum Id {
@@ -203,7 +209,7 @@ mod tests {
     use retroglyph_core::grid::{Grid, Pos, Rect};
 
     use super::*;
-    use crate::Interaction;
+    use crate::interact::Interaction;
 
     #[derive(Clone, Copy, PartialEq, Eq)]
     enum Id {
@@ -374,7 +380,7 @@ mod tests {
 
     #[test]
     fn theme_on_maps_dim_onto_disabled_style() {
-        use crate::Theme;
+        use crate::theme::Theme;
 
         let button = Button::new("Go").theme_on(Theme::DARK, Color::Default);
         assert_eq!(button.disabled_style.foreground(), Theme::DARK.dim);
@@ -391,7 +397,7 @@ mod tests {
 
     #[test]
     fn theme_maps_named_roles_onto_every_state() {
-        use crate::Theme;
+        use crate::theme::Theme;
 
         let response: Response<()> = Response {
             hovered: true,
@@ -412,7 +418,7 @@ mod tests {
 
     #[test]
     fn theme_on_uses_the_given_backdrop_instead_of_panel_bg() {
-        use crate::Theme;
+        use crate::theme::Theme;
 
         let button = Button::new("Go").theme_on(Theme::DARK, Color::Default);
 

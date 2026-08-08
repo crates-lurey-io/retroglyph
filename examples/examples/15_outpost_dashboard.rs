@@ -52,10 +52,11 @@ use retroglyph_core::grid::{HasSize, Pos, Rect, Size};
 use retroglyph_core::surface::Surface;
 use retroglyph_core::terminal::Terminal;
 use retroglyph_examples::Example;
-use retroglyph_ui::{
-    Align, Camera, Constraint, Easing, Tween, draw_clipped, split_h, split_h_spaced, split_v,
-    truncate,
-};
+use retroglyph_ui::align::Align;
+use retroglyph_ui::animate::{Easing, Tween};
+use retroglyph_ui::camera::Camera;
+use retroglyph_ui::layout::{Constraint, split_h, split_h_spaced, split_v};
+use retroglyph_ui::text::{draw_clipped, truncate};
 
 // ── Breakpoints ────────────────────────────────────────────────────────────
 

@@ -9,7 +9,7 @@ use core::time::Duration;
 ///
 /// ```
 /// use core::time::Duration;
-/// use retroglyph_ui::{Easing, Tween};
+/// use retroglyph_ui::animate::{Easing, Tween};
 ///
 /// let mut fade = Tween::new(0.0, 1.0)
 ///     .duration(Duration::from_millis(200))

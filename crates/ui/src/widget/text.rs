@@ -2,8 +2,8 @@
 use retroglyph_core::color::Style;
 
 use super::Widget;
-use crate::Align;
 use crate::Surface;
+use crate::align::Align;
 use crate::text::draw_clipped;
 
 /// A single line of text in one [`Style`], clipped (not wrapped) to
@@ -21,13 +21,15 @@ use crate::text::draw_clipped;
 /// Unlike [`super::BoxBorder`], [`super::Gauge`], [`super::StatBar`],
 /// [`super::Table`], and [`super::Button`], `Text` has no `theme()`/
 /// `theme_on()` pair: a line of plain text has no single semantic
-/// [`Theme`](crate::Theme) role to map onto, so callers set `style` directly.
+/// [`Theme`](crate::theme::Theme) role to map onto, so callers set `style` directly.
 ///
 /// # Examples
 ///
 /// ```
 /// use retroglyph_core::grid::{Grid, Rect};
-/// use retroglyph_ui::{Align, Surface, Text, Widget};
+/// use retroglyph_ui::align::Align;
+/// use retroglyph_ui::widget::{Text, Widget};
+/// use retroglyph_ui::Surface;
 ///
 /// let area = Rect::new(0, 0, 10, 1);
 /// let mut grid = Grid::new(10, 1);

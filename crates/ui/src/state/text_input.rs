@@ -5,7 +5,7 @@ use retroglyph_core::text::{char_width, width_usize};
 
 /// A `String` value, a byte cursor into it, and a horizontal scroll offset.
 ///
-/// The state a single-line editable text field needs, mirroring [`ListState`](crate::ListState)'s
+/// The state a single-line editable text field needs, mirroring [`ListState`](crate::state::ListState)'s
 /// split between "what's selected/typed" and "how it's drawn".
 ///
 /// Holds no reference to any widget: the same `TextInputState` can be reused across frames (and
@@ -16,7 +16,7 @@ use retroglyph_core::text::{char_width, width_usize};
 /// `insert_str`/`backspace`/`delete` never split a multi-byte character, and `move_left`/
 /// `move_right` step by whole `char`s. Display-column math (where the caret actually draws, and
 /// how far the field has scrolled) is a separate concern handled by
-/// [`ensure_visible`](Self::ensure_visible) and the [`TextInput`](crate::TextInput) widget itself, via
+/// [`ensure_visible`](Self::ensure_visible) and the [`TextInput`](crate::widget::TextInput) widget itself, via
 /// `retroglyph_core::text::width_usize`: a byte or char count is the wrong unit once the value
 /// contains a double-width character.
 ///
@@ -147,8 +147,8 @@ impl TextInputState {
     /// fall through to its own key handling, e.g. Enter/Escape/Tab, none of which this consumes).
     ///
     /// Key releases and auto-repeats other than presses are ignored except that auto-repeat
-    /// presses are treated the same as a press (matches [`FocusRing`](crate::FocusRing)/
-    /// [`Shortcuts`](crate::Shortcuts)'s own `is_down` gating). [`Event`](retroglyph_core::event::Event)
+    /// presses are treated the same as a press (matches [`FocusRing`](crate::interact::FocusRing)/
+    /// [`Shortcuts`](crate::interact::Shortcuts)'s own `is_down` gating). [`Event`](retroglyph_core::event::Event)
     /// has no IME/composition variant to begin with; see the scope note above.
     pub fn handle_event(&mut self, event: &Event) -> bool {
         match event {
@@ -196,7 +196,7 @@ impl TextInputState {
     }
 
     /// Nudge the scroll offset by the minimum amount needed to keep the cursor within a
-    /// `width`-column window, the way [`ListState::ensure_visible`](crate::ListState::ensure_visible)
+    /// `width`-column window, the way [`ListState::ensure_visible`](crate::state::ListState::ensure_visible)
     /// keeps a selection in view.
     ///
     /// A no-op if `width` is zero or the cursor is already visible. Call this once per frame

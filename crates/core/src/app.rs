@@ -48,7 +48,7 @@ pub enum Flow {
     /// previous frame on screen.
     ///
     /// For turn-based apps that only need to redraw in response to player input, not on every
-    /// tick of the driver's loop. Returning `Idle` while a `retroglyph_ui::Tween`- or
+    /// tick of the driver's loop. Returning `Idle` while a `retroglyph_ui::animate::Tween`- or
     /// [`FrameClock`](crate::frames::FrameClock)-driven animation is still in flight is an
     /// app bug, not a valid use: an in-progress animation has something new to show every frame,
     /// which is exactly what `Idle` tells the driver isn't true.
@@ -144,7 +144,7 @@ impl RunOptions {
     /// Options for a continuously-rendering, [`target_fps`](Self::target_fps)-paced loop.
     ///
     /// [`event_driven`](Self::event_driven) is `false`: [`Flow::Idle`](crate::app::Flow::Idle) only skips `present`, it
-    /// never blocks. Use this for apps that drive a `retroglyph_ui::Tween`/
+    /// never blocks. Use this for apps that drive a `retroglyph_ui::animate::Tween`/
     /// [`FrameClock`](crate::frames::FrameClock) from [`Frame::delta`](crate::app::Frame::delta) and need `update`
     /// called every tick regardless of input.
     ///

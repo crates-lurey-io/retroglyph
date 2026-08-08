@@ -27,7 +27,7 @@ use retroglyph_core::grid::Rect;
 use retroglyph_core::surface::Surface;
 use retroglyph_core::terminal::Terminal;
 use retroglyph_examples::Example;
-use retroglyph_ui::{Constraint, split_h, split_v};
+use retroglyph_ui::layout::{Constraint, split_h, split_v};
 
 /// State for the weighted-fill example (none needed: the pane layout never changes).
 #[derive(Default)]

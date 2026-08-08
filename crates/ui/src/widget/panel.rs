@@ -7,10 +7,11 @@ use retroglyph_core::text::truncate_measured;
 
 use super::{BorderType, BoxBorder, Measure, Widget};
 use crate::Surface;
+use crate::align::Align;
 use crate::draw::fill_rect;
 use crate::style::Sides;
 use crate::text::draw_clipped;
-use crate::{Align, Theme};
+use crate::theme::Theme;
 
 /// Which border edge a [`PanelTitle`] is drawn into.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -52,7 +53,9 @@ pub struct PanelTitle<'a> {
 ///
 /// ```
 /// use retroglyph_core::grid::{Grid, Rect};
-/// use retroglyph_ui::{Align, Panel, Surface, TitlePosition, Widget};
+/// use retroglyph_ui::align::Align;
+/// use retroglyph_ui::widget::{Panel, TitlePosition, Widget};
+/// use retroglyph_ui::Surface;
 ///
 /// let area = Rect::new(0, 0, 20, 5);
 /// let mut grid = Grid::new(20, 5);
@@ -175,7 +178,8 @@ impl<'a> Panel<'a> {
     ///
     /// ```
     /// use retroglyph_core::grid::Rect;
-    /// use retroglyph_ui::{Panel, Sides};
+    /// use retroglyph_ui::style::Sides;
+    /// use retroglyph_ui::widget::Panel;
     ///
     /// let panel = Panel::new().padding(Sides::symmetric(0, 1));
     /// let area = Rect::new(0, 0, 20, 5);

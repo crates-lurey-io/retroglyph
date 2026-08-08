@@ -47,13 +47,14 @@ use crate::Surface;
 /// Unlike [`super::BoxBorder`], [`super::Gauge`], [`super::StatBar`],
 /// [`super::Table`], and [`super::Button`], `Paragraph` has no `theme()`/
 /// `theme_on()` pair: word-wrapped text has no single semantic
-/// [`Theme`](crate::Theme) role to map onto, so callers set `style` directly.
+/// [`Theme`](crate::theme::Theme) role to map onto, so callers set `style` directly.
 ///
 /// # Examples
 ///
 /// ```
 /// use retroglyph_core::grid::{Grid, Rect};
-/// use retroglyph_ui::{Measure, Paragraph, Surface, Widget};
+/// use retroglyph_ui::widget::{Measure, Paragraph, Widget};
+/// use retroglyph_ui::Surface;
 ///
 /// let p = Paragraph::new("the quick brown fox jumps");
 /// let height = p.height_for(10); // rows needed to wrap at 10 columns

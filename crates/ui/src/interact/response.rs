@@ -1,17 +1,17 @@
-//! [`Response`]: what [`Interaction::interact`](crate::Interaction::interact)
+//! [`Response`]: what [`Interaction::interact`](crate::interact::Interaction::interact)
 //! hands back to a widget call site.
 
 use retroglyph_core::grid::{Pos, Rect};
 
 /// What happened to a widget this frame, as reported by
-/// [`Interaction::interact`](crate::Interaction::interact).
+/// [`Interaction::interact`](crate::interact::Interaction::interact).
 ///
 /// Every field is scoped to *this* frame only (e.g. [`clicked`](Self::clicked)
 /// is `true` for exactly the one frame the release lands on), except
 /// [`focused`](Self::focused), which stays `true` across frames until focus
 /// moves elsewhere. Fields a widget didn't ask for via
-/// [`Sense`](crate::Sense) are always `false`/`0`: a widget sensed with
-/// only [`Sense::HOVER`](crate::Sense::HOVER) never reports
+/// [`Sense`](crate::interact::Sense) are always `false`/`0`: a widget sensed with
+/// only [`Sense::HOVER`](crate::interact::Sense::HOVER) never reports
 /// [`clicked`](Self::clicked), for instance.
 // Flat, independent fields by design: `Response` is a per-frame report card, not a state
 // machine: collapsing it into enums would only make `interact`'s construction of it more
@@ -21,8 +21,8 @@ use retroglyph_core::grid::{Pos, Rect};
 // `Interaction::interact`, which always has a real id in hand, so wrapping it in `Option` would
 // just make every caller unwrap a value that's never actually absent. The one place this crate
 // builds a `Response` without going through `interact` is [`Response::default`], used as a
-// synthetic "nothing happened" value (see [`Widget`](crate::Widget) impls that share their
-// [`InteractiveWidget`](crate::InteractiveWidget) drawing routine, and this crate's own tests).
+// synthetic "nothing happened" value (see [`Widget`](crate::widget::Widget) impls that share their
+// [`InteractiveWidget`](crate::widget::InteractiveWidget) drawing routine, and this crate's own tests).
 // `Default` is implemented for `Response<()>` specifically, not `impl<Id: Default>` generically:
 // nothing here ever needs a default `Response` under a real app `Id`, since a real `Id` only ever
 // reaches a `Response` through `interact`, so there's no reason to demand every `Id` a caller
@@ -76,7 +76,7 @@ impl Default for Response<()> {
 }
 
 impl<Id: Copy> Response<Id> {
-    /// The `id` passed to [`Interaction::interact`](crate::Interaction::interact) this frame,
+    /// The `id` passed to [`Interaction::interact`](crate::interact::Interaction::interact) this frame,
     /// echoed back so a call site that only has the resolved `Response` in hand (e.g. one
     /// returned from a widget it drew in a loop) can still tell which id it belongs to. For a
     /// [`Response::default`] built directly rather than through `interact`, this is just
@@ -89,7 +89,7 @@ impl<Id: Copy> Response<Id> {
 
 impl<Id> Response<Id> {
     /// The pointer is over this widget's rect, resolved from last frame's
-    /// hit-test: see [`Interaction`](crate::Interaction) for why there's a
+    /// hit-test: see [`Interaction`](crate::interact::Interaction) for why there's a
     /// frame of latency.
     #[must_use]
     pub const fn hovered(&self) -> bool {
@@ -97,7 +97,7 @@ impl<Id> Response<Id> {
     }
 
     /// The primary pointer button went down on this widget this frame, or
-    /// (sensed with [`Sense::FOCUSABLE`](crate::Sense::FOCUSABLE)) Enter or
+    /// (sensed with [`Sense::FOCUSABLE`](crate::interact::Sense::FOCUSABLE)) Enter or
     /// Space was pressed while it was focused.
     #[must_use]
     pub const fn pressed(&self) -> bool {
@@ -116,7 +116,7 @@ impl<Id> Response<Id> {
     /// A full press-release cycle landed on this widget this frame: pressed
     /// and released while still hovered, never crossing the drag threshold.
     /// Also fires from keyboard activation (Enter/Space while focused) --
-    /// terminals are frequently mouse-less, so [`Sense::click`](crate::Sense::click)
+    /// terminals are frequently mouse-less, so [`Sense::click`](crate::interact::Sense::click)
     /// widgets are keyboard-operable by default.
     #[must_use]
     pub const fn clicked(&self) -> bool {
@@ -124,7 +124,7 @@ impl<Id> Response<Id> {
     }
 
     /// A second [`clicked`](Self::clicked) landed on this widget within
-    /// [`Interaction::with_double_click_window`](crate::Interaction::with_double_click_window)
+    /// [`Interaction::with_double_click_window`](crate::interact::Interaction::with_double_click_window)
     /// frames of the first, e.g. to open a file on double-click while a single click just
     /// selects it. Implies [`clicked`](Self::clicked) is also `true` this frame. A third click
     /// starts counting fresh rather than re-firing every frame after the second: each pair of
@@ -141,7 +141,7 @@ impl<Id> Response<Id> {
     /// without waiting for a release event: the same "slide-to-cancel" feedback
     /// `is_pointer_button_down_on` gives egui widgets and `IsItemHovered() && IsItemActive()`
     /// gives Dear `ImGui` widgets. Only ever `true` for widgets sensed with
-    /// [`Sense::CLICK`](crate::Sense::CLICK).
+    /// [`Sense::CLICK`](crate::interact::Sense::CLICK).
     #[must_use]
     pub const fn held(&self) -> bool {
         self.held
@@ -149,7 +149,7 @@ impl<Id> Response<Id> {
 
     /// The pointer moved past the drag threshold while pressed on this
     /// widget. Only ever `true` for widgets sensed with
-    /// [`Sense::DRAG`](crate::Sense::DRAG).
+    /// [`Sense::DRAG`](crate::interact::Sense::DRAG).
     #[must_use]
     pub const fn dragging(&self) -> bool {
         self.dragging
@@ -182,7 +182,7 @@ impl<Id> Response<Id> {
 
     /// The secondary (right) mouse button pressed and released on this
     /// widget this frame while still hovered. Only ever `true` for widgets
-    /// sensed with [`Sense::SECONDARY_CLICK`](crate::Sense::SECONDARY_CLICK).
+    /// sensed with [`Sense::SECONDARY_CLICK`](crate::interact::Sense::SECONDARY_CLICK).
     /// Unlike [`clicked`](Self::clicked), there's no keyboard equivalent --
     /// a secondary action needs its own trigger (a modifier+Enter, a menu
     /// key, whatever fits the app) since Enter/Space already means
@@ -194,17 +194,17 @@ impl<Id> Response<Id> {
 
     /// Scroll wheel delta accumulated this frame while the pointer was
     /// within this widget's rect (regardless of what else was drawn on top
-    /// of it; see [`Sense::SCROLL`](crate::Sense::SCROLL)): positive
+    /// of it; see [`Sense::SCROLL`](crate::interact::Sense::SCROLL)): positive
     /// scrolls forward/down, negative scrolls backward/up. Feeds straight
-    /// into [`ListState::scroll_by`](crate::ListState::scroll_by). Zero
+    /// into [`ListState::scroll_by`](crate::state::ListState::scroll_by). Zero
     /// unless sensed with `SCROLL` and something scrolled.
     #[must_use]
     pub const fn scroll_delta(&self) -> i32 {
         self.scroll_delta
     }
 
-    /// This widget was interacted with via a [`Sense`](crate::Sense) that
-    /// had [`Sense::DISABLED`](crate::Sense::DISABLED) set.
+    /// This widget was interacted with via a [`Sense`](crate::interact::Sense) that
+    /// had [`Sense::DISABLED`](crate::interact::Sense::DISABLED) set.
     /// [`hovered`](Self::hovered) still works, so a disabled control can
     /// show a tooltip explaining why; every other field above is `false`
     /// (or `0`) regardless of what the pointer/keyboard did. Widgets should
@@ -218,7 +218,7 @@ impl<Id> Response<Id> {
     /// Where the pointer is, in grid coordinates, resolved from the same last-frame snapshot
     /// [`hovered`](Self::hovered) is computed from: `Some` exactly when this widget's rect
     /// contains the pointer, `None` when it's elsewhere or this widget wasn't sensed with a
-    /// pointer-registering [`Sense`](crate::Sense). Lets a composite widget shown under a single
+    /// pointer-registering [`Sense`](crate::interact::Sense). Lets a composite widget shown under a single
     /// id (a list of rows, a strip of tabs) resolve which of its own parts the pointer is over,
     /// without needing a distinct id per part.
     #[must_use]
@@ -239,7 +239,7 @@ impl<Id> Response<Id> {
     /// How far the pointer has moved from [`press_origin`](Self::press_origin), signed and in
     /// grid cells: `(pointer.x - press_origin.x, pointer.y - press_origin.y)`. Unlike
     /// [`pointer_pos`](Self::pointer_pos), this keeps reporting once the pointer slides outside
-    /// this widget's own rect, which is the common case for a [`Sense::DRAG`](crate::Sense::DRAG)
+    /// this widget's own rect, which is the common case for a [`Sense::DRAG`](crate::interact::Sense::DRAG)
     /// widget like a scrollbar thumb or a resizable pane divider: both need the drag's full
     /// displacement, not just the part of it that stayed over the thumb. `None` under the same
     /// condition [`press_origin`](Self::press_origin) is `None`: no press is currently active on
@@ -250,7 +250,7 @@ impl<Id> Response<Id> {
     }
 
     /// The `area` this widget was shown at, as passed to
-    /// [`Interaction::interact`](crate::Interaction::interact) this frame. Useful for anything
+    /// [`Interaction::interact`](crate::interact::Interaction::interact) this frame. Useful for anything
     /// that draws relative to where this widget landed, e.g. a tooltip anchored under its
     /// trigger.
     #[must_use]

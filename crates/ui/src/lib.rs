@@ -6,34 +6,34 @@
 //! alignment ([`layout`]).
 //!
 //! Every widget ([`widget`]) is a builder struct that draws itself into a
-//! [`Grid`](retroglyph_core::grid::Grid) via [`Widget`]/[`StatefulWidget`] and
+//! [`Grid`](retroglyph_core::grid::Grid) via [`Widget`](widget::Widget)/[`StatefulWidget`](widget::StatefulWidget) and
 //! retains no state of its own: state that outlives one render call (a
 //! selection index, a scroll offset, a text field's value and cursor)
-//! lives in [`ListState`]/[`TextInputState`] instead. A
-//! handful of things that are genuinely just functions ([`fill_rect`],
-//! [`thumb_geometry`]/[`offset_for_pos`] in [`draw`]; [`truncate`]/[`truncate_owned`] in
+//! lives in [`ListState`](state::ListState)/[`TextInputState`](state::TextInputState) instead. A
+//! handful of things that are genuinely just functions ([`fill_rect`](draw::fill_rect),
+//! [`thumb_geometry`](draw::thumb_geometry)/[`offset_for_pos`](draw::offset_for_pos) in [`draw`]; [`truncate`](text::truncate)/[`truncate_owned`](text::truncate_owned) in
 //! [`text`]) stay free functions rather than pretending to be widgets. Three more independent
 //! layers build on top:
 //!
-//! - [`Widget`]/[`StatefulWidget`] ([`widget`]) render into a [`Surface`],
+//! - [`Widget`](widget::Widget)/[`StatefulWidget`](widget::StatefulWidget) ([`widget`]) render into a [`Surface`],
 //!   an area-relative, single-layer view over a [`Grid`](retroglyph_core::grid::Grid), and let
 //!   callers box or store heterogeneous widgets, e.g. a `Vec<Box<dyn Widget>>` of panes to
 //!   render each frame, with no `Backend` type parameter, since drawing touches nothing but
-//!   cells. [`AnimatedWidget`] is `StatefulWidget`'s sibling for state that evolves with
-//!   wall-clock time (e.g. [`ScrollState`]'s momentum physics) instead of only in response to
-//!   input; see its own docs. [`InteractiveWidget`] is the sibling trait for widgets that also
-//!   read a [`Response`] (`Button`, `Scrollbar`, `List`, `Tabs`).
-//! - [`Interaction`] ([`interact`]) for hover/click/drag/focus tracking
-//!   without a retained widget tree: the sibling of [`ListState`] for
-//!   widgets that don't have a natural selection index of their own. [`Ui`] pairs one frame's
-//!   [`Surface`] with an `Interaction`, via [`Interaction::frame`]: [`Ui::show`] is how an
-//!   [`InteractiveWidget`] gets hit-tested and drawn from the one area/id a call site names.
-//! - [`BoxStyle`] ([`style`]) for a Lip-Gloss-style box model (padding,
+//!   cells. [`AnimatedWidget`](widget::AnimatedWidget) is `StatefulWidget`'s sibling for state that evolves with
+//!   wall-clock time (e.g. [`ScrollState`](state::ScrollState)'s momentum physics) instead of only in response to
+//!   input; see its own docs. [`InteractiveWidget`](widget::InteractiveWidget) is the sibling trait for widgets that also
+//!   read a [`Response`](interact::Response) (`Button`, `Scrollbar`, `List`, `Tabs`).
+//! - [`Interaction`](interact::Interaction) ([`interact`]) for hover/click/drag/focus tracking
+//!   without a retained widget tree: the sibling of [`ListState`](state::ListState) for
+//!   widgets that don't have a natural selection index of their own. [`Ui`](ui::Ui) pairs one frame's
+//!   [`Surface`] with an `Interaction`, via [`Interaction::frame`](interact::Interaction::frame): [`Ui::show`](ui::Ui::show) is how an
+//!   [`InteractiveWidget`](widget::InteractiveWidget) gets hit-tested and drawn from the one area/id a call site names.
+//! - [`BoxStyle`](style::BoxStyle) ([`style`]) for a Lip-Gloss-style box model (padding,
 //!   border, margin) rendered into a standalone `Grid`.
-//! - [`join_h`]/[`join_v`] ([`block`]) to compose several `Grid`s (e.g. `BoxStyle::render`
+//! - [`join_h`](block::join_h)/[`join_v`](block::join_v) ([`block`]) to compose several `Grid`s (e.g. `BoxStyle::render`
 //!   output) into one; `retroglyph_core::surface::Surface::blit` stamps the result onto a surface.
-//! - [`Theme`] ([`theme`]) for named color roles (an app picks
-//!   [`Theme::DARK`]/[`Theme::LIGHT`], or builds its own), independent of
+//! - [`Theme`](theme::Theme) ([`theme`]) for named color roles (an app picks
+//!   [`Theme::DARK`](theme::Theme::DARK)/[`Theme::LIGHT`](theme::Theme::LIGHT), or builds its own), independent of
 //!   how the app decides which one is active.
 //!
 //! This crate is itself optional: games that draw manually depend only on
@@ -52,7 +52,7 @@
 //! ⚪ Optional.
 //!
 //! Forwards `retroglyph-core`'s `dev` feature, which forces development diagnostics on in a build
-//! that would otherwise compile them out (see [`retroglyph_core::dev`]).
+//! that would otherwise compile them out (see [`retroglyph_core::dev`](retroglyph_core::dev)).
 //!
 //! ### `egc`
 //!
@@ -60,7 +60,7 @@
 //!
 //! Forwards to `retroglyph-core`'s `egc` feature.
 //!
-//! Upgrades [`Paragraph`]'s word-wrap (always available) to grapheme-cluster-aware correctness.
+//! Upgrades [`Paragraph`](widget::Paragraph)'s word-wrap (always available) to grapheme-cluster-aware correctness.
 //!
 //! ### `libm`
 //!
@@ -74,10 +74,10 @@
 //!
 //! ⚪ Optional.
 //!
-//! Adds `Serialize`/`Deserialize` impls for [`Theme`] and `Density`, forwarding to
+//! Adds `Serialize`/`Deserialize` impls for [`Theme`](theme::Theme) and `Density`, forwarding to
 //! `retroglyph-core`'s `serde` feature.
 //!
-//! [`Theme`] round-trips through `Color`'s own `serde` impl.
+//! [`Theme`](theme::Theme) round-trips through `Color`'s own `serde` impl.
 //!
 //! ### `std`
 //!
@@ -98,6 +98,14 @@
     html_favicon_url = "https://raw.githubusercontent.com/crates-lurey-io/retroglyph/main/docs/public/assets/logo.svg"
 )]
 #![cfg_attr(docsrs, feature(doc_cfg))]
+// A `pub mod` line's own outer doc comment and its target module's inner `//!` doc concatenate
+// into one rendered page, but intra-doc links in that combined block resolve against the scope
+// where the *outer* comment lives (this file, the crate root) rather than the module's own scope.
+// Every module doc below that also carries an outer doc comment on its `pub mod` line therefore
+// needs fully qualified links even for types the module defines itself, which then reads as
+// "redundant" from the module file's own point of view. Rather than track that split per link,
+// every intra-doc link in this crate is fully qualified and this lint is off crate-wide.
+#![allow(rustdoc::redundant_explicit_links)]
 extern crate alloc;
 
 // This crate's float use -- easing curves and tweens, scrollbar geometry, gauge/sparkline/bar
@@ -117,6 +125,11 @@ compile_error!("retroglyph-ui needs a float backend: enable `std` or `libm`.");
 struct ReadmeDoctests;
 
 pub mod align;
+// A `pub mod` line's own doc comment concatenates with the module's inner `//!` doc and resolves
+// against the crate root, so this module's own types need to be qualified in it even though the
+// module defines them itself; that inflation is what pushes the paragraph below past the
+// `too_long_first_doc_paragraph` threshold (retroglyph#1273).
+#[allow(clippy::too_long_first_doc_paragraph)]
 /// Time-driven value animation: easing curves, a stateful `Tween`, and a periodic oscillator.
 ///
 /// The trig-based easing curves and the oscillator's sine wave go through `retroglyph_core`'s
@@ -129,7 +142,9 @@ pub mod camera;
 pub mod draw;
 pub mod interact;
 pub mod layout;
-/// A live frame-time/FPS overlay: [`PerfOverlayApp`] wraps any `App` with one, on any `Backend`.
+// See the `too_long_first_doc_paragraph` comment above `animate`: same noisy-lint mis-attribution.
+#[allow(clippy::too_long_first_doc_paragraph)]
+/// A live frame-time/FPS overlay: [`PerfOverlayApp`](perf::PerfOverlayApp) wraps any `App` with one, on any `Backend`.
 pub mod perf;
 pub mod state;
 pub mod style;
@@ -138,33 +153,9 @@ pub mod theme;
 pub mod ui;
 pub mod widget;
 
-pub use align::Align;
-pub use animate::{Easing, Tween, oscillate, oscillate_with_phase};
-pub use block::{join_h, join_v};
-pub use camera::Camera;
-pub use draw::{fill_rect, offset_for_pos, thumb_geometry};
-pub use interact::{
-    Consumed, DEFAULT_DRAG_THRESHOLD, Density, FocusRing, HitTester, Interaction, Pointer,
-    Response, Sense, Shortcuts,
-};
-pub use layout::{
-    Constraint, Flex, Side, Spacing, anchored_rect, centered_rect, split_h, split_h_flex,
-    split_h_n, split_h_n_flex, split_h_n_spaced, split_h_spaced, split_v, split_v_flex, split_v_n,
-    split_v_n_flex, split_v_n_spaced, split_v_spaced,
-};
-pub use perf::{
-    DEFAULT_LAYER, DefaultPerfRenderer, FRAME_HISTORY, PerfOverlayApp, PerfOverlayMode,
-    PerfRenderer, default_is_toggle_key,
-};
+// No root re-exports below this line by design (retroglyph#1273, matching retroglyph-core's
+// retroglyph#1035): every public item lives at its module path. `retroglyph_core::surface`'s
+// types are the one exception, kept per retroglyph#1035's own reasoning for this line: they spare
+// callers from tracking which crate a type lives in, which is a different, legitimate concern
+// from this crate's own root re-exports.
 pub use retroglyph_core::surface::{Layer, StyledSurface, Surface};
-pub use state::{ListState, ScrollPhysics, ScrollState, SelectionWrap, TextInputState};
-pub use style::{BoxStyle, Sides};
-pub use text::{draw_clipped, truncate, truncate_owned};
-pub use theme::Theme;
-pub use ui::Ui;
-pub use widget::{
-    AnimatedPerfOverlay, AnimatedWidget, BorderType, BoxBorder, Button, Gauge, HighlightSpacing,
-    InteractiveWidget, List, ListDirection, Log, Measure, Meter, Modal, Panel, PanelTitle,
-    Paragraph, PerfOverlay, PrintLine, ProgressBar, Scrollbar, Sparkline, StatBar, StatefulWidget,
-    Table, Tabs, Text, TextInput, TitlePosition, Widget,
-};

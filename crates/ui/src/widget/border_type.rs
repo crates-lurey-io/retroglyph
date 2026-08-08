@@ -10,7 +10,7 @@ use retroglyph_core::symbols::border;
 /// make nested or stateful boxes visually distinct at a glance: an outer [`BorderType::Double`]
 /// around an inner [`BorderType::Plain`] reads instantly, where two identical single lines don't,
 /// and double/thick borders are a legible way to mark an active pane even on a 16-color terminal
-/// where [`Theme`](crate::Theme) alone can't carry that distinction.
+/// where [`Theme`](crate::theme::Theme) alone can't carry that distinction.
 ///
 /// Covers four of ratatui's six `BorderType` variants (`Plain`, `Rounded`, `Double`, `Thick`);
 /// `QuadrantInside`/`QuadrantOutside` are omitted since nothing here has a use for them yet. Each
@@ -20,7 +20,7 @@ use retroglyph_core::symbols::border;
 /// # Examples
 ///
 /// ```
-/// use retroglyph_ui::{BorderType, BoxBorder};
+/// use retroglyph_ui::widget::{BorderType, BoxBorder};
 ///
 /// let border = BoxBorder::new().border_type(BorderType::Rounded);
 /// ```

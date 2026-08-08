@@ -26,7 +26,11 @@ use retroglyph_core::grid::{Pos, Rect};
 use retroglyph_core::terminal::Terminal;
 use retroglyph_core::text::width_usize;
 use retroglyph_examples::Example;
-use retroglyph_ui::{Panel, StatefulWidget, Surface, TextInput, TextInputState, Widget as _};
+use retroglyph_ui::state::TextInputState;
+
+use retroglyph_ui::widget::{Panel, StatefulWidget, TextInput, Widget as _};
+
+use retroglyph_ui::Surface;
 
 /// Every [`CursorStyle`] variant, in the order Tab cycles them (and DECSCUSR numbers them; see
 /// [`Terminal::set_cursor_style`]'s own docs).

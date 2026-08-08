@@ -18,7 +18,11 @@
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use retroglyph_core::grid::{Grid, Rect};
-use retroglyph_ui::{ListState, StatefulWidget, Surface, Table};
+use retroglyph_ui::state::ListState;
+
+use retroglyph_ui::widget::{StatefulWidget, Table};
+
+use retroglyph_ui::Surface;
 use std::hint::black_box;
 
 /// Builds `rows x cols` of short, deterministic cell text, long enough that some cells need

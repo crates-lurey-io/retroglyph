@@ -30,10 +30,13 @@ use retroglyph_core::event::{Event, KeyCode};
 use retroglyph_core::grid::Rect;
 use retroglyph_core::terminal::Terminal;
 use retroglyph_examples::Example;
-use retroglyph_ui::{
-    BoxStyle, Button, Constraint, Gauge, Interaction, List, ListState, Sides, Sparkline, Table,
-    Tabs, Theme, Ui, split_h, split_v,
-};
+use retroglyph_ui::interact::Interaction;
+use retroglyph_ui::layout::{Constraint, split_h, split_v};
+use retroglyph_ui::state::ListState;
+use retroglyph_ui::style::{BoxStyle, Sides};
+use retroglyph_ui::theme::Theme;
+use retroglyph_ui::ui::Ui;
+use retroglyph_ui::widget::{Button, Gauge, List, Sparkline, Table, Tabs};
 
 /// Identifies the dashboard's one interactive widget for [`Interaction`]'s hit-testing and focus
 /// ring -- see `10_widgets_interaction` for a fuller demonstration of the same machinery.

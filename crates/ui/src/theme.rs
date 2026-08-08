@@ -2,7 +2,7 @@
 
 use retroglyph_core::color::{Color, Style};
 
-use crate::Response;
+use crate::interact::Response;
 
 /// A palette of named color roles, rather than a CSS-style cascade: draw
 /// code picks the role it means (`theme.accent`, `theme.border`) and the
@@ -18,7 +18,7 @@ use crate::Response;
 /// # Examples
 ///
 /// ```
-/// use retroglyph_ui::Theme;
+/// use retroglyph_ui::theme::Theme;
 ///
 /// let theme = Theme::DARK;
 /// assert_eq!(theme.fg, Theme::DARK.fg);
@@ -167,8 +167,8 @@ impl Theme {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_ui::Theme;
-    /// use retroglyph_ui::Interaction;
+    /// use retroglyph_ui::theme::Theme;
+    /// use retroglyph_ui::interact::Interaction;
     /// use retroglyph_core::grid::{Pos, Rect};
     ///
     /// let theme = Theme::DARK;
@@ -199,8 +199,8 @@ impl Theme {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_ui::Theme;
-    /// use retroglyph_ui::Interaction;
+    /// use retroglyph_ui::theme::Theme;
+    /// use retroglyph_ui::interact::Interaction;
     /// use retroglyph_core::grid::{Pos, Rect};
     ///
     /// let theme = Theme::DARK;
@@ -240,8 +240,8 @@ impl Theme {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_ui::Theme;
-    /// use retroglyph_ui::Interaction;
+    /// use retroglyph_ui::theme::Theme;
+    /// use retroglyph_ui::interact::Interaction;
     /// use retroglyph_core::grid::{Pos, Rect};
     ///
     /// let theme = Theme::DARK;

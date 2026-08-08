@@ -139,7 +139,7 @@ impl TestHarness {
     /// [`App::update`](crate::app::App::update), replacing [`STEP_DELTA`] (builder style).
     ///
     /// For an app under test whose animation timing is calibrated against a different fixed
-    /// delta than [`STEP_DELTA`]'s 16ms (a `retroglyph_ui::Tween`/[`FrameClock`](crate::frames::FrameClock)
+    /// delta than [`STEP_DELTA`]'s 16ms (a `retroglyph_ui::animate::Tween`/[`FrameClock`](crate::frames::FrameClock)
     /// tuned in real seconds, for example): matching that calibration here keeps however many
     /// `step` calls an animation takes to settle the same as what tuned it, rather than retuning
     /// the animation (or the test's assertions) around the harness's own default instead.

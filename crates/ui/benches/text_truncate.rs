@@ -18,7 +18,7 @@
 #![allow(missing_docs)]
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use retroglyph_ui::truncate;
+use retroglyph_ui::text::truncate;
 use std::hint::black_box;
 
 /// Builds a `len`-character-long ASCII string, longer than any `max_cols` budget used below so

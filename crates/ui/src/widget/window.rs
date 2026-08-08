@@ -7,7 +7,7 @@
 
 /// The `(original_index, item)` pairs of `items` visible in a `visible_len`-item window starting
 /// at `offset`. Out-of-range `offset` simply yields nothing, the same "no upper clamp, caller's
-/// responsibility" contract as [`ListState::scroll_by`](crate::ListState::scroll_by).
+/// responsibility" contract as [`ListState::scroll_by`](crate::state::ListState::scroll_by).
 pub(super) fn visible_window<T>(
     items: &[T],
     offset: usize,

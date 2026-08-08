@@ -11,7 +11,7 @@ use retroglyph_core::grid::{Pos, Rect};
 /// Standalone and headless: no [`Backend`](retroglyph_core::backend::Backend)
 /// dependency, so it's usable (and unit-testable) without a
 /// [`Terminal`](retroglyph_core::terminal::Terminal) or any drawing at all, e.g. for
-/// hand-rolled hit-testing outside of [`Interaction`](crate::Interaction).
+/// hand-rolled hit-testing outside of [`Interaction`](crate::interact::Interaction).
 ///
 /// Registrations are draw-ordered: a later [`push`](Self::push) means drawn
 /// (and therefore visually on top) later, so [`topmost_at`](Self::topmost_at)
