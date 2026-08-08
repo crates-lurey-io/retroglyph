@@ -44,6 +44,13 @@
 ))]
 mod fps;
 mod launch;
+#[cfg(any(
+    feature = "crossterm",
+    feature = "software",
+    feature = "gl",
+    feature = "wgpu"
+))]
+mod perf_overlay;
 pub mod util;
 mod wasm_entry;
 
