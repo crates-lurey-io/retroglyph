@@ -551,6 +551,19 @@ mod tests {
         assert_eq!(grid[Pos::new(2, 1)].glyph(), ' ');
     }
 
+    /// Mirrors `put_tile_refuses_a_wide_glyph_at_the_last_column`: a wide grapheme whose spacer
+    /// would fall off the grid is refused outright rather than leaving an orphaned primary cell.
+    #[cfg(feature = "egc")]
+    #[test]
+    fn write_grapheme_refuses_a_wide_glyph_at_the_last_column() {
+        let mut grid = Grid::new(4, 4);
+        assert!(
+            grid.write_grapheme(0, 3, 0, "\u{4e2d}", Style::default())
+                .is_none()
+        );
+        assert_eq!(grid[Pos::new(3, 0)].glyph(), ' ');
+    }
+
     #[cfg(feature = "egc")]
     #[test]
     fn write_grapheme_in_bounds_still_writes() {
