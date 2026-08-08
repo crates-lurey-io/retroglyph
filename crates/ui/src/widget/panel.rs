@@ -49,6 +49,11 @@ pub struct PanelTitle<'a> {
 /// than via `title_align`), use [`Panel::add_title`], which is fully additive: it never disturbs
 /// `title`/`title_align`, and multiple `add_title` calls stack rather than overwrite each other.
 ///
+/// `Panel` draws in place into a [`Surface`] the caller already owns and has no concept of
+/// margin. For a standalone box rendered into its own `Grid` -- composed outside a frame, laid
+/// out with `join_h`/`join_v`, or needing margin (space outside the border) -- see
+/// [`BoxStyle`](crate::style::BoxStyle) instead.
+///
 /// # Examples
 ///
 /// ```

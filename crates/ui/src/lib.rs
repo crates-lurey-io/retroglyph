@@ -22,14 +22,21 @@
 //!   cells. [`AnimatedWidget`](widget::AnimatedWidget) is `StatefulWidget`'s sibling for state that evolves with
 //!   wall-clock time (e.g. [`ScrollState`](state::ScrollState)'s momentum physics) instead of only in response to
 //!   input; see its own docs. [`InteractiveWidget`](widget::InteractiveWidget) is the sibling trait for widgets that also
-//!   read a [`Response`](interact::Response) (`Button`, `Scrollbar`, `List`, `Tabs`).
+//!   read a [`Response`](interact::Response) (`Button`, `Scrollbar`, `List`, `Tabs`). For a
+//!   bordered box drawn straight into that `Surface` -- with titles, [`BorderType`](widget::BorderType)
+//!   glyph sets, `padding`, and theming -- reach for [`Panel`](widget::Panel) first; it's the
+//!   default answer to "draw me a box".
 //! - [`Interaction`](interact::Interaction) ([`interact`]) for hover/click/drag/focus tracking
 //!   without a retained widget tree: the sibling of [`ListState`](state::ListState) for
 //!   widgets that don't have a natural selection index of their own. [`Ui`](ui::Ui) pairs one frame's
 //!   [`Surface`] with an `Interaction`, via [`Interaction::frame`](interact::Interaction::frame): [`Ui::show`](ui::Ui::show) is how an
 //!   [`InteractiveWidget`](widget::InteractiveWidget) gets hit-tested and drawn from the one area/id a call site names.
-//! - [`BoxStyle`](style::BoxStyle) ([`style`]) for a Lip-Gloss-style box model (padding,
-//!   border, margin) rendered into a standalone `Grid`.
+//! - [`BoxStyle`](style::BoxStyle) ([`style`]) is the standalone alternative to
+//!   [`Panel`](widget::Panel): a Lip-Gloss-style box model (padding, border, margin) rendered
+//!   into its own `Grid`, independent of any `Surface`/`Backend`/`Terminal`. Reach for it instead
+//!   of `Panel` when composing a box outside a frame, laying several boxes out with `join_h`/
+//!   `join_v` below, or needing `margin` (space outside the border, which `Panel` has no concept
+//!   of); it has no titles, `BorderType`, or theming.
 //! - [`join_h`](block::join_h)/[`join_v`](block::join_v) ([`block`]) to compose several `Grid`s (e.g. `BoxStyle::render`
 //!   output) into one; `retroglyph_core::surface::Surface::blit` stamps the result onto a surface.
 //! - [`Theme`](theme::Theme) ([`theme`]) for named color roles (an app picks
