@@ -7,6 +7,7 @@
 //! [`run_on`](retroglyph_core::app::run_on), which owns its own
 //! `while` loop.
 
+use super::EventLoopError;
 use super::translate::{
     translate_ime, translate_key, translate_modifiers, translate_mouse_button,
     translate_physical_pos,
@@ -385,13 +386,13 @@ impl WindowConfig {
 ///
 /// # Errors
 ///
-/// Returns [`winit::error::EventLoopError`] if the event loop cannot be
+/// Returns [`EventLoopError`] if the event loop cannot be
 /// created or fails while running.
 pub fn run_windowed<P, F>(
     config: WindowConfig,
     presenter: P,
     app_loop: F,
-) -> Result<(), winit::error::EventLoopError>
+) -> Result<(), EventLoopError>
 where
     P: Presenter + 'static,
     F: FnMut(&mut Terminal<WindowBackend<P>>) + 'static,
@@ -458,14 +459,14 @@ where
 ///
 /// # Errors
 ///
-/// Returns [`winit::error::EventLoopError`] if the event loop cannot be
+/// Returns [`EventLoopError`] if the event loop cannot be
 /// created or fails while running.
 pub fn run_windowed_with_proxy<P, F, O>(
     config: WindowConfig,
     presenter: P,
     app_loop: F,
     on_proxy: O,
-) -> Result<(), winit::error::EventLoopError>
+) -> Result<(), EventLoopError>
 where
     P: Presenter + 'static,
     F: FnMut(&mut Terminal<WindowBackend<P>>) + 'static,
@@ -549,7 +550,7 @@ where
 ///
 /// # Errors
 ///
-/// Returns [`winit::error::EventLoopError`] if the event loop cannot be
+/// Returns [`EventLoopError`] if the event loop cannot be
 /// created or fails while running.
 pub fn run_windowed_with_typed_proxy<T, P, F, O, D>(
     config: WindowConfig,
@@ -557,7 +558,7 @@ pub fn run_windowed_with_typed_proxy<T, P, F, O, D>(
     app_loop: F,
     on_proxy: O,
     on_custom_event: D,
-) -> Result<(), winit::error::EventLoopError>
+) -> Result<(), EventLoopError>
 where
     T: Send + 'static,
     P: Presenter + 'static,
@@ -604,7 +605,7 @@ fn run_windowed_with_typed_proxy_and_exit_flag<T, P, F, O, D>(
     on_custom_event: D,
     exit_requested: Rc<Cell<bool>>,
     skip_present: Rc<Cell<bool>>,
-) -> Result<(), winit::error::EventLoopError>
+) -> Result<(), EventLoopError>
 where
     T: Send + 'static,
     P: Presenter + 'static,
@@ -654,7 +655,7 @@ where
     #[cfg(not(target_arch = "wasm32"))]
     {
         let mut app = app;
-        event_loop.run_app(&mut app)
+        event_loop.run_app(&mut app).map_err(EventLoopError::from)
     }
 
     #[cfg(target_arch = "wasm32")]
@@ -708,13 +709,13 @@ where
 ///
 /// # Errors
 ///
-/// Returns [`winit::error::EventLoopError`] if the event loop cannot be
+/// Returns [`EventLoopError`] if the event loop cannot be
 /// created or fails while running.
 pub fn run_app<P, A>(
     config: WindowConfig,
     presenter: P,
     app: A,
-) -> Result<(), winit::error::EventLoopError>
+) -> Result<(), EventLoopError>
 where
     P: Presenter + 'static,
     A: retroglyph_core::app::App<WindowBackend<P>> + 'static,
@@ -736,13 +737,13 @@ where
 ///
 /// # Errors
 ///
-/// Returns [`winit::error::EventLoopError`] if the event loop cannot be
+/// Returns [`EventLoopError`] if the event loop cannot be
 /// created or fails while running.
 pub fn run_app_on<P, A>(
     config: WindowConfig,
     terminal: Terminal<WindowBackend<P>>,
     app: A,
-) -> Result<(), winit::error::EventLoopError>
+) -> Result<(), EventLoopError>
 where
     P: Presenter + 'static,
     A: retroglyph_core::app::App<WindowBackend<P>> + 'static,
@@ -768,14 +769,14 @@ where
 ///
 /// # Errors
 ///
-/// Returns [`winit::error::EventLoopError`] if the event loop cannot be
+/// Returns [`EventLoopError`] if the event loop cannot be
 /// created or fails while running.
 pub fn run_app_with_proxy<P, A, O>(
     config: WindowConfig,
     presenter: P,
     app: A,
     on_proxy: O,
-) -> Result<(), winit::error::EventLoopError>
+) -> Result<(), EventLoopError>
 where
     P: Presenter + 'static,
     A: retroglyph_core::app::App<WindowBackend<P>> + 'static,
@@ -796,7 +797,7 @@ where
 ///
 /// # Errors
 ///
-/// Returns [`winit::error::EventLoopError`] if the event loop cannot be
+/// Returns [`EventLoopError`] if the event loop cannot be
 /// created or fails while running.
 pub fn run_app_with_typed_proxy<T, P, A, O, D>(
     config: WindowConfig,
@@ -804,7 +805,7 @@ pub fn run_app_with_typed_proxy<T, P, A, O, D>(
     app: A,
     on_proxy: O,
     on_custom_event: D,
-) -> Result<(), winit::error::EventLoopError>
+) -> Result<(), EventLoopError>
 where
     T: Send + 'static,
     P: Presenter + 'static,
@@ -830,7 +831,7 @@ fn run_app_on_with_typed_proxy<T, P, A, O, D>(
     mut app: A,
     on_proxy: O,
     on_custom_event: D,
-) -> Result<(), winit::error::EventLoopError>
+) -> Result<(), EventLoopError>
 where
     T: Send + 'static,
     P: Presenter + 'static,

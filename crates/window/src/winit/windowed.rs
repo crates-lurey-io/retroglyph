@@ -144,10 +144,11 @@ mod tests {
 
     #[test]
     fn event_loop_error_displays_and_sources_the_inner_error() {
-        // `RecreationAttempt` is the one `EventLoopError` variant with no private fields, so it's
-        // the only one constructible outside `winit` itself.
-        let err: WindowedLaunchError<std::io::Error> =
-            WindowedLaunchError::EventLoop(EventLoopError::RecreationAttempt);
+        // `RecreationAttempt` is the one raw `winit::error::EventLoopError` variant with no
+        // private fields, so it's the only one constructible outside `winit` itself.
+        let err: WindowedLaunchError<std::io::Error> = WindowedLaunchError::EventLoop(
+            EventLoopError::from(::winit::error::EventLoopError::RecreationAttempt),
+        );
         assert!(err.to_string().contains("windowed event loop failed"));
         assert!(std::error::Error::source(&err).is_some());
     }
