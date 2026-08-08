@@ -1,17 +1,28 @@
 //! Constraint-based `Rect` splitter for multi-panel UIs.
 //!
-//! Splits a [`Rect`] into stacked rows ([`split_v`]) or side-by-side columns
-//! ([`split_h`]) according to a slice of [`Constraint`]s. [`split_h_spaced`]/[`split_v_spaced`]
-//! do the same but also carve a fixed-cell gap between every adjacent pair of panes, without the
-//! caller having to interleave `Constraint::Fixed(spacing)` gap constraints and filter them back
-//! out by hand; they return the gap rects alongside the content panes so a caller can draw
-//! dividers in them without recomputing the gap positions.
+//! [`split_v`]/[`split_h`] split a [`Rect`] into stacked rows or side-by-side columns from a
+//! slice of [`Constraint`]s; that pair plus `Constraint` is the whole entry point for the plain
+//! case. Spacing and leftover-space placement are opt-in knobs on [`Layout`] instead of separate
+//! named functions:
 //!
-//! Every `split_*` function has a const-generic `split_*_n` sibling ([`split_v_n`]/[`split_h_n`],
-//! plus the `_flex`/`_spaced` combinations) that takes `[Constraint; N]` and returns `[Rect; N]`
-//! instead of allocating a `Vec<Rect>`: useful for a fixed pane count re-split every frame, and
-//! the array return type lets a caller destructure (`let [header, body] = split_v_n(area, [..]);`)
-//! instead of indexing into a `Vec` that can silently drift out of sync with the constraint list.
+//! ```
+//! use retroglyph_core::grid::Rect;
+//! use retroglyph_ui::layout::{Constraint, Flex, Layout};
+//!
+//! let area = Rect::new(0, 0, 20, 10);
+//! let panes = Layout::vertical([Constraint::Fixed(1), Constraint::Fill(1)])
+//!     .spacing(1)
+//!     .flex(Flex::Center)
+//!     .split(area);
+//! assert_eq!(panes.len(), 2);
+//! ```
+//!
+//! [`Layout::spacing`] carves a fixed-cell gap (or [`Spacing::Overlap`]) between every adjacent
+//! pair of panes, without the caller having to interleave `Constraint::Fixed(spacing)` gap
+//! constraints and filter them back out by hand; [`Layout::split_with_gaps`] returns those gap
+//! rects alongside the content panes so a caller can draw dividers in them without recomputing
+//! the gap positions. [`Layout::flex`] controls where leftover space goes once constraints are
+//! resolved; see [`Flex`].
 //!
 //! The solver sums the [`Fixed`](Constraint::Fixed), [`Percent`](Constraint::Percent), and
 //! [`Ratio`](Constraint::Ratio) amounts, then distributes whatever remains across the
@@ -23,8 +34,7 @@
 //! equal distribution. Sizes are clamped so the panes never spill past `area`. This is a
 //! single sequential pass, not an iterative constraint solver: a [`Max`](Constraint::Max)
 //! pane that is capped below its share does not redistribute the excess to other panes, so
-//! leftover space can remain unclaimed (see [`Flex`] for how that leftover is placed via
-//! [`split_v_flex`]/[`split_h_flex`]).
+//! leftover space can remain unclaimed (see [`Flex`] for how that leftover is placed).
 use alloc::vec::Vec;
 
 use retroglyph_core::grid::{HasSize, Rect, Size};
@@ -245,89 +255,6 @@ fn solve(total: u16, constraints: &[Constraint]) -> SmallBuf<u16, STACK_CAP> {
     sizes
 }
 
-/// Const-generic sibling of [`solve`]: same algorithm, but sized to `N` at compile time, so
-/// every scratch buffer is a plain `[T; N]` on the stack and there is no [`SmallBuf`] heap
-/// fallback to worry about, whatever `N` is. Used by [`split_v_n`]/[`split_h_n`] and their
-/// `_flex`/`_spaced` siblings.
-fn solve_n<const N: usize>(total: u16, constraints: &[Constraint; N]) -> [u16; N] {
-    let mut sizes = [0u16; N];
-    for (i, c) in constraints.iter().enumerate() {
-        sizes[i] = c.base(total);
-    }
-
-    // Clamp the fixed/percent sum so it never exceeds the axis, same as `solve`.
-    let mut used: u16 = 0;
-    for size in &mut sizes {
-        let room = total.saturating_sub(used);
-        *size = (*size).min(room);
-        used += *size;
-    }
-
-    // Same largest-remainder distribution as `solve`, but into fixed-size `[T; N]` scratch
-    // (at most `N` panes can be flexible, so `N` is always enough room).
-    let mut flexible: [(usize, u16, Option<u16>); N] = [(0, 0, None); N];
-    let mut flex_len = 0usize;
-    for (i, c) in constraints.iter().enumerate() {
-        match c {
-            Constraint::Fill(weight) => {
-                flexible[flex_len] = (i, *weight, None);
-                flex_len += 1;
-            }
-            Constraint::Min(_) => {
-                flexible[flex_len] = (i, 1, None);
-                flex_len += 1;
-            }
-            Constraint::Max(cap) => {
-                flexible[flex_len] = (i, 1, Some(*cap));
-                flex_len += 1;
-            }
-            Constraint::Fixed(_) | Constraint::Percent(_) | Constraint::Ratio(_, _) => {}
-        }
-    }
-    if flex_len > 0 {
-        let remainder = total.saturating_sub(used);
-        let total_weight: u32 = flexible[..flex_len]
-            .iter()
-            .map(|&(_, w, _)| u32::from(w))
-            .sum();
-        if let Some(total_weight) = core::num::NonZeroU32::new(total_weight) {
-            let mut shares = [0u32; N];
-            let mut fracs = [0u32; N];
-            let mut floor_sum: u32 = 0;
-            for (k, &(_, weight, _)) in flexible[..flex_len].iter().enumerate() {
-                let product = u32::from(remainder) * u32::from(weight);
-                let share = product / total_weight;
-                fracs[k] = product % total_weight;
-                shares[k] = share;
-                floor_sum += share;
-            }
-            let mut leftover = u32::from(remainder).saturating_sub(floor_sum);
-            let mut order = [0usize; N];
-            for (idx, slot) in order[..flex_len].iter_mut().enumerate() {
-                *slot = idx;
-            }
-            order[..flex_len].sort_by(|&a, &b| fracs[b].cmp(&fracs[a]).then(a.cmp(&b)));
-            for &idx in &order[..flex_len] {
-                if leftover == 0 {
-                    break;
-                }
-                shares[idx] += 1;
-                leftover -= 1;
-            }
-            for (k, &(i, _, cap)) in flexible[..flex_len].iter().enumerate() {
-                // `shares[k]` is an integer share of `remainder` (a `u16` widened to `u32`), so
-                // it can never exceed `remainder` itself and fits back in a `u16`.
-                #[allow(clippy::cast_possible_truncation)]
-                let share = shares[k] as u16;
-                let grown = sizes[i].saturating_add(share);
-                sizes[i] = cap.map_or(grown, |max| grown.min(max));
-            }
-        }
-    }
-
-    sizes
-}
-
 /// Split `area` into stacked rows top-to-bottom.
 ///
 /// Returns one [`Rect`] per constraint; empty panes (zero height) are still
@@ -361,39 +288,6 @@ pub fn split_v(area: Rect, constraints: &[Constraint]) -> Vec<Rect> {
             rect
         })
         .collect()
-}
-
-/// Split `area` into stacked rows top-to-bottom, like [`split_v`], but sized to a compile-time
-/// pane count `N`: takes `[Constraint; N]` and returns `[Rect; N]` instead of allocating a `Vec`.
-///
-/// The array length ties the constraint count to the return type, so a caller that destructures
-/// the result (`let [header, body, footer] = split_v_n(area, [..]);`) gets a compile error if it
-/// adds or removes a constraint without updating the destructuring pattern, rather than a
-/// silently out-of-sync index into a `Vec`. Never allocates, for any `N`.
-///
-/// Never panics, for the same reason as [`split_v`].
-///
-/// # Examples
-///
-/// ```
-/// use retroglyph_core::grid::Rect;
-/// use retroglyph_ui::layout::{Constraint, split_v_n};
-///
-/// let area = Rect::new(0, 0, 20, 10);
-/// let [header, body, footer] =
-///     split_v_n(area, [Constraint::Fixed(1), Constraint::Fill(1), Constraint::Fixed(1)]);
-/// assert_eq!((header.height(), body.height(), footer.height()), (1, 8, 1));
-/// ```
-#[must_use]
-pub fn split_v_n<const N: usize>(area: Rect, constraints: [Constraint; N]) -> [Rect; N] {
-    let sizes = solve_n(area.height(), &constraints);
-    let mut y = area.top();
-    core::array::from_fn(|i| {
-        let h = sizes[i];
-        let rect = Rect::new(area.left(), y, area.width(), h);
-        y = y.saturating_add(h);
-        rect
-    })
 }
 
 /// Split `area` into columns left-to-right.
@@ -430,40 +324,11 @@ pub fn split_h(area: Rect, constraints: &[Constraint]) -> Vec<Rect> {
         .collect()
 }
 
-/// Split `area` into columns left-to-right, like [`split_h`], but sized to a compile-time pane
-/// count `N`: takes `[Constraint; N]` and returns `[Rect; N]` instead of allocating a `Vec`.
-///
-/// See [`split_v_n`] for why the array-sized signature is worth it over indexing a `Vec`. Never
-/// allocates, for any `N`; never panics, for the same reason as [`split_h`].
-///
-/// # Examples
-///
-/// ```
-/// use retroglyph_core::grid::Rect;
-/// use retroglyph_ui::layout::{Constraint, split_h_n};
-///
-/// let area = Rect::new(0, 0, 100, 5);
-/// let [left, right] = split_h_n(area, [Constraint::Percent(30), Constraint::Fill(1)]);
-/// assert_eq!((left.width(), right.width()), (30, 70));
-/// ```
-#[must_use]
-pub fn split_h_n<const N: usize>(area: Rect, constraints: [Constraint; N]) -> [Rect; N] {
-    let sizes = solve_n(area.width(), &constraints);
-    let mut x = area.left();
-    core::array::from_fn(|i| {
-        let w = sizes[i];
-        let rect = Rect::new(x, area.top(), w, area.height());
-        x = x.saturating_add(w);
-        rect
-    })
-}
-
 /// How adjacent panes relate along the split axis in a `_spaced` split: a fixed gap between
 /// them, or a shared, overlapping edge.
 ///
 /// A plain `u16` (the historic `spacing` parameter) converts to [`Space`](Self::Space) via
-/// [`From`], so existing callers of [`split_h_spaced`]/[`split_v_spaced`]/[`split_h_n_spaced`]/
-/// [`split_v_n_spaced`] keep compiling unchanged.
+/// [`From`], so [`Layout::spacing`] accepts either a bare cell count or a [`Spacing`] directly.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Spacing {
@@ -496,105 +361,9 @@ impl From<u16> for Spacing {
     }
 }
 
-/// Split `area` into columns left-to-right, like [`split_h`], but with a `spacing`-cell gap or
-/// overlap between every adjacent pair of panes; see [`Spacing`].
-///
-/// `spacing`'s cell count is reserved from (for [`Spacing::Space`]) or added back to (for
-/// [`Spacing::Overlap`]) `area` before `constraints` are resolved, so
-/// [`Fill`](Constraint::Fill)/[`Percent`](Constraint::Percent) panes share only what's left
-/// after every gap is reserved, or the full extra room an overlap frees up. No-op (falls back
-/// to [`split_h`], with an empty gap `Vec`) with fewer than two panes or zero spacing/overlap.
-///
-/// Returns `(panes, gaps)`: `gaps` has one entry between every adjacent pair of panes (so
-/// `constraints.len() - 1` gaps, none leading or trailing), in the same left-to-right order as
-/// `panes`. For [`Spacing::Space`] a gap rect is the empty cell(s) between the two panes it
-/// separates; for [`Spacing::Overlap`] it is the shared cell(s) both adjacent panes draw over
-/// (whichever pane is drawn last wins there), which is exactly the region a caller would want to
-/// draw a shared border into.
-///
-/// # Examples
-///
-/// ```
-/// use retroglyph_core::grid::Rect;
-/// use retroglyph_ui::layout::{Constraint, Spacing, split_h_spaced};
-///
-/// let area = Rect::new(0, 0, 59, 6);
-/// let (panes, gaps) = split_h_spaced(area, &[Constraint::Fill(1); 3], 1);
-/// assert_eq!(panes.iter().map(Rect::width).collect::<Vec<_>>(), vec![19, 19, 19]);
-/// assert_eq!(panes[1].left(), panes[0].right() + 1); // one gap cell between panes
-/// assert_eq!(gaps.len(), 2); // one gap between each adjacent pair of panes
-/// assert_eq!(gaps[0], Rect::new(19, 0, 1, 6));
-///
-/// let (panes, gaps) = split_h_spaced(area, &[Constraint::Fill(1); 2], Spacing::Overlap(1));
-/// assert_eq!(panes[1].left(), panes[0].right() - 1); // panes share one border column
-/// assert_eq!(gaps[0], Rect::new(panes[0].right() - 1, 0, 1, 6)); // the shared column
-/// ```
-#[must_use]
-pub fn split_h_spaced(
-    area: Rect,
-    constraints: &[Constraint],
-    spacing: impl Into<Spacing>,
-) -> (Vec<Rect>, Vec<Rect>) {
-    let spacing = spacing.into();
-    if spacing.cells() == 0 || constraints.len() < 2 {
-        return (split_h(area, constraints), Vec::new());
-    }
-    let sizes = solve(
-        spaced_total(area.width(), constraints.len(), spacing),
-        constraints,
-    );
-    let mut x = area.left();
-    let mut panes = Vec::with_capacity(sizes.len());
-    let mut gaps = Vec::with_capacity(sizes.len().saturating_sub(1));
-    let last = sizes.len().saturating_sub(1);
-    for (i, w) in sizes.iter().copied().enumerate() {
-        panes.push(Rect::new(x, area.top(), w, area.height()));
-        if i < last {
-            let (gx, gw) = spacer_span(x, w, spacing);
-            gaps.push(Rect::new(gx, area.top(), gw, area.height()));
-        }
-        x = step(x, w, spacing);
-    }
-    (panes, gaps)
-}
-
-/// Split `area` into stacked rows top-to-bottom, like [`split_v`], but with a `spacing`-cell gap
-/// or overlap between every adjacent pair of panes; see [`Spacing`].
-///
-/// See [`split_h_spaced`] for the full behavior, including the shape and meaning of the returned
-/// `(panes, gaps)`; this is the same operation along the vertical axis.
-#[must_use]
-pub fn split_v_spaced(
-    area: Rect,
-    constraints: &[Constraint],
-    spacing: impl Into<Spacing>,
-) -> (Vec<Rect>, Vec<Rect>) {
-    let spacing = spacing.into();
-    if spacing.cells() == 0 || constraints.len() < 2 {
-        return (split_v(area, constraints), Vec::new());
-    }
-    let sizes = solve(
-        spaced_total(area.height(), constraints.len(), spacing),
-        constraints,
-    );
-    let mut y = area.top();
-    let mut panes = Vec::with_capacity(sizes.len());
-    let mut gaps = Vec::with_capacity(sizes.len().saturating_sub(1));
-    let last = sizes.len().saturating_sub(1);
-    for (i, h) in sizes.iter().copied().enumerate() {
-        panes.push(Rect::new(area.left(), y, area.width(), h));
-        if i < last {
-            let (gy, gh) = spacer_span(y, h, spacing);
-            gaps.push(Rect::new(area.left(), gy, area.width(), gh));
-        }
-        y = step(y, h, spacing);
-    }
-    (panes, gaps)
-}
-
-/// The axis length to solve `count` panes' [`Constraint`]s against for a `_spaced` split: `total`
-/// with `count - 1` gaps of `spacing.cells()` reserved out ([`Spacing::Space`]) or handed back in
-/// ([`Spacing::Overlap`]). Shared by the `Vec`-returning and array-returning `_spaced` splits.
+/// The axis length to solve `count` panes' [`Constraint`]s against once [`Layout::spacing`] is
+/// set: `total` with `count - 1` gaps of `spacing.cells()` reserved out ([`Spacing::Space`]) or
+/// handed back in ([`Spacing::Overlap`]).
 const fn spaced_total(total: u16, count: usize, spacing: Spacing) -> u16 {
     // `count` is the number of panes in one layout split, nowhere near `u16::MAX` in any
     // realistic UI, and callers only reach here with `count >= 2`.
@@ -607,19 +376,10 @@ const fn spaced_total(total: u16, count: usize, spacing: Spacing) -> u16 {
     }
 }
 
-/// Advance a `_spaced` split's cursor past a pane of size `size` starting at `pos`, leaving a
-/// [`Spacing::Space`] gap or eating into the next pane by a [`Spacing::Overlap`] amount.
-const fn step(pos: u16, size: u16, spacing: Spacing) -> u16 {
-    match spacing {
-        Spacing::Space(n) => pos.saturating_add(size).saturating_add(n),
-        Spacing::Overlap(n) => pos.saturating_add(size).saturating_sub(n),
-    }
-}
-
 /// The gap rect's start position and length along the split axis, trailing the pane of `size`
 /// cells starting at `pos`. For [`Spacing::Space`] this is the empty `n`-cell run right after the
 /// pane; for [`Spacing::Overlap`] it is the pane's own trailing `n` cells, which the next pane
-/// draws over. Shared by every `_spaced` split, `Vec`- and array-returning alike.
+/// draws over. Used by [`Layout::split_with_gaps`].
 const fn spacer_span(pos: u16, size: u16, spacing: Spacing) -> (u16, u16) {
     let n = spacing.cells();
     let start = match spacing {
@@ -629,95 +389,11 @@ const fn spacer_span(pos: u16, size: u16, spacing: Spacing) -> (u16, u16) {
     (start, n)
 }
 
-/// Split `area` into columns left-to-right, like [`split_h_n`], but with a `spacing`-cell gap or
-/// overlap between every adjacent pair of panes, like [`split_h_spaced`]; see [`Spacing`].
-///
-/// Reserves or hands back `spacing.cells() * (N - 1)` cells up front (equivalent to
-/// [`split_h_spaced`]) and solves the remaining panes against what's left, so
-/// [`Fill`](Constraint::Fill)/[`Percent`](Constraint::Percent) panes share only the space after
-/// every gap is reserved, same as [`split_h_spaced`]. No-op (falls back to [`split_h_n`], with an
-/// empty gap `Vec`) with fewer than two panes or zero spacing/overlap.
-///
-/// Returns `(panes, gaps)`, same meaning as [`split_h_spaced`]'s return value: `panes` is the
-/// array of `N` content panes (never allocates, unlike the `Vec`-returning [`split_h_spaced`]),
-/// and `gaps` is a `Vec` of the `N - 1` gap rects between them. `gaps` is a `Vec` rather than a
-/// second const-generic array because its length (`N - 1`) is not expressible as a fixed-size
-/// array tied to `N` on stable Rust.
-///
-/// # Examples
-///
-/// ```
-/// use retroglyph_core::grid::Rect;
-/// use retroglyph_ui::layout::{Constraint, split_h_n_spaced};
-///
-/// let area = Rect::new(0, 0, 59, 6);
-/// let ([a, b, c], gaps) = split_h_n_spaced(area, [Constraint::Fill(1); 3], 1);
-/// assert_eq!((a.width(), b.width(), c.width()), (19, 19, 19));
-/// assert_eq!(b.left(), a.right() + 1);
-/// assert_eq!(gaps.len(), 2);
-/// ```
-#[must_use]
-pub fn split_h_n_spaced<const N: usize>(
-    area: Rect,
-    constraints: [Constraint; N],
-    spacing: impl Into<Spacing>,
-) -> ([Rect; N], Vec<Rect>) {
-    let spacing = spacing.into();
-    if spacing.cells() == 0 || N < 2 {
-        return (split_h_n(area, constraints), Vec::new());
-    }
-    let sizes = solve_n(spaced_total(area.width(), N, spacing), &constraints);
-    let mut x = area.left();
-    let mut gaps = Vec::with_capacity(N.saturating_sub(1));
-    let panes = core::array::from_fn(|i| {
-        let w = sizes[i];
-        let rect = Rect::new(x, area.top(), w, area.height());
-        if i + 1 < N {
-            let (gx, gw) = spacer_span(x, w, spacing);
-            gaps.push(Rect::new(gx, area.top(), gw, area.height()));
-        }
-        x = step(x, w, spacing);
-        rect
-    });
-    (panes, gaps)
-}
-
-/// Split `area` into stacked rows top-to-bottom, like [`split_v_n`], but with a `spacing`-cell
-/// gap or overlap between every adjacent pair of panes, like [`split_v_spaced`]; see [`Spacing`].
-///
-/// See [`split_h_n_spaced`] for the full behavior, including why `gaps` is a `Vec` rather than a
-/// second const-generic array; this is the same operation along the vertical axis.
-#[must_use]
-pub fn split_v_n_spaced<const N: usize>(
-    area: Rect,
-    constraints: [Constraint; N],
-    spacing: impl Into<Spacing>,
-) -> ([Rect; N], Vec<Rect>) {
-    let spacing = spacing.into();
-    if spacing.cells() == 0 || N < 2 {
-        return (split_v_n(area, constraints), Vec::new());
-    }
-    let sizes = solve_n(spaced_total(area.height(), N, spacing), &constraints);
-    let mut y = area.top();
-    let mut gaps = Vec::with_capacity(N.saturating_sub(1));
-    let panes = core::array::from_fn(|i| {
-        let h = sizes[i];
-        let rect = Rect::new(area.left(), y, area.width(), h);
-        if i + 1 < N {
-            let (gy, gh) = spacer_span(y, h, spacing);
-            gaps.push(Rect::new(area.left(), gy, area.width(), gh));
-        }
-        y = step(y, h, spacing);
-        rect
-    });
-    (panes, gaps)
-}
-
 /// How leftover space is placed along the split axis, once [`Constraint`]s
 /// are resolved.
 ///
 /// Only matters when the resolved pane sizes sum to less than `area`'s
-/// length; passed to [`split_v_flex`]/[`split_h_flex`].
+/// length; set via [`Layout::flex`].
 ///
 /// [`split_v`]/[`split_h`] always behave like [`Start`](Self::Start): any
 /// leftover space trails after the last pane, unclaimed. This matches their
@@ -743,8 +419,8 @@ pub enum Flex {
 }
 
 /// Compute each pane's starting offset along an axis of `total` cells for
-/// the resolved `sizes`, per `flex`. Companion to [`solve`]; used by
-/// [`split_v_flex`]/[`split_h_flex`].
+/// the resolved `sizes`, per `flex`. Companion to [`solve`]; used by `Layout`'s internal resolve
+/// step.
 ///
 /// Returns a [`SmallBuf`], not a `Vec`, so the common small-split case does not pay for a heap
 /// allocation here either (same rationale as `solve`'s scratch buffers).
@@ -804,139 +480,192 @@ fn place(total: u16, sizes: &[u16], flex: Flex) -> SmallBuf<u16, STACK_CAP> {
     offsets
 }
 
-/// Const-generic sibling of [`place`], used by [`split_v_n_flex`]/[`split_h_n_flex`]. Same
-/// algorithm, but into a fixed-size `[u16; N]` so it never allocates, for any `N`.
-fn place_n<const N: usize>(total: u16, sizes: &[u16; N], flex: Flex) -> [u16; N] {
-    let content: u16 = sizes.iter().fold(0u16, |a, &b| a.saturating_add(b));
-    let slack = total.saturating_sub(content);
-    let mut offsets = [0u16; N];
+/// Which axis a [`Layout`] splits along.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Axis {
+    Vertical,
+    Horizontal,
+}
 
-    let packed_from = |start: u16, offsets: &mut [u16; N]| {
-        let mut pos = start;
-        for (o, &s) in offsets.iter_mut().zip(sizes.iter()) {
-            *o = pos;
-            pos = pos.saturating_add(s);
+/// Builder for [`split_v`]/[`split_h`] with optional spacing and leftover-space placement.
+///
+/// `Layout::vertical`/[`Layout::horizontal`] take the [`Constraint`]s (anything that converts to
+/// a `Vec<Constraint>`: an array literal, a `Vec`, or a `Box<[Constraint]>`); [`Layout::spacing`]
+/// and [`Layout::flex`] are optional chained calls that default to no spacing and
+/// [`Flex::Start`](Flex::default), matching plain [`split_v`]/[`split_h`]. [`Layout::split`]
+/// resolves the panes; [`Layout::split_with_gaps`] also returns the gap [`Rect`]s a caller would
+/// draw dividers into, the same pair [`split_h`]-with-spacing used to return.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::grid::Rect;
+/// use retroglyph_ui::layout::{Constraint, Flex, Layout};
+///
+/// let area = Rect::new(0, 0, 20, 10);
+/// let panes = Layout::vertical([Constraint::Fixed(1), Constraint::Fill(1)])
+///     .spacing(1)
+///     .flex(Flex::Center)
+///     .split(area);
+/// assert_eq!(panes.len(), 2);
+/// ```
+#[derive(Clone, Debug)]
+pub struct Layout {
+    axis: Axis,
+    constraints: Vec<Constraint>,
+    spacing: Spacing,
+    flex: Flex,
+}
+
+impl Layout {
+    /// Split into stacked rows top-to-bottom, like [`split_v`].
+    #[must_use]
+    pub fn vertical(constraints: impl Into<Vec<Constraint>>) -> Self {
+        Self {
+            axis: Axis::Vertical,
+            constraints: constraints.into(),
+            spacing: Spacing::Space(0),
+            flex: Flex::Start,
         }
-    };
+    }
 
-    match flex {
-        Flex::End => packed_from(slack, &mut offsets),
-        Flex::Center => packed_from(slack / 2, &mut offsets),
-        Flex::SpaceBetween if N > 1 => {
-            // `N` is the number of panes in one layout split, nowhere near `u16::MAX` in any
-            // realistic UI.
-            #[allow(clippy::cast_possible_truncation)]
-            let gaps = N as u16 - 1;
-            let gap = slack / gaps;
-            let mut extra = slack % gaps;
-            let mut pos = 0;
-            for (i, &s) in sizes.iter().enumerate() {
-                offsets[i] = pos;
-                pos = pos.saturating_add(s);
-                if i + 1 < N {
-                    pos = pos.saturating_add(gap + u16::from(extra > 0));
-                    extra = extra.saturating_sub(1);
-                }
+    /// Split into columns left-to-right, like [`split_h`].
+    #[must_use]
+    pub fn horizontal(constraints: impl Into<Vec<Constraint>>) -> Self {
+        Self {
+            axis: Axis::Horizontal,
+            constraints: constraints.into(),
+            spacing: Spacing::Space(0),
+            flex: Flex::Start,
+        }
+    }
+
+    /// Carve a fixed-cell gap (or [`Spacing::Overlap`]) between every adjacent pair of panes; see
+    /// [`Spacing`]. Defaults to no spacing, matching plain [`split_v`]/[`split_h`].
+    #[must_use]
+    pub fn spacing(mut self, spacing: impl Into<Spacing>) -> Self {
+        self.spacing = spacing.into();
+        self
+    }
+
+    /// Control where leftover space is placed once constraints are resolved; see [`Flex`].
+    /// Defaults to [`Flex::Start`], matching plain [`split_v`]/[`split_h`].
+    #[must_use]
+    pub const fn flex(mut self, flex: Flex) -> Self {
+        self.flex = flex;
+        self
+    }
+
+    /// Resolve each pane's offset and size along the split axis: `axis_len` after
+    /// [`spacing`](Self::spacing) is reserved/handed back, [`solve`]d against `constraints`, then
+    /// [`place`]d per [`flex`](Self::flex), with the per-pane spacing delta folded back in.
+    fn resolve(&self, axis_len: u16) -> (Vec<u16>, Vec<u16>) {
+        let gap = if self.constraints.len() >= 2 {
+            self.spacing.cells()
+        } else {
+            0
+        };
+        let total = if gap == 0 {
+            axis_len
+        } else {
+            spaced_total(axis_len, self.constraints.len(), self.spacing)
+        };
+        let sizes = solve(total, &self.constraints);
+        let mut offsets: Vec<u16> = place(total, &sizes, self.flex).to_vec();
+        if gap != 0 {
+            for (i, offset) in offsets.iter_mut().enumerate() {
+                // `i` is a pane index in one layout split, nowhere near `u16::MAX` in any
+                // realistic UI.
+                #[allow(clippy::cast_possible_truncation)]
+                let delta = gap.saturating_mul(i as u16);
+                *offset = match self.spacing {
+                    Spacing::Space(_) => offset.saturating_add(delta),
+                    Spacing::Overlap(_) => offset.saturating_sub(delta),
+                };
             }
         }
-        Flex::Start | Flex::SpaceBetween => packed_from(0, &mut offsets),
-        Flex::SpaceAround => {
-            // `N` is the number of panes in one layout split, nowhere near `u16::MAX` in any
-            // realistic UI.
-            #[allow(clippy::cast_possible_truncation)]
-            let gaps = N as u16 + 1;
-            let unit = slack / gaps;
-            let mut extra = slack % gaps;
-            let mut pos = unit + u16::from(extra > 0);
-            extra = extra.saturating_sub(u16::from(extra > 0));
-            for (i, &s) in sizes.iter().enumerate() {
-                offsets[i] = pos;
-                pos = pos.saturating_add(s);
-                pos = pos.saturating_add(unit + u16::from(extra > 0));
-                extra = extra.saturating_sub(u16::from(extra > 0));
+        (offsets, sizes.to_vec())
+    }
+
+    /// Split `area` into panes along [`vertical`](Self::vertical)/[`horizontal`](Self::horizontal)
+    /// per the builder's constraints, spacing, and flex.
+    ///
+    /// Never panics, for the same reason as [`split_v`]/[`split_h`].
+    #[must_use]
+    pub fn split(&self, area: Rect) -> Vec<Rect> {
+        match self.axis {
+            Axis::Vertical => {
+                let (offsets, sizes) = self.resolve(area.height());
+                offsets
+                    .iter()
+                    .zip(sizes.iter())
+                    .map(|(&y, &h)| {
+                        Rect::new(area.left(), area.top().saturating_add(y), area.width(), h)
+                    })
+                    .collect()
+            }
+            Axis::Horizontal => {
+                let (offsets, sizes) = self.resolve(area.width());
+                offsets
+                    .iter()
+                    .zip(sizes.iter())
+                    .map(|(&x, &w)| {
+                        Rect::new(area.left().saturating_add(x), area.top(), w, area.height())
+                    })
+                    .collect()
             }
         }
     }
 
-    offsets
-}
-
-/// Split `area` into stacked rows top-to-bottom, like [`split_v`], but with
-/// explicit control over how leftover space is placed via [`Flex`].
-///
-/// Never panics, for the same reason as [`split_v`]: every offset is computed with
-/// [`saturating_add`](u16::saturating_add)/[`saturating_sub`](u16::saturating_sub).
-#[must_use]
-pub fn split_v_flex(area: Rect, constraints: &[Constraint], flex: Flex) -> Vec<Rect> {
-    let sizes = solve(area.height(), constraints);
-    let offsets = place(area.height(), &sizes, flex);
-    offsets
-        .iter()
-        .copied()
-        .zip(sizes.iter().copied())
-        .map(|(y, h)| Rect::new(area.left(), area.top().saturating_add(y), area.width(), h))
-        .collect()
-}
-
-/// Split `area` into stacked rows top-to-bottom, like [`split_v_n`], but with explicit control
-/// over how leftover space is placed via [`Flex`], like [`split_v_flex`].
-///
-/// Never allocates, for any `N`; never panics, for the same reason as [`split_v_flex`].
-#[must_use]
-pub fn split_v_n_flex<const N: usize>(
-    area: Rect,
-    constraints: [Constraint; N],
-    flex: Flex,
-) -> [Rect; N] {
-    let sizes = solve_n(area.height(), &constraints);
-    let offsets = place_n(area.height(), &sizes, flex);
-    core::array::from_fn(|i| {
-        Rect::new(
-            area.left(),
-            area.top().saturating_add(offsets[i]),
-            area.width(),
-            sizes[i],
-        )
-    })
-}
-
-/// Split `area` into columns left-to-right, like [`split_h`], but with
-/// explicit control over how leftover space is placed via [`Flex`].
-///
-/// Never panics, for the same reason as [`split_h`]: every offset is computed with
-/// [`saturating_add`](u16::saturating_add)/[`saturating_sub`](u16::saturating_sub).
-#[must_use]
-pub fn split_h_flex(area: Rect, constraints: &[Constraint], flex: Flex) -> Vec<Rect> {
-    let sizes = solve(area.width(), constraints);
-    let offsets = place(area.width(), &sizes, flex);
-    offsets
-        .iter()
-        .copied()
-        .zip(sizes.iter().copied())
-        .map(|(x, w)| Rect::new(area.left().saturating_add(x), area.top(), w, area.height()))
-        .collect()
-}
-
-/// Split `area` into columns left-to-right, like [`split_h_n`], but with explicit control over
-/// how leftover space is placed via [`Flex`], like [`split_h_flex`].
-///
-/// Never allocates, for any `N`; never panics, for the same reason as [`split_h_flex`].
-#[must_use]
-pub fn split_h_n_flex<const N: usize>(
-    area: Rect,
-    constraints: [Constraint; N],
-    flex: Flex,
-) -> [Rect; N] {
-    let sizes = solve_n(area.width(), &constraints);
-    let offsets = place_n(area.width(), &sizes, flex);
-    core::array::from_fn(|i| {
-        Rect::new(
-            area.left().saturating_add(offsets[i]),
-            area.top(),
-            sizes[i],
-            area.height(),
-        )
-    })
+    /// Split `area` like [`split`](Self::split), and also return the gap [`Rect`]s between every
+    /// adjacent pair of panes carved out by [`spacing`](Self::spacing).
+    ///
+    /// Returns `(panes, gaps)`: `gaps` has one entry between every adjacent pair of panes (so
+    /// `constraints.len() - 1` gaps, none leading or trailing), in the same order as `panes`. For
+    /// [`Spacing::Space`] a gap rect is the empty cell(s) between the two panes it separates; for
+    /// [`Spacing::Overlap`] it is the shared cell(s) both adjacent panes draw over (whichever pane
+    /// is drawn last wins there), which is exactly the region a caller would want to draw a
+    /// shared border into. `gaps` is empty with fewer than two panes or zero spacing/overlap.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::grid::Rect;
+    /// use retroglyph_ui::layout::{Constraint, Layout};
+    ///
+    /// let area = Rect::new(0, 0, 59, 6);
+    /// let (panes, gaps) = Layout::horizontal([Constraint::Fill(1); 3])
+    ///     .spacing(1)
+    ///     .split_with_gaps(area);
+    /// assert_eq!(panes.iter().map(Rect::width).collect::<Vec<_>>(), vec![19, 19, 19]);
+    /// assert_eq!(panes[1].left(), panes[0].right() + 1); // one gap cell between panes
+    /// assert_eq!(gaps.len(), 2); // one gap between each adjacent pair of panes
+    /// assert_eq!(gaps[0], Rect::new(19, 0, 1, 6));
+    /// ```
+    #[must_use]
+    pub fn split_with_gaps(&self, area: Rect) -> (Vec<Rect>, Vec<Rect>) {
+        let panes = self.split(area);
+        if self.spacing.cells() == 0 || panes.len() < 2 {
+            return (panes, Vec::new());
+        }
+        let gaps = match self.axis {
+            Axis::Vertical => panes
+                .windows(2)
+                .map(|w| {
+                    let (gy, gh) = spacer_span(w[0].top(), w[0].height(), self.spacing);
+                    Rect::new(area.left(), gy, area.width(), gh)
+                })
+                .collect(),
+            Axis::Horizontal => panes
+                .windows(2)
+                .map(|w| {
+                    let (gx, gw) = spacer_span(w[0].left(), w[0].width(), self.spacing);
+                    Rect::new(gx, area.top(), gw, area.height())
+                })
+                .collect(),
+        };
+        (panes, gaps)
+    }
 }
 
 /// Compute a `width`×`height` [`Rect`] centered within `screen`.
@@ -1346,18 +1075,16 @@ mod tests {
         let area = Rect::new(0, 0, 10, 4);
         let constraints = [Constraint::Fixed(2), Constraint::Fixed(2)];
         let legacy = split_v(area, &constraints);
-        let flexed = split_v_flex(area, &constraints, Flex::Start);
+        let flexed = Layout::vertical(constraints).flex(Flex::Start).split(area);
         assert_eq!(legacy, flexed);
     }
 
     #[test]
     fn flex_end_pushes_leftover_before_the_panes() {
         let area = Rect::new(0, 0, 10, 10);
-        let panes = split_v_flex(
-            area,
-            &[Constraint::Fixed(2), Constraint::Fixed(2)],
-            Flex::End,
-        );
+        let panes = Layout::vertical([Constraint::Fixed(2), Constraint::Fixed(2)])
+            .flex(Flex::End)
+            .split(area);
         // 6 rows of slack lead before the first pane.
         assert_eq!(panes[0].top(), 6);
         assert_eq!(panes[1].top(), 8);
@@ -1367,7 +1094,9 @@ mod tests {
     #[test]
     fn flex_center_splits_leftover_around_the_panes() {
         let area = Rect::new(0, 0, 10, 10);
-        let panes = split_v_flex(area, &[Constraint::Fixed(4)], Flex::Center);
+        let panes = Layout::vertical([Constraint::Fixed(4)])
+            .flex(Flex::Center)
+            .split(area);
         // 6 rows of slack, 3 leading before the single pane.
         assert_eq!(panes[0].top(), 3);
         assert_eq!(panes[0].bottom(), 7);
@@ -1376,11 +1105,9 @@ mod tests {
     #[test]
     fn flex_space_between_puts_leftover_between_panes_only() {
         let area = Rect::new(0, 0, 10, 1);
-        let panes = split_h_flex(
-            area,
-            &[Constraint::Fixed(2), Constraint::Fixed(2)],
-            Flex::SpaceBetween,
-        );
+        let panes = Layout::horizontal([Constraint::Fixed(2), Constraint::Fixed(2)])
+            .flex(Flex::SpaceBetween)
+            .split(area);
         // 6 cells of slack become a single gap between the two panes.
         assert_eq!(panes[0].left(), 0);
         assert_eq!(panes[0].right(), 2);
@@ -1391,7 +1118,9 @@ mod tests {
     #[test]
     fn flex_space_around_puts_equal_gaps_at_both_edges() {
         let area = Rect::new(0, 0, 9, 1);
-        let panes = split_h_flex(area, &[Constraint::Fixed(3)], Flex::SpaceAround);
+        let panes = Layout::horizontal([Constraint::Fixed(3)])
+            .flex(Flex::SpaceAround)
+            .split(area);
         // 6 cells of slack split into 2 gaps (before and after) of 3 each.
         assert_eq!(panes[0].left(), 3);
         assert_eq!(panes[0].right(), 6);
@@ -1400,15 +1129,13 @@ mod tests {
     #[test]
     fn spaced_split_carves_out_gaps_between_panes() {
         let area = Rect::new(0, 0, 59, 6);
-        let (panes, gaps) = split_h_spaced(
-            area,
-            &[
-                Constraint::Fill(1),
-                Constraint::Fill(1),
-                Constraint::Fill(1),
-            ],
-            1,
-        );
+        let (panes, gaps) = Layout::horizontal([
+            Constraint::Fill(1),
+            Constraint::Fill(1),
+            Constraint::Fill(1),
+        ])
+        .spacing(1)
+        .split_with_gaps(area);
         assert_eq!(panes.len(), 3);
         let widths: Vec<u16> = panes.iter().map(Rect::width).collect();
         assert_eq!(widths, vec![19, 19, 19]);
@@ -1430,19 +1157,15 @@ mod tests {
     #[test]
     fn spaced_split_resolves_percent_against_the_post_gap_axis() {
         let area = Rect::new(0, 0, 100, 1);
-        let (panes, _) = split_h_spaced(
-            area,
-            &[Constraint::Percent(50), Constraint::Percent(50)],
-            10,
-        );
+        let (panes, _) = Layout::horizontal([Constraint::Percent(50), Constraint::Percent(50)])
+            .spacing(10)
+            .split_with_gaps(area);
         let widths: Vec<u16> = panes.iter().map(Rect::width).collect();
         assert_eq!(widths, vec![45, 45]);
 
-        let (panes, _) = split_h_spaced(
-            area,
-            &[Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)],
-            10,
-        );
+        let (panes, _) = Layout::horizontal([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)])
+            .spacing(10)
+            .split_with_gaps(area);
         let widths: Vec<u16> = panes.iter().map(Rect::width).collect();
         assert_eq!(widths, vec![45, 45]);
     }
@@ -1451,11 +1174,15 @@ mod tests {
     fn spaced_split_falls_back_with_one_pane_or_no_spacing() {
         let area = Rect::new(0, 0, 10, 1);
         assert_eq!(
-            split_h_spaced(area, &[Constraint::Fill(1)], 1),
+            Layout::horizontal([Constraint::Fill(1)])
+                .spacing(1)
+                .split_with_gaps(area),
             (split_h(area, &[Constraint::Fill(1)]), Vec::new())
         );
         assert_eq!(
-            split_h_spaced(area, &[Constraint::Fill(1), Constraint::Fill(1)], 0),
+            Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)])
+                .spacing(0)
+                .split_with_gaps(area),
             (
                 split_h(area, &[Constraint::Fill(1), Constraint::Fill(1)]),
                 Vec::new()
@@ -1466,15 +1193,13 @@ mod tests {
     #[test]
     fn vertical_spaced_split_matches_horizontal_shape() {
         let area = Rect::new(0, 0, 6, 59);
-        let (panes, gaps) = split_v_spaced(
-            area,
-            &[
-                Constraint::Fill(1),
-                Constraint::Fill(1),
-                Constraint::Fill(1),
-            ],
-            1,
-        );
+        let (panes, gaps) = Layout::vertical([
+            Constraint::Fill(1),
+            Constraint::Fill(1),
+            Constraint::Fill(1),
+        ])
+        .spacing(1)
+        .split_with_gaps(area);
         let heights: Vec<u16> = panes.iter().map(Rect::height).collect();
         assert_eq!(heights, vec![19, 19, 19]);
         assert_eq!(panes[1].top(), panes[0].bottom() + 1);
@@ -1488,11 +1213,9 @@ mod tests {
     #[test]
     fn overlap_spacing_shares_one_edge_cell_between_panes() {
         let area = Rect::new(0, 0, 60, 6);
-        let (panes, gaps) = split_h_spaced(
-            area,
-            &[Constraint::Fill(1), Constraint::Fill(1)],
-            Spacing::Overlap(1),
-        );
+        let (panes, gaps) = Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)])
+            .spacing(Spacing::Overlap(1))
+            .split_with_gaps(area);
         assert_eq!(panes.len(), 2);
         // The panes claim the full area between them and share exactly one column.
         assert_eq!(panes[0].left(), area.left());
@@ -1509,7 +1232,9 @@ mod tests {
     #[test]
     fn overlap_spacing_works_vertically_and_with_more_than_two_panes() {
         let area = Rect::new(0, 0, 6, 61);
-        let (panes, gaps) = split_v_spaced(area, &[Constraint::Fill(1); 3], Spacing::Overlap(1));
+        let (panes, gaps) = Layout::vertical([Constraint::Fill(1); 3])
+            .spacing(Spacing::Overlap(1))
+            .split_with_gaps(area);
         assert_eq!(panes.len(), 3);
         assert_eq!(panes[0].top(), area.top());
         assert_eq!(panes[2].bottom(), area.bottom());
@@ -1522,15 +1247,15 @@ mod tests {
     fn overlap_spacing_falls_back_with_one_pane_or_zero_overlap() {
         let area = Rect::new(0, 0, 10, 1);
         assert_eq!(
-            split_h_spaced(area, &[Constraint::Fill(1)], Spacing::Overlap(1)),
+            Layout::horizontal([Constraint::Fill(1)])
+                .spacing(Spacing::Overlap(1))
+                .split_with_gaps(area),
             (split_h(area, &[Constraint::Fill(1)]), Vec::new())
         );
         assert_eq!(
-            split_h_spaced(
-                area,
-                &[Constraint::Fill(1), Constraint::Fill(1)],
-                Spacing::Overlap(0)
-            ),
+            Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)])
+                .spacing(Spacing::Overlap(0))
+                .split_with_gaps(area),
             (
                 split_h(area, &[Constraint::Fill(1), Constraint::Fill(1)]),
                 Vec::new()
@@ -1539,13 +1264,19 @@ mod tests {
     }
 
     #[test]
-    fn split_h_n_spaced_matches_split_h_spaced_with_overlap() {
-        let area = Rect::new(0, 0, 60, 6);
-        let constraints = [Constraint::Fill(1); 2];
-        let (vec_panes, vec_gaps) = split_h_spaced(area, &constraints, Spacing::Overlap(1));
-        let ([a, b], gaps) = split_h_n_spaced(area, constraints, Spacing::Overlap(1));
-        assert_eq!(vec_panes, vec![a, b]);
-        assert_eq!(vec_gaps, gaps);
+    fn spacing_and_flex_compose() {
+        // Center-flexed with a 1-cell gap: the two panes fill 9 of the 10 available cells
+        // (10 minus the one gap cell), leaving 1 cell of slack split around them by `Flex::Center`,
+        // then the gap is threaded back in between the panes.
+        let area = Rect::new(0, 0, 10, 1);
+        let panes = Layout::horizontal([Constraint::Fixed(4), Constraint::Fixed(4)])
+            .spacing(1)
+            .flex(Flex::Center)
+            .split(area);
+        assert_eq!(panes[0].left(), 0);
+        assert_eq!(panes[0].right(), 4);
+        assert_eq!(panes[1].left(), 5);
+        assert_eq!(panes[1].right(), 9);
     }
 
     #[test]
@@ -1737,107 +1468,23 @@ mod tests {
     }
 
     #[test]
-    fn split_v_n_matches_split_v() {
-        let area = Rect::new(0, 0, 20, 10);
-        let constraints = [
+    fn layout_split_matches_plain_split_v_and_split_h() {
+        let v_area = Rect::new(0, 0, 20, 10);
+        let v_constraints = [
             Constraint::Fixed(1),
             Constraint::Fill(1),
             Constraint::Fixed(1),
         ];
-        let vec_panes = split_v(area, &constraints);
-        let [a, b, c] = split_v_n(area, constraints);
-        assert_eq!(vec_panes, vec![a, b, c]);
-    }
-
-    #[test]
-    fn split_h_n_matches_split_h() {
-        let area = Rect::new(0, 0, 100, 5);
-        let constraints = [Constraint::Percent(30), Constraint::Fill(1)];
-        let vec_panes = split_h(area, &constraints);
-        let [left, right] = split_h_n(area, constraints);
-        assert_eq!(vec_panes, vec![left, right]);
-    }
-
-    #[test]
-    fn split_v_n_destructures_by_compile_time_count() {
-        let area = Rect::new(0, 0, 12, 12);
-        let [header, body, footer] = split_v_n(
-            area,
-            [
-                Constraint::Fixed(2),
-                Constraint::Fill(1),
-                Constraint::Fixed(2),
-            ],
-        );
-        assert_eq!(header.height(), 2);
-        assert_eq!(body.height(), 8);
-        assert_eq!(footer.height(), 2);
-        assert_eq!(header.top(), 0);
-        assert_eq!(body.top(), 2);
-        assert_eq!(footer.top(), 10);
-    }
-
-    #[test]
-    fn split_h_n_flex_matches_split_h_flex() {
-        let area = Rect::new(0, 0, 10, 1);
-        let constraints = [Constraint::Fixed(2), Constraint::Fixed(2)];
-        let vec_panes = split_h_flex(area, &constraints, Flex::SpaceBetween);
-        let [a, b] = split_h_n_flex(area, constraints, Flex::SpaceBetween);
-        assert_eq!(vec_panes, vec![a, b]);
-    }
-
-    #[test]
-    fn split_v_n_flex_matches_split_v_flex() {
-        let area = Rect::new(0, 0, 10, 10);
-        let constraints = [Constraint::Fixed(2), Constraint::Fixed(2)];
-        let vec_panes = split_v_flex(area, &constraints, Flex::End);
-        let [a, b] = split_v_n_flex(area, constraints, Flex::End);
-        assert_eq!(vec_panes, vec![a, b]);
-    }
-
-    #[test]
-    fn split_h_n_spaced_matches_split_h_spaced() {
-        let area = Rect::new(0, 0, 59, 6);
-        let constraints = [Constraint::Fill(1); 3];
-        let (vec_panes, vec_gaps) = split_h_spaced(area, &constraints, 1);
-        let ([a, b, c], gaps) = split_h_n_spaced(area, constraints, 1);
-        assert_eq!(vec_panes, vec![a, b, c]);
-        assert_eq!(vec_gaps, gaps);
-    }
-
-    #[test]
-    fn split_v_n_spaced_matches_split_v_spaced() {
-        let area = Rect::new(0, 0, 6, 59);
-        let constraints = [Constraint::Fill(1); 3];
-        let (vec_panes, vec_gaps) = split_v_spaced(area, &constraints, 1);
-        let ([a, b, c], gaps) = split_v_n_spaced(area, constraints, 1);
-        assert_eq!(vec_panes, vec![a, b, c]);
-        assert_eq!(vec_gaps, gaps);
-    }
-
-    #[test]
-    fn split_h_n_spaced_falls_back_with_one_pane_or_no_spacing() {
-        let area = Rect::new(0, 0, 10, 1);
         assert_eq!(
-            split_h_n_spaced(area, [Constraint::Fill(1)], 1),
-            ([split_h_n(area, [Constraint::Fill(1)])[0]], Vec::new())
+            Layout::vertical(v_constraints).split(v_area),
+            split_v(v_area, &v_constraints)
         );
-        let constraints = [Constraint::Fill(1), Constraint::Fill(1)];
-        assert_eq!(
-            split_h_n_spaced(area, constraints, 0),
-            (split_h_n(area, constraints), Vec::new())
-        );
-    }
 
-    /// `solve_n` never falls back to the heap, unlike `solve`'s `SmallBuf`; this covers a pane
-    /// count past `STACK_CAP` to confirm that holds true and produces the same result `solve`
-    /// would.
-    #[test]
-    fn split_h_n_beyond_stack_cap_matches_split_h() {
-        let area = Rect::new(0, 0, 20, 1);
-        let constraints = [Constraint::Fixed(1); 20];
-        let vec_panes = split_h(area, &constraints);
-        let arr_panes = split_h_n(area, constraints);
-        assert_eq!(vec_panes, arr_panes.to_vec());
+        let h_area = Rect::new(0, 0, 100, 5);
+        let h_constraints = [Constraint::Percent(30), Constraint::Fill(1)];
+        assert_eq!(
+            Layout::horizontal(h_constraints).split(h_area),
+            split_h(h_area, &h_constraints)
+        );
     }
 }
