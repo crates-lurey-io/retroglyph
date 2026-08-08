@@ -40,10 +40,7 @@ where
         }
         term.backend_mut().push_event(event.clone());
 
-        let frame = Frame {
-            delta: *delay,
-            frame: frame_count,
-        };
+        let frame = Frame::new(*delay, frame_count);
         frame_count = frame_count.wrapping_add(1);
 
         let present_count_before = term.present_count();

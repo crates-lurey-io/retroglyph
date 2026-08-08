@@ -121,10 +121,7 @@ fn png_snapshot_light() {
     let mut term = Terminal::new(renderer);
     let mut state = ThemeSwitch::init(&mut term);
     term.backend_mut().push_event(key(KeyCode::Char('t')));
-    let frame = Frame {
-        delta: HEADLESS_FRAME_DELTA,
-        frame: 0,
-    };
+    let frame = Frame::new(HEADLESS_FRAME_DELTA, 0);
     state.tick(&mut term, &frame);
     term.present().ok();
 

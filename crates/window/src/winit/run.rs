@@ -849,10 +849,7 @@ where
             let now = web_time::Instant::now();
             let delta = now.duration_since(last);
             last = now;
-            let frame = retroglyph_core::app::Frame {
-                delta,
-                frame: frame_count,
-            };
+            let frame = retroglyph_core::app::Frame::new(delta, frame_count);
             frame_count = frame_count.wrapping_add(1);
             match app.update(term, &frame) {
                 retroglyph_core::app::Flow::Exit => exit_requested_in_loop.set(true),

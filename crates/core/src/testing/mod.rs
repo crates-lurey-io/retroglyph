@@ -228,10 +228,7 @@ impl TestHarness {
         if let Some(event) = self.queued.pop_front() {
             self.term.backend_mut().push_event(event);
         }
-        let frame = Frame {
-            delta: self.step_delta,
-            frame: self.frame,
-        };
+        let frame = Frame::new(self.step_delta, self.frame);
         self.frame = self.frame.wrapping_add(1);
         let present_count_before = self.term.present_count();
         let flow = app.update(&mut self.term, &frame);

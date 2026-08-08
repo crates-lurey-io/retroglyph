@@ -235,10 +235,7 @@ impl<B: Backend, E: Example> App<B> for ExampleApp<E> {
         let state = self.state.get_or_insert_with(|| E::init(term));
         // Scaled for the example; the `PerfOverlayApp` wrapping this reports on real time, which
         // `RG_TIME_SCALE` does not change.
-        let scaled = Frame {
-            delta: frame.delta.mul_f64(self.time_scale),
-            frame: frame.frame,
-        };
+        let scaled = Frame::new(frame.delta.mul_f64(self.time_scale), frame.frame);
         let keep_going = state.tick(term, &scaled);
         if !keep_going {
             // Quitting: `present` clears `current` each frame, so an example that returns without
@@ -583,10 +580,7 @@ pub fn render_headless_frames<E: Example>(frames: u32) -> Vec<String> {
 
     let mut views = Vec::new();
     for i in 0..frames {
-        let frame = Frame {
-            delta: HEADLESS_FRAME_DELTA,
-            frame: u64::from(i),
-        };
+        let frame = Frame::new(HEADLESS_FRAME_DELTA, u64::from(i));
         if !state.tick(&mut term, &frame) {
             break;
         }
@@ -658,10 +652,7 @@ pub fn render_perf_overlay_rgb<E: Example>(
         #[allow(clippy::cast_precision_loss)] // `frame_n` is display-jitter phase, not a count.
         let phase = frame_n as f64 * 0.35;
         let millis = 10.0f64.mul_add(phase.sin(), 16.0);
-        let frame = Frame {
-            delta: Duration::from_secs_f64(millis / 1000.0),
-            frame: frame_n,
-        };
+        let frame = Frame::new(Duration::from_secs_f64(millis / 1000.0), frame_n);
         frame_n += 1;
         let _ = App::update(app, term, &frame);
     };
@@ -731,10 +722,7 @@ pub fn run_headless_stdout<E: Example>() {
     let mut term = Terminal::new(backend);
     let mut state = E::init(&mut term);
     for i in 0..frames {
-        let frame = Frame {
-            delta: HEADLESS_FRAME_DELTA,
-            frame: u64::from(i),
-        };
+        let frame = Frame::new(HEADLESS_FRAME_DELTA, u64::from(i));
         if !state.tick(&mut term, &frame) {
             break;
         }

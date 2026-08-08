@@ -60,11 +60,20 @@ pub enum Flow {
 
 /// Per-frame context handed to [`App::update`](crate::app::App::update).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Frame {
     /// Wall-clock time elapsed since the previous frame, supplied by the driver.
     pub delta: Duration,
     /// Monotonic frame counter, starting at 0.
     pub frame: u64,
+}
+
+impl Frame {
+    /// A frame at `frame` with `delta` elapsed since the previous one.
+    #[must_use]
+    pub const fn new(delta: Duration, frame: u64) -> Self {
+        Self { delta, frame }
+    }
 }
 
 /// The per-frame update contract for a game.
@@ -301,10 +310,7 @@ where
         let now = std::time::Instant::now();
         let delta = now.duration_since(last);
         last = now;
-        let frame = Frame {
-            delta,
-            frame: frame_count,
-        };
+        let frame = Frame::new(delta, frame_count);
         frame_count = frame_count.wrapping_add(1);
         let present_count_before = term.present_count();
         let flow = app.update(&mut term, &frame);
@@ -421,7 +427,7 @@ where
 ///     let mut term = Terminal::new(Headless::new(80, 24));
 ///     let mut frame_count = 0u64;
 ///     loop {
-///         let frame = Frame { delta: core::time::Duration::ZERO, frame: frame_count };
+///         let frame = Frame::new(core::time::Duration::ZERO, frame_count);
 ///         frame_count += 1;
 ///         if app.update(&mut term, &frame) == Flow::Exit {
 ///             return Ok(());
@@ -795,19 +801,13 @@ mod tests {
         // the terminal), so drive the loop by hand via `step`, mirroring what `run_on_with`
         // does around the `Flow::Idle` branch.
         let mut term = term;
-        let frame0 = Frame {
-            delta: Duration::ZERO,
-            frame: 0,
-        };
+        let frame0 = Frame::new(Duration::ZERO, 0);
         assert_eq!(app.update(&mut term, &frame0), Flow::Idle);
         // This is the exact call `run_on_with` makes on `Flow::Idle` when `event_driven` is
         // `true`: it must buffer the event, not return/consume it, so `update`'s own `has_input`
         // still finds it below.
         assert!(term.wait_for_input(Duration::MAX));
-        let frame1 = Frame {
-            delta: Duration::ZERO,
-            frame: 1,
-        };
+        let frame1 = Frame::new(Duration::ZERO, 1);
         assert_eq!(app.update(&mut term, &frame1), Flow::Exit);
         assert!(app.saw_input_after_idle);
     }
