@@ -172,7 +172,7 @@ impl Surface<'_> {
         {
             let mut buf = [0u8; 4];
             let s = ch.encode_utf8(&mut buf);
-            self.write_grapheme_at(abs_x, abs_y, s, style);
+            self.put_grapheme_at(abs_x, abs_y, s, style);
         }
         #[cfg(not(feature = "egc"))]
         {

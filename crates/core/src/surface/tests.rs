@@ -798,7 +798,7 @@ fn a_wide_char_at_the_clip_edge_refuses_to_write_its_spacer_outside_the_clip() {
     );
 }
 
-// Gated to the non-egc build: under `egc`, `put`/`put_signed` go through `write_grapheme_at`
+// Gated to the non-egc build: under `egc`, `put`/`put_signed` go through `put_grapheme_at`
 // instead of `Grid::put_tile`, which has the same unfixed shape (retroglyph#1045 only covers
 // the non-egc branches, matching #998's own scope for `put_offset`).
 #[test]
@@ -824,7 +824,7 @@ fn put_does_not_tint_a_foreign_tile_when_put_tile_refuses_the_write() {
 }
 
 // egc counterpart of the non-egc test above (retroglyph#1090): under `egc`, `put` goes through
-// `write_grapheme_at`/`Grid::write_grapheme` instead of `Grid::put_tile`, which had the same
+// `put_grapheme_at`/`Grid::write_grapheme` instead of `Grid::put_tile`, which had the same
 // unfixed shape. As above, the clip is wider than the grid, so `wide_spacer_fits` passes and it
 // is `Grid::write_grapheme`'s own out-of-bounds refusal that has to stop `apply_tint` from
 // re-tinting the existing tile.

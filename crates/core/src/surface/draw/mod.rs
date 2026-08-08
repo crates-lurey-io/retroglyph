@@ -99,7 +99,7 @@ impl Surface<'_> {
         let Some((x, y)) = self.shift(x, y) else {
             return;
         };
-        self.write_grapheme_at(x, y, grapheme, style);
+        self.put_grapheme_at(x, y, grapheme, style);
     }
 
     /// Writes `grapheme` at the already-*absolute* grid coordinate `(x, y)` (post-[`shift`],
@@ -119,13 +119,7 @@ impl Surface<'_> {
     /// distinct from the clip check above, so `apply_tint` is gated on its own `bool` too rather
     /// than assumed to always land once `wide_spacer_fits` passes.
     #[cfg(feature = "egc")]
-    pub(super) fn write_grapheme_at(
-        &mut self,
-        x: u16,
-        y: u16,
-        grapheme: &str,
-        style: Style,
-    ) -> bool {
+    pub(super) fn put_grapheme_at(&mut self, x: u16, y: u16, grapheme: &str, style: Style) -> bool {
         use unicode_width::UnicodeWidthStr;
 
         if !self.wide_spacer_fits(x, y, grapheme.width()) {
@@ -146,7 +140,7 @@ impl Surface<'_> {
     ///
     /// [`Grid::put_tile`]/[`Grid::write_grapheme`] only refuse a wide write at the *grid*'s own
     /// right edge, not the clip's, so every wide write site (both the `egc` grapheme path via
-    /// [`write_grapheme_at`](Self::write_grapheme_at) and the plain-`char` path in
+    /// [`put_grapheme_at`](Self::put_grapheme_at) and the plain-`char` path in
     /// [`put`](Self::put)/[`put_signed`](Self::put_signed)/[`put_offset`](Self::put_offset))
     /// calls this first: without it, a clip narrower than the surface's own area would let a
     /// wide glyph's spacer land one column past the clip, silently overwriting whatever is
