@@ -457,7 +457,7 @@ pub fn run_software_with<E: Example>(builder: retroglyph_software::config::Softw
 pub fn run_gl<E: Example>() {
     run_windowed::<E, _>(
         E::configure(
-            retroglyph_gl::GlBackendBuilder::new()
+            retroglyph_gl::config::GlBackendBuilder::new()
                 .grid_size(50, 25)
                 .scale(2),
         ),

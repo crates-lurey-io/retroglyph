@@ -39,8 +39,8 @@
     clippy::cast_sign_loss
 )]
 
-use crate::GlBackendBuilder;
 use crate::GlRenderer;
+use crate::config::GlBackendBuilder;
 use crate::shaders::GlslFlavor;
 use glow::HasContext as _;
 use retroglyph_core::backend::DrawCell;

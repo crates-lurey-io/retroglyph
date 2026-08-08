@@ -48,8 +48,8 @@
     clippy::cast_precision_loss
 )]
 
-use crate::GlBackendBuilder;
 use crate::GlRenderer;
+use crate::config::GlBackendBuilder;
 use crate::shaders::GlslFlavor;
 use glow::HasContext as _;
 use glutin::config::{ConfigSurfaceTypes, ConfigTemplateBuilder};
