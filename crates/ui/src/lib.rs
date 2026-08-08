@@ -60,7 +60,7 @@
 //!
 //! Forwards to `retroglyph-core`'s `egc` feature.
 //!
-//! Upgrades [`Paragraph`](widget::Paragraph)'s word-wrap (always available) to grapheme-cluster-aware correctness.
+//! Upgrades [`Paragraph`](crate::widget::Paragraph)'s word-wrap (always available) to grapheme-cluster-aware correctness.
 //!
 //! ### `libm`
 //!
@@ -74,10 +74,10 @@
 //!
 //! ⚪ Optional.
 //!
-//! Adds `Serialize`/`Deserialize` impls for [`Theme`](theme::Theme) and `Density`, forwarding to
+//! Adds `Serialize`/`Deserialize` impls for [`Theme`](crate::theme::Theme) and `Density`, forwarding to
 //! `retroglyph-core`'s `serde` feature.
 //!
-//! [`Theme`](theme::Theme) round-trips through `Color`'s own `serde` impl.
+//! [`Theme`](crate::theme::Theme) round-trips through `Color`'s own `serde` impl.
 //!
 //! ### `std`
 //!
