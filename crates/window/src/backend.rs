@@ -3,7 +3,7 @@
 
 use crate::presenter::Presenter;
 use retroglyph_core::backend::DrawCell;
-use retroglyph_core::backend::{Cursor, Input, Output};
+use retroglyph_core::backend::{Compositing, Cursor, Input, Output};
 use retroglyph_core::event::{Event, coalesces_with};
 use retroglyph_core::grid::Size;
 use std::collections::VecDeque;
@@ -177,12 +177,8 @@ impl<P: Presenter> Output for WindowBackend<P> {
         self.presenter.resize(size);
     }
 
-    fn needs_full_frame(&self) -> bool {
-        self.presenter.needs_full_frame()
-    }
-
-    fn composites_layers(&self) -> bool {
-        self.presenter.composites_layers()
+    fn compositing(&self) -> Compositing {
+        self.presenter.compositing()
     }
 }
 

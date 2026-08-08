@@ -304,7 +304,7 @@ fn paint(out: &mut impl Output, cells: &[(Pos, Tile)]) {
 }
 
 /// Feeds a full layered frame `(layer, pos, tile)` into any [`Output`] via `draw_layers`, the way
-/// the core `Terminal` drives a `composites_layers` backend. Both GL and software composite this
+/// the core `Terminal` drives a `PixelLayered` backend. Both GL and software composite this
 /// stream themselves, so the two must agree pixel-for-pixel.
 fn paint_layers(out: &mut impl Output, cells: &[(u8, Pos, Tile)]) {
     out.draw_layers(cells.iter().map(|(l, p, t)| DrawCell::on_layer(*l, *p, t)))
@@ -786,7 +786,7 @@ fn wide_tile_png(w: u32, h: u32) -> Vec<u8> {
 }
 
 /// A `cols` x `rows` grid painted from `grid`'s layer 0, in the all-cells layer-major order a
-/// `composites_layers` backend receives.
+/// `PixelLayered` backend receives.
 #[cfg(feature = "tilesets")]
 fn span_scene(grid: &retroglyph_core::grid::Grid) -> Vec<(u8, Pos, Tile)> {
     (0..grid.height())

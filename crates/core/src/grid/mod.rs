@@ -41,7 +41,7 @@
 //! it beats ordering draw calls.
 //!
 //! Compositing itself happens in one of two places, chosen by the backend
-//! (see [`crate::backend::Output::composites_layers`]):
+//! (see [`crate::backend::Output::compositing`]):
 //!
 //! - **Cell backends** (`Headless`, `retroglyph-crossterm`) do not composite
 //!   layers themselves. [`crate::terminal::Terminal::present`] calls

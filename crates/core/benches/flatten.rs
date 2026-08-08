@@ -1,6 +1,6 @@
 //! Benchmarks for layer compositing (`Grid::flatten_into`), the per-frame step
 //! `Terminal::present` runs for every backend that doesn't composite layers itself (see
-//! `crate::backend::Output::composites_layers`): currently `Headless` and `retroglyph-crossterm`.
+//! `crate::backend::Output::compositing`): currently `Headless` and `retroglyph-crossterm`.
 //!
 //! retroglyph#269 asks for coverage of this hot path across 1/4/16 layers: `flatten_into` walks
 //! every allocated layer for every cell unconditionally (see `grid.rs`'s module doc, "No
@@ -9,7 +9,7 @@
 //!
 //! `flatten_into` itself is crate-private (only `Terminal::present` calls it), so this drives it
 //! through that public entry point: a `Terminal<Headless>` (which never overrides
-//! `composites_layers`, so it takes the flatten path) with `n` layers populated, calling
+//! `compositing`, so it takes the flatten path) with `n` layers populated, calling
 //! `present()` once per iteration. `present()` also diffs the flattened frame against the
 //! previous one, but that diff cost is invariant across the layer counts compared here, while the
 //! flatten cost is not, so the scaling this benchmark reports is attributable to `flatten_into`.
