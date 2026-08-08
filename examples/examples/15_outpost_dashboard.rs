@@ -55,7 +55,7 @@ use retroglyph_examples::Example;
 use retroglyph_ui::align::Align;
 use retroglyph_ui::animate::{Easing, Tween};
 use retroglyph_ui::camera::Camera;
-use retroglyph_ui::layout::{Constraint, split_h, split_h_spaced, split_v};
+use retroglyph_ui::layout::{Constraint, Layout, split_h, split_v};
 use retroglyph_ui::text::{draw_clipped, truncate};
 
 // ── Breakpoints ────────────────────────────────────────────────────────────
@@ -751,16 +751,14 @@ impl OutpostDashboard {
         }
 
         // Four animated stat tiles, side by side.
-        let (cols, _) = split_h_spaced(
-            Rect::new(
+        let cols = Layout::horizontal([Constraint::Fill(1); 4])
+            .spacing(1)
+            .split(Rect::new(
                 area.left(),
                 area.top() + 1,
                 area.width().saturating_sub(2 * MIN_TARGET_W + 2),
                 3,
-            ),
-            &[Constraint::Fill(1); 4],
-            1,
-        );
+            ));
         for (col, stat) in cols.iter().zip(&self.stats) {
             if col.width() < 4 {
                 continue;
