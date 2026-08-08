@@ -962,6 +962,7 @@ pub fn centered_rect(screen: Rect, width: u16, height: u16) -> Rect {
 
 /// Which side of an anchor rect a panel prefers to open on, for [`anchored_rect`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Side {
     /// Open above the anchor (panel's bottom edge touches the anchor's top edge).
     Above,

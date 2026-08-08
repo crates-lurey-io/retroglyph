@@ -25,6 +25,7 @@ use retroglyph_core::symbols::border;
 /// let border = BoxBorder::new().border_type(BorderType::Rounded);
 /// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum BorderType {
     /// Single-line box-drawing glyphs: `┌─┐│└┘`.
     #[default]
