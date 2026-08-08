@@ -134,8 +134,8 @@ two closest:
   pixel or WASM backend. retroglyph's widget/layout crate borrows ratatui's constraint-based layout
   ergonomics, but retroglyph's `Terminal<B>` also runs against a native pixel-rendered window or a
   browser canvas without changing a line of game logic: pick ratatui if a real terminal is always
-  the target and you want its wider widget catalog: `Style` is fg/bg color only, on purpose, so
-  that every backend (including the pixel and GL renderers) behaves identically. Rich-attribute
+  the target and you want its wider widget catalog: `Style` is fg/bg color only, on purpose, so that
+  every backend (including the pixel and GL renderers) behaves identically. Rich-attribute
   dashboards and TUIs are ratatui's turf; retroglyph stays the game-grid library.
 - **[bracket-lib](https://github.com/amethyst/bracket-lib)** (the maintained successor to RLTK) is
   the closest match in spirit: one virtual ASCII terminal, several swappable backends including
