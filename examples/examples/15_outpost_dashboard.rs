@@ -51,10 +51,11 @@ use retroglyph::event::{Event, KeyCode, MouseButton, MouseEventKind};
 use retroglyph::grid::{HasSize, Pos, Rect, Size};
 use retroglyph::surface::Surface;
 use retroglyph::terminal::Terminal;
-use retroglyph::ui::{
-    Align, Camera, Constraint, Easing, Tween, draw_clipped, split_h, split_h_spaced, split_v,
-    truncate,
-};
+use retroglyph::ui::align::Align;
+use retroglyph::ui::animate::{Easing, Tween};
+use retroglyph::ui::camera::Camera;
+use retroglyph::ui::layout::{Constraint, split_h, split_h_spaced, split_v};
+use retroglyph::ui::text::{draw_clipped, truncate};
 use retroglyph_examples::Example;
 
 // ── Breakpoints ────────────────────────────────────────────────────────────

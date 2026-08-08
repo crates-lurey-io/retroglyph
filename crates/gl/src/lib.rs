@@ -3,8 +3,8 @@
 //!
 //! # Architecture
 //!
-//! [`GlBackendBuilder`] holds configuration (fonts, grid size, integer scale) and
-//! [`build`](GlBackendBuilder::build)s a [`GlRenderer`]. The glyph source is a static
+//! [`config::GlBackendBuilder`] holds configuration (fonts, grid size, integer scale) and
+//! [`build`](config::GlBackendBuilder::build)s a [`GlRenderer`]. The glyph source is a static
 //! [`FontChain`] (a single [`BitmapFont`] is a chain of one); every font in the chain is
 //! grid-packed into one `TEXTURE_2D_ARRAY` atlas and addressed by a flat slot id (issue #367's
 //! grid-packing half, lifting the 256-layer cap). The renderer maintains
@@ -92,7 +92,7 @@
 
 pub mod config;
 
-mod error;
+pub mod error;
 mod renderer;
 mod shaders;
 #[cfg(feature = "tilesets")]
@@ -124,12 +124,12 @@ mod context;
 #[path = "context_wasm.rs"]
 mod context;
 
-pub use config::{GlBackendBuilder, GlBackendError};
-pub use error::SurfaceError;
-// Re-export the font types so a consumer can build a custom atlas without a separate dependency.
+// Re-exports a dependency's own public types so a consumer can build a custom atlas without a
+// separate direct dependency on retroglyph-window (STYLE_GUIDE.md exception 3).
 pub use retroglyph_window::font::{self as font, BitmapFont, FontChain};
 
 use context::GlContext;
+use error::SurfaceError;
 use renderer::{FLAG_HAS_BG, FLAG_HAS_GLYPH, GlResources, Instance};
 use retroglyph_core::backend::DrawCell;
 use retroglyph_core::backend::Output;
@@ -164,7 +164,7 @@ struct ReadmeDoctests;
 /// no-op cursor, so a duplicate queue here would only ever be dead. See the sub-cell offset note
 /// on [`Presenter`] for the shared rendering contract.
 ///
-/// Build one with [`GlBackendBuilder`]. Before the windowing loop calls
+/// Build one with [`config::GlBackendBuilder`]. Before the windowing loop calls
 /// [`init_surface`](Presenter::init_surface) there is no GL context; drawing updates only the
 /// CPU-side instance array, and [`present`](Presenter::present) is a no-op. Once the surface
 /// exists, `present` uploads changed cells and issues the single instanced draw call.
@@ -214,7 +214,7 @@ struct Gpu {
 
 impl GlRenderer {
     /// Builds a renderer for the given glyph cache, grid size, and scale. Called by
-    /// [`GlBackendBuilder::build`].
+    /// [`config::GlBackendBuilder::build`].
     ///
     /// Glyph cells wider or taller than 255 unscaled pixels are clamped to 255 (the
     /// [`CellGeometry`] limit).
@@ -246,8 +246,9 @@ impl GlRenderer {
         }
     }
 
-    /// Attaches a decoded sprite atlas (issue #366). Called by [`GlBackendBuilder::build`] when a
-    /// tileset was registered; the GPU atlas is built later in [`build_resources`](Self::build_resources).
+    /// Attaches a decoded sprite atlas (issue #366). Called by
+    /// [`config::GlBackendBuilder::build`] when a tileset was registered; the GPU atlas is built
+    /// later in [`build_resources`](Self::build_resources).
     #[cfg(feature = "tilesets")]
     pub(crate) fn set_sprites(&mut self, set: SpriteSet) {
         self.sprite_set = Some(set);
@@ -311,7 +312,8 @@ impl GlRenderer {
     ///
     /// # Errors
     ///
-    /// Returns [`SurfaceError::Init`] if a shader fails to compile or the program fails to link.
+    /// Returns [`error::SurfaceError::Init`] if a shader fails to compile or the program fails to
+    /// link.
     #[allow(clippy::cast_precision_loss)]
     pub(crate) fn build_resources(
         &self,
@@ -805,7 +807,7 @@ impl Drop for GlRenderer {
 #[cfg(all(test, feature = "default-font"))]
 mod compositing_tests {
     use super::{FLAG_HAS_BG, FLAG_HAS_GLYPH};
-    use crate::GlBackendBuilder;
+    use crate::config::GlBackendBuilder;
     use retroglyph_core::backend::DrawCell;
     use retroglyph_core::backend::Output;
     use retroglyph_core::color::Color;
@@ -846,7 +848,7 @@ mod compositing_tests {
             .build();
         assert!(matches!(
             result,
-            Err(crate::GlBackendError::SurfaceTooLarge)
+            Err(crate::config::GlBackendError::SurfaceTooLarge)
         ));
     }
 
@@ -1108,7 +1110,7 @@ mod compositing_tests {
 /// `warned_dropped_tint` set and instance arrays are inspected).
 #[cfg(all(test, feature = "default-font", feature = "tilesets"))]
 mod dropped_tint_tests {
-    use crate::GlBackendBuilder;
+    use crate::config::GlBackendBuilder;
     use retroglyph_core::backend::DrawCell;
     use retroglyph_core::backend::Output;
     use retroglyph_core::color::Style;
@@ -1262,8 +1264,8 @@ mod dropped_tint_tests {
 /// applies here.
 #[cfg(all(test, feature = "default-font"))]
 mod output_conformance_tests {
-    use crate::GlBackendBuilder;
     use crate::GlRenderer;
+    use crate::config::GlBackendBuilder;
     use retroglyph_core::backend::Output;
     use retroglyph_core::grid::HasSize;
     use retroglyph_core::grid::Size;

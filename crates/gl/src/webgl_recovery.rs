@@ -41,7 +41,7 @@
 // one, so the lint is reporting a fact that has no consequence on this target.
 #![allow(clippy::future_not_send)]
 
-use crate::GlBackendBuilder;
+use crate::config::GlBackendBuilder;
 use retroglyph_core::backend::DrawCell;
 use retroglyph_core::backend::Output as _;
 use retroglyph_core::color::Color;

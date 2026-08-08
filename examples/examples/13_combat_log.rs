@@ -38,7 +38,9 @@ use retroglyph::grid::Rect;
 use retroglyph::surface::Surface;
 use retroglyph::terminal::Terminal;
 use retroglyph::text::Line;
-use retroglyph::ui::{Interaction, Log, Modal, ScrollState, Scrollbar, Sense, StatBar, Widget};
+use retroglyph::ui::interact::{Interaction, Sense};
+use retroglyph::ui::state::ScrollState;
+use retroglyph::ui::widget::{Log, Modal, Scrollbar, StatBar, Widget};
 use retroglyph_examples::Example;
 
 const PLAYER_MAX_HP: u32 = 30;

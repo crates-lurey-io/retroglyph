@@ -86,7 +86,7 @@ impl std::error::Error for GlBackendError {
 /// # #[cfg(not(target_arch = "wasm32"))]
 /// # fn main() {
 /// use retroglyph_core::color::Style;
-/// use retroglyph_gl::GlBackendBuilder;
+/// use retroglyph_gl::config::GlBackendBuilder;
 /// use retroglyph_window::winit::{WindowConfig, run_windowed};
 ///
 /// let renderer = GlBackendBuilder::new()
@@ -169,7 +169,7 @@ impl GlBackendBuilder {
     /// # Examples
     ///
     /// ```no_run
-    /// use retroglyph_gl::GlBackendBuilder;
+    /// use retroglyph_gl::config::GlBackendBuilder;
     /// use retroglyph_window::font::{BitmapFont, FontChain, unscii16};
     ///
     /// // A fallback font declaring the quadrant glyphs CP437 has no mapping for.

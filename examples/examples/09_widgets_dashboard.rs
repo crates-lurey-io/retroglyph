@@ -29,10 +29,13 @@ use retroglyph::color::Style;
 use retroglyph::event::{Event, KeyCode};
 use retroglyph::grid::Rect;
 use retroglyph::terminal::Terminal;
-use retroglyph::ui::{
-    BoxStyle, Button, Constraint, Gauge, Interaction, List, ListState, Sides, Sparkline, Table,
-    Tabs, Theme, Ui, split_h, split_v,
-};
+use retroglyph::ui::interact::Interaction;
+use retroglyph::ui::layout::{Constraint, split_h, split_v};
+use retroglyph::ui::state::ListState;
+use retroglyph::ui::style::{BoxStyle, Sides};
+use retroglyph::ui::theme::Theme;
+use retroglyph::ui::ui::Ui;
+use retroglyph::ui::widget::{Button, Gauge, List, Sparkline, Table, Tabs};
 use retroglyph_examples::Example;
 
 /// Identifies the dashboard's one interactive widget for [`Interaction`]'s hit-testing and focus

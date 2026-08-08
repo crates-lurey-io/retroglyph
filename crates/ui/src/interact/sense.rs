@@ -1,10 +1,10 @@
-//! [`Sense`]: what a widget wants [`Interaction::interact`](crate::Interaction::interact)
+//! [`Sense`]: what a widget wants [`Interaction::interact`](crate::interact::Interaction::interact)
 //! to compute on its behalf.
 
 use core::ops::{BitOr, BitOrAssign};
 
-/// Which of a [`Response`](crate::Response)'s fields
-/// [`Interaction::interact`](crate::Interaction::interact) should actually
+/// Which of a [`Response`](crate::interact::Response)'s fields
+/// [`Interaction::interact`](crate::interact::Interaction::interact) should actually
 /// populate for a given widget call.
 ///
 /// A manual bitflag over `u8`: mirrors
@@ -20,28 +20,28 @@ pub struct Sense(u8);
 
 impl Sense {
     /// Register the widget's rect for hit-testing and report
-    /// [`Response::hovered`](crate::Response::hovered).
+    /// [`Response::hovered`](crate::interact::Response::hovered).
     pub const HOVER: Self = Self(1 << 0);
-    /// Report [`Response::pressed`](crate::Response::pressed),
-    /// [`Response::released`](crate::Response::released), and
-    /// [`Response::clicked`](crate::Response::clicked).
+    /// Report [`Response::pressed`](crate::interact::Response::pressed),
+    /// [`Response::released`](crate::interact::Response::released), and
+    /// [`Response::clicked`](crate::interact::Response::clicked).
     pub const CLICK: Self = Self(1 << 1);
-    /// Report [`Response::dragging`](crate::Response::dragging) once the
+    /// Report [`Response::dragging`](crate::interact::Response::dragging) once the
     /// pointer moves past the drag threshold while pressed on this widget.
     pub const DRAG: Self = Self(1 << 2);
-    /// Register the widget in the [`FocusRing`](crate::FocusRing)'s
+    /// Register the widget in the [`FocusRing`](crate::interact::FocusRing)'s
     /// Tab/Shift+Tab order and report
-    /// [`Response::focused`](crate::Response::focused). Combined with
+    /// [`Response::focused`](crate::interact::Response::focused). Combined with
     /// [`CLICK`](Self::CLICK), Enter/Space also activate the widget while
     /// it's focused: terminals are frequently mouse-less.
     pub const FOCUSABLE: Self = Self(1 << 3);
-    /// Report [`Response::scroll_delta`](crate::Response::scroll_delta)
+    /// Report [`Response::scroll_delta`](crate::interact::Response::scroll_delta)
     /// whenever the pointer is within this widget's rect. Unlike the other
     /// pointer senses, this is *not* limited to the single
-    /// topmost widget under the pointer: see [`Interaction::interact`](crate::Interaction::interact)'s
+    /// topmost widget under the pointer: see [`Interaction::interact`](crate::interact::Interaction::interact)'s
     /// doc comment on `scroll_delta` for why.
     pub const SCROLL: Self = Self(1 << 4);
-    /// Report [`Response::secondary_clicked`](crate::Response::secondary_clicked):
+    /// Report [`Response::secondary_clicked`](crate::interact::Response::secondary_clicked):
     /// the secondary (right) button pressed and released on this widget
     /// while still hovered. Independent of [`CLICK`](Self::CLICK): combine
     /// them (`Sense::click() | Sense::SECONDARY_CLICK`) for a widget that
@@ -51,15 +51,15 @@ impl Sense {
     /// press-and-release on the same widget always counts, since
     /// secondary-button drags aren't a gesture this module resolves.
     pub const SECONDARY_CLICK: Self = Self(1 << 5);
-    /// Keeps this call's hit-testing (so [`Response::hovered`](crate::Response::hovered)
+    /// Keeps this call's hit-testing (so [`Response::hovered`](crate::interact::Response::hovered)
     /// still works, most of the value of showing a disabled control at
     /// all) but suppresses everything else this sense would otherwise
-    /// register or report: no [`FocusRing`](crate::FocusRing) registration,
-    /// and [`Response::pressed`](crate::Response::pressed),
-    /// [`released`](crate::Response::released), [`clicked`](crate::Response::clicked),
-    /// [`held`](crate::Response::held), [`dragging`](crate::Response::dragging),
-    /// [`focused`](crate::Response::focused), and
-    /// [`secondary_clicked`](crate::Response::secondary_clicked) all report
+    /// register or report: no [`FocusRing`](crate::interact::FocusRing) registration,
+    /// and [`Response::pressed`](crate::interact::Response::pressed),
+    /// [`released`](crate::interact::Response::released), [`clicked`](crate::interact::Response::clicked),
+    /// [`held`](crate::interact::Response::held), [`dragging`](crate::interact::Response::dragging),
+    /// [`focused`](crate::interact::Response::focused), and
+    /// [`secondary_clicked`](crate::interact::Response::secondary_clicked) all report
     /// `false`, even if the gesture would otherwise satisfy them.
     /// [`SCROLL`](Self::SCROLL) is suppressed too: a disabled row's own
     /// [`Sense::SCROLL`] never fires, though this doesn't stop an enclosing
@@ -70,10 +70,10 @@ impl Sense {
     /// Sense::DISABLED`. See [`disabled_if`](Self::disabled_if) for the
     /// common call-site shape.
     pub const DISABLED: Self = Self(1 << 6);
-    /// Senses nothing: [`interact`](crate::Interaction::interact) still
-    /// registers the id nowhere and every [`Response`](crate::Response) field reports as if
-    /// nothing happened, matching [`Response::default`](crate::Response), with one exception:
-    /// [`rect`](crate::Response::rect) always echoes back the area passed to `interact`, useful
+    /// Senses nothing: [`interact`](crate::interact::Interaction::interact) still
+    /// registers the id nowhere and every [`Response`](crate::interact::Response) field reports as if
+    /// nothing happened, matching [`Response::default`](crate::interact::Response), with one exception:
+    /// [`rect`](crate::interact::Response::rect) always echoes back the area passed to `interact`, useful
     /// for purely decorative widgets that still want layout echo.
     pub const NONE: Self = Self(0);
 

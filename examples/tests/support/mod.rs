@@ -81,7 +81,7 @@ pub fn headless_snapshot<E: Example>(frames: u32) -> String {
 #[cfg(all(feature = "software", not(target_arch = "wasm32")))]
 #[must_use]
 pub fn png_snapshot<E: Example>(cols: u16, rows: u16, scale: u16) -> Vec<u8> {
-    use retroglyph::software::SoftwareBackendBuilder;
+    use retroglyph::software::config::SoftwareBackendBuilder;
     use retroglyph::terminal::Terminal;
     use retroglyph_window::presenter::Presenter;
 

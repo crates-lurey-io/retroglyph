@@ -26,7 +26,7 @@ use retroglyph::event::{Event, KeyCode};
 use retroglyph::grid::Rect;
 use retroglyph::surface::Surface;
 use retroglyph::terminal::Terminal;
-use retroglyph::ui::{Constraint, split_h, split_v};
+use retroglyph::ui::layout::{Constraint, split_h, split_v};
 use retroglyph_examples::Example;
 
 /// State for the weighted-fill example (none needed: the pane layout never changes).
@@ -87,6 +87,7 @@ impl WeightedFill {
 
     /// Draws one demo row: a caption above a `split_h` of `row` using `constraints`, with each
     /// resulting pane labeled by the entry in `labels` at the same index.
+    // ANCHOR: layout
     fn draw_row(
         surface: &mut Surface<'_>,
         row: Rect,
@@ -102,6 +103,7 @@ impl WeightedFill {
             Self::draw_pane(surface, *pane, label);
         }
     }
+    // ANCHOR_END: layout
 
     /// Draws this frame (the driver presents).
     #[allow(clippy::unused_self)]

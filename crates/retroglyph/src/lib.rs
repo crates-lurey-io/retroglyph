@@ -75,7 +75,7 @@
 //! ⚪ Optional.
 //!
 //! Adds `Serialize`/`Deserialize` impls to the curated types that support them (`Color`, `Style`,
-//! geometry, ..., plus [`ui::Theme`]/`Density` when `ui` is also enabled). Forwards to
+//! geometry, ..., plus [`ui::theme::Theme`]/`Density` when `ui` is also enabled). Forwards to
 //! `retroglyph-core`'s and `retroglyph-ui`'s own `serde` features; neither backend crate has one.
 //!
 //! ### `software`

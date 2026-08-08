@@ -41,7 +41,7 @@ use retroglyph::color::{AnsiColor, Color, Style};
 use retroglyph::event::{Event, KeyCode};
 use retroglyph::frames::FrameClock;
 use retroglyph::terminal::Terminal;
-use retroglyph::ui::{Easing, Tween, oscillate_with_phase};
+use retroglyph::ui::animate::{Easing, Tween, oscillate_with_phase};
 use retroglyph_examples::Example;
 use std::time::Duration;
 

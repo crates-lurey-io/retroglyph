@@ -13,7 +13,7 @@ use core::time::Duration;
 ///
 /// ```
 /// use core::time::Duration;
-/// use retroglyph_ui::oscillate;
+/// use retroglyph_ui::animate::oscillate;
 ///
 /// let period = Duration::from_secs(2);
 /// assert_eq!(oscillate(Duration::ZERO, period), 0.5); // sin(0) == 0, remapped to the midpoint
@@ -34,7 +34,7 @@ pub fn oscillate(elapsed: Duration, period: Duration) -> f32 {
 ///
 /// ```
 /// use core::time::Duration;
-/// use retroglyph_ui::oscillate_with_phase;
+/// use retroglyph_ui::animate::oscillate_with_phase;
 ///
 /// let period = Duration::from_secs(2);
 /// // A quarter cycle ahead of `elapsed = 0` is the same as `elapsed = period / 4` with no phase.

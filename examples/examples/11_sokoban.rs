@@ -36,7 +36,9 @@ use retroglyph::event::{Event, KeyCode};
 use retroglyph::grid::{Grid, Rect};
 use retroglyph::terminal::Terminal;
 use retroglyph::tile::Tile;
-use retroglyph::ui::{Constraint, Easing, Panel, Tween, Widget, split_h, split_v};
+use retroglyph::ui::animate::{Easing, Tween};
+use retroglyph::ui::layout::{Constraint, split_h, split_v};
+use retroglyph::ui::widget::{Panel, Widget};
 use retroglyph_examples::Example;
 
 /// The level, hand-designed to be solvable with the two boxes pushed one at a time: `#` wall,
@@ -341,9 +343,11 @@ impl Sokoban {
             .bg(Color::Default);
         surface.put_offset((level_x + px, level_y + py), (pdx, pdy), '@', style);
 
+        // ANCHOR: panel
         Panel::new()
             .title("Status")
             .render(&mut surface.scope(status_area));
+        // ANCHOR_END: panel
         let inner_x = status_area.left() + 2;
         let mut y = status_area.top() + 1;
         surface.print(

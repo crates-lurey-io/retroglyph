@@ -1,4 +1,4 @@
-//! [`PerfOverlayApp`]: a live frame-time/FPS overlay for any `App`, on any `Backend`.
+//! [`PerfOverlayApp`](crate::perf::PerfOverlayApp): a live frame-time/FPS overlay for any `App`, on any `Backend`.
 //!
 //! Wrap an existing [`App`](retroglyph_core::app::App) once and it gains a toggleable perf readout on
 //! every backend, with no backend-specific code in the wrapped app itself:
@@ -10,7 +10,7 @@
 //! use retroglyph_core::backend::{Backend, Headless};
 //! use retroglyph_core::terminal::Terminal;
 //! # use retroglyph_core::app::{App, Flow, Frame};
-//! use retroglyph_ui::PerfOverlayApp;
+//! use retroglyph_ui::perf::PerfOverlayApp;
 //! # struct MyGame;
 //! # impl<B: Backend> App<B> for MyGame {
 //! #     fn update(&mut self, _term: &mut Terminal<B>, frame: &Frame) -> Flow {
@@ -37,14 +37,14 @@
 //!
 //! # Rendering
 //!
-//! [`DefaultPerfRenderer`] (used by [`PerfOverlayApp::new`]) draws a single-row `NNNfps MM.Mms
+//! [`DefaultPerfRenderer`](crate::perf::DefaultPerfRenderer) (used by [`PerfOverlayApp::new`](crate::perf::PerfOverlayApp::new)) draws a single-row `NNNfps MM.Mms
 //! minMM.M maxMM.M <backend>` readout, compact enough to fit an 80-column terminal alongside a
 //! long backend label. For a richer overlay (a bordered panel, a frame-time sparkline, extra
 //! app-supplied metrics like resolution or vsync state), pass a closure to
-//! [`PerfOverlayApp::with_closure`]: composing this crate's [`Panel`](crate::Panel)/
-//! [`Sparkline`](crate::Sparkline) widgets, or [`PerfOverlay`](crate::PerfOverlay) directly,
-//! requires no glue code beyond the closure itself. Implement [`PerfRenderer`] directly, and
-//! construct with [`PerfOverlayApp::with_renderer`], only for a named, reusable renderer type
+//! [`PerfOverlayApp::with_closure`](crate::perf::PerfOverlayApp::with_closure): composing this crate's [`Panel`](crate::widget::Panel)/
+//! [`Sparkline`](crate::widget::Sparkline) widgets, or [`PerfOverlay`](crate::widget::PerfOverlay) directly,
+//! requires no glue code beyond the closure itself. Implement [`PerfRenderer`](crate::perf::PerfRenderer) directly, and
+//! construct with [`PerfOverlayApp::with_renderer`](crate::perf::PerfOverlayApp::with_renderer), only for a named, reusable renderer type
 //! instead of a closure.
 //!
 //! This whole wrapper exists in large part because
@@ -54,7 +54,7 @@
 //! through and calls `FrameStats::record` for the widget that otherwise couldn't. An app that
 //! doesn't need this wrapper's other job (generic toggle-key handling across any wrapped
 //! [`App`](retroglyph_core::app::App), on every backend) no longer needs it just for that:
-//! [`AnimatedPerfOverlay`](crate::AnimatedPerfOverlay) reaches `Frame` directly, so an app that
+//! [`AnimatedPerfOverlay`](crate::widget::AnimatedPerfOverlay) reaches `Frame` directly, so an app that
 //! already owns a `FrameStats` field can record and draw it in a single call, with no decorator at
 //! all.
 //!
@@ -63,7 +63,7 @@
 //! [`PerfOverlayApp::update`](retroglyph_core::app::App::update) drains every event out of the wrapped
 //! [`Terminal`](retroglyph_core::terminal::Terminal) before handing control to the inner
 //! [`App`](retroglyph_core::app::App), keeps any that match the toggle key (backtick, or F1 as an
-//! alias, by default; see [`default_is_toggle_key`]), and re-queues the rest via
+//! alias, by default; see [`default_is_toggle_key`](crate::perf::default_is_toggle_key)), and re-queues the rest via
 //! [`Terminal::requeue_events`](retroglyph_core::terminal::Terminal::requeue_events) so the inner app sees
 //! exactly the input it would have without the overlay, minus the toggle presses. This works
 //! identically on every backend because it only goes through
@@ -72,12 +72,12 @@
 //! [`Input::push_event`](retroglyph_core::backend::Input::push_event), whose documented default is
 //! a no-op for backends that never receive events from outside their own `poll_event`).
 //!
-//! The toggle key doesn't just flip visibility: it cycles through [`PerfOverlayMode`]:
-//! [`Off`](PerfOverlayMode::Off) -> [`Compact`](PerfOverlayMode::Compact) ->
-//! [`Full`](PerfOverlayMode::Full) -> back to `Off`. `Full` only exists once
-//! [`PerfOverlayApp::cycle_with`] registers a second, richer [`PerfRenderer`] (typically
-//! [`PerfOverlay`](crate::PerfOverlay), a bordered panel with a frame-time
-//! [`Sparkline`](crate::Sparkline)); without it, the cycle degrades to the plain two-state
+//! The toggle key doesn't just flip visibility: it cycles through [`PerfOverlayMode`](crate::perf::PerfOverlayMode):
+//! [`Off`](crate::perf::PerfOverlayMode::Off) -> [`Compact`](crate::perf::PerfOverlayMode::Compact) ->
+//! [`Full`](crate::perf::PerfOverlayMode::Full) -> back to `Off`. `Full` only exists once
+//! [`PerfOverlayApp::cycle_with`](crate::perf::PerfOverlayApp::cycle_with) registers a second, richer [`PerfRenderer`](crate::perf::PerfRenderer) (typically
+//! [`PerfOverlay`](crate::widget::PerfOverlay), a bordered panel with a frame-time
+//! [`Sparkline`](crate::widget::Sparkline)); without it, the cycle degrades to the plain two-state
 //! `Off`/`Compact` toggle.
 
 mod app;
@@ -90,18 +90,18 @@ pub use renderer::{DefaultPerfRenderer, PerfRenderer};
 
 use retroglyph_core::surface::Layer;
 
-/// How many frames [`PerfOverlayApp`]'s internal [`FrameStats`](retroglyph_core::frames::FrameStats)
+/// How many frames [`PerfOverlayApp`](crate::perf::PerfOverlayApp)'s internal [`FrameStats`](retroglyph_core::frames::FrameStats)
 /// remembers.
 ///
 /// About two seconds at 60fps. Not configurable per instance: pick a bigger window by building a
-/// `FrameStats` directly and rendering it through a custom [`PerfRenderer`] closure instead of
-/// [`PerfOverlayApp`], if a specific app genuinely needs one.
+/// `FrameStats` directly and rendering it through a custom [`PerfRenderer`](crate::perf::PerfRenderer) closure instead of
+/// [`PerfOverlayApp`](crate::perf::PerfOverlayApp), if a specific app genuinely needs one.
 pub const FRAME_HISTORY: usize = 120;
 
-/// [`PerfOverlayApp`]'s default overlay layer: [`Layer::Debug`].
+/// [`PerfOverlayApp`](crate::perf::PerfOverlayApp)'s default overlay layer: [`Layer::Debug`].
 ///
 /// The workspace's named top-most UI tier, so a perf HUD stays visible over whatever else is on
 /// screen (including an open [`Layer::Overlay`] popup) rather than risking a lower, app-chosen
-/// layer hiding it. Override with [`PerfOverlayApp::layer`] if an app's own content already
+/// layer hiding it. Override with [`PerfOverlayApp::layer`](crate::perf::PerfOverlayApp::layer) if an app's own content already
 /// reaches this layer.
 pub const DEFAULT_LAYER: u8 = Layer::Debug.as_u8();

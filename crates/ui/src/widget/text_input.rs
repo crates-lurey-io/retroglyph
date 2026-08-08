@@ -7,12 +7,12 @@ use retroglyph_core::text::{split_at_width, width_usize};
 
 use super::StatefulWidget;
 use crate::Surface;
-use crate::TextInputState;
-use crate::Theme;
+use crate::state::TextInputState;
 use crate::text::truncate as truncate_to_cols;
+use crate::theme::Theme;
 
 /// A single-line editable text field: the stateless drawing half of [`TextInputState`], the
-/// same split [`List`](super::List) has with [`ListState`](crate::ListState).
+/// same split [`List`](super::List) has with [`ListState`](crate::state::ListState).
 ///
 /// Draws `state.value()` (masked with `mask` if set, or `placeholder` while `state.value()` is
 /// empty), scrolled horizontally by `state.scroll()` and clipped to `surface.area()`'s width,
@@ -23,7 +23,7 @@ use crate::text::truncate as truncate_to_cols;
 /// (CJK, most emoji) still puts the caret in the right screen column.
 ///
 /// This widget does not call [`TextInputState::ensure_visible`]: like
-/// [`List`](super::List)/[`ListState::ensure_visible`](crate::ListState::ensure_visible), that's
+/// [`List`](super::List)/[`ListState::ensure_visible`](crate::state::ListState::ensure_visible), that's
 /// the caller's job, once per frame, with the actual current field width (which can change on
 /// resize).
 ///
@@ -41,7 +41,9 @@ use crate::text::truncate as truncate_to_cols;
 ///
 /// ```
 /// use retroglyph_core::grid::{Grid, Rect};
-/// use retroglyph_ui::{StatefulWidget, Surface, TextInput, TextInputState};
+/// use retroglyph_ui::state::TextInputState;
+/// use retroglyph_ui::widget::{StatefulWidget, TextInput};
+/// use retroglyph_ui::Surface;
 ///
 /// let mut state = TextInputState::new();
 /// state.set_value("hello");

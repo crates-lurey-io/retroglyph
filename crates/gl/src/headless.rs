@@ -48,8 +48,8 @@
     clippy::cast_precision_loss
 )]
 
-use crate::GlBackendBuilder;
 use crate::GlRenderer;
+use crate::config::GlBackendBuilder;
 use crate::shaders::GlslFlavor;
 use glow::HasContext as _;
 use glutin::config::{ConfigSurfaceTypes, ConfigTemplateBuilder};
@@ -482,7 +482,7 @@ fn matches_software_backend_pixel_for_pixel() {
     let frame = render_to_frame(&ctx, &gl).expect("render");
 
     // Reference CPU rasterization, same font, same grid.
-    let mut sw = retroglyph_software::SoftwareBackendBuilder::new()
+    let mut sw = retroglyph_software::config::SoftwareBackendBuilder::new()
         .grid_size(cols, rows)
         .scale(scale)
         .build()
@@ -510,7 +510,7 @@ fn matches_software_backend_with_layers_pixel_for_pixel() {
     let frame = render_to_frame(&ctx, &gl).expect("render");
 
     // Software composites the same stream on the CPU (the parity reference).
-    let mut sw = retroglyph_software::SoftwareBackendBuilder::new()
+    let mut sw = retroglyph_software::config::SoftwareBackendBuilder::new()
         .grid_size(cols, rows)
         .scale(scale)
         .build()
@@ -942,7 +942,7 @@ fn matches_software_backend_for_multicell_spans() {
     paint_layers(&mut gl, &scene);
     let frame = render_to_frame(&ctx, &gl).expect("render");
 
-    let mut sw = retroglyph_software::SoftwareBackendBuilder::new()
+    let mut sw = retroglyph_software::config::SoftwareBackendBuilder::new()
         .grid_size(cols, rows)
         .scale(scale)
         .tileset(tileset())
@@ -993,7 +993,7 @@ fn matches_software_backend_for_a_span_covered_cells_default_background() {
     paint_layers(&mut gl, &scene);
     let frame = render_to_frame(&ctx, &gl).expect("render");
 
-    let mut sw = retroglyph_software::SoftwareBackendBuilder::new()
+    let mut sw = retroglyph_software::config::SoftwareBackendBuilder::new()
         .grid_size(cols, rows)
         .scale(scale)
         .build()

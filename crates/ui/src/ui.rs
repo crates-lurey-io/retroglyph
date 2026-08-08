@@ -1,7 +1,7 @@
 //! [`Ui`]: one frame's [`Surface`] and [`Interaction`] paired, so a call site names an `area`/`id`
 //! once and gets both hit-testing and drawing from it.
 //!
-//! You rarely build a `Ui` yourself. [`Interaction::frame`](crate::Interaction::frame) runs one
+//! You rarely build a `Ui` yourself. [`Interaction::frame`](crate::interact::Interaction::frame) runs one
 //! frame's `begin_frame`/`end_frame` lifecycle and hands its closure a ready `Ui`; [`Ui::new`] is
 //! the escape hatch for callers driving that lifecycle by hand. From there [`Ui::show`] hit-tests
 //! and draws an [`InteractiveWidget`] from one `area`/`id`, [`Ui::draw`]
@@ -13,7 +13,7 @@
 //! use retroglyph_core::backend::Headless;
 //! use retroglyph_core::grid::Rect;
 //! use retroglyph_core::terminal::Terminal;
-//! use retroglyph_ui::{Interaction, Sense};
+//! use retroglyph_ui::interact::{Interaction, Sense};
 //!
 //! #[derive(Clone, Copy, PartialEq, Eq)]
 //! enum WidgetId {
@@ -53,7 +53,7 @@ struct Cursor {
 impl Cursor {
     /// Carve `primary` cells off the leading edge of `remaining` along `axis` (top for
     /// [`Axis::Vertical`], left for [`Axis::Horizontal`]), clipped to whatever's left (like
-    /// [`split_v`](crate::split_v)/[`split_h`](crate::split_h), this never overflows `remaining`)
+    /// [`split_v`](crate::layout::split_v)/[`split_h`](crate::layout::split_h), this never overflows `remaining`)
     /// and shrinks `remaining` by the same amount.
     fn allocate(&mut self, primary: u16) -> Rect {
         match self.axis {
@@ -136,7 +136,7 @@ pub struct Ui<'s, 'g, Id> {
 impl<'s, 'g, Id> Ui<'s, 'g, Id> {
     /// A `Ui` pairing `surface` with `interaction` for one frame, enabled.
     ///
-    /// The low-level constructor; prefer [`Interaction::frame`](crate::Interaction::frame), which
+    /// The low-level constructor; prefer [`Interaction::frame`](crate::interact::Interaction::frame), which
     /// builds this and runs the frame lifecycle for you.
     #[must_use]
     pub const fn new(surface: &'s mut Surface<'g>, interaction: &'s mut Interaction<Id>) -> Self {
@@ -205,7 +205,7 @@ impl<'g, Id: Copy + PartialEq> Ui<'_, 'g, Id> {
     ///
     /// If this context is [`disabled`](Self::enabled), the returned [`Response`] still reports
     /// [`hovered`](Response::hovered) but never an activation: see
-    /// [`Sense::DISABLED`](crate::Sense::DISABLED).
+    /// [`Sense::DISABLED`](crate::interact::Sense::DISABLED).
     #[must_use]
     pub fn show(
         &mut self,
@@ -340,7 +340,7 @@ impl<'g, Id: Copy + PartialEq> Ui<'_, 'g, Id> {
     /// the cursor's remaining area sized by an explicit height or, for `show_auto`/`draw_auto`,
     /// by [`Measure::height_for`], and advancing the cursor by that strip's height, so the
     /// call site never computes a `Rect` by hand. Content past the bottom of the cursor's area
-    /// clips, the same way [`split_v`](crate::split_v) clips a pane that overflows `area`.
+    /// clips, the same way [`split_v`](crate::layout::split_v) clips a pane that overflows `area`.
     ///
     /// Nests with [`horizontal`](Self::horizontal): the `Ui` handed to `f` is a plain `Ui`, so
     /// it can call `vertical`/`horizontal` again to start a flow along the other axis, scoped to
@@ -431,7 +431,7 @@ impl<'g, Id: Copy + PartialEq> Ui<'_, 'g, Id> {
     /// Like [`show`](Self::show), but allocates the area from this `Ui`'s own cursor instead of
     /// taking one explicitly: `size` is a height on a [`vertical`](Self::vertical) cursor, a
     /// width on a [`horizontal`](Self::horizontal) one, clipped to whatever's left (like
-    /// [`split_v`](crate::split_v)/[`split_h`](crate::split_h)), and the cursor advances by that
+    /// [`split_v`](crate::layout::split_v)/[`split_h`](crate::layout::split_h)), and the cursor advances by that
     /// amount so the next `show_sized`/`draw_sized`/`show_auto`/`draw_auto` call claims the
     /// space right after it.
     ///

@@ -25,7 +25,9 @@ use retroglyph::event::{Event, KeyCode};
 use retroglyph::grid::{Pos, Rect};
 use retroglyph::terminal::Terminal;
 use retroglyph::text::width_usize;
-use retroglyph::ui::{Panel, StatefulWidget, Surface, TextInput, TextInputState, Widget as _};
+use retroglyph::ui::Surface;
+use retroglyph::ui::state::TextInputState;
+use retroglyph::ui::widget::{Panel, StatefulWidget, TextInput, Widget as _};
 use retroglyph_examples::Example;
 
 /// Every [`CursorStyle`] variant, in the order Tab cycles them (and DECSCUSR numbers them; see

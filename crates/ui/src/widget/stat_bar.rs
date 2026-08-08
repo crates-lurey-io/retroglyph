@@ -5,7 +5,7 @@ use retroglyph_core::color::{Color, Style};
 
 use super::{Widget, bar};
 use crate::Surface;
-use crate::Theme;
+use crate::theme::Theme;
 
 /// A labeled stat bar: `label`, a bar filling `current / max` of the
 /// remaining width colored by [`super::Meter`], and a trailing
@@ -28,7 +28,8 @@ use crate::Theme;
 ///
 /// ```
 /// use retroglyph_core::grid::{Grid, Rect};
-/// use retroglyph_ui::{StatBar, Surface, Widget};
+/// use retroglyph_ui::widget::{StatBar, Widget};
+/// use retroglyph_ui::Surface;
 ///
 /// let area = Rect::new(0, 0, 20, 1);
 /// let mut grid = Grid::new(20, 1);

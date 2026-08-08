@@ -13,7 +13,7 @@
 //! headless snapshots above are what proves the toggle itself works.
 //!
 //! [`Headless::format_view`]: retroglyph::backend::Headless::format_view
-//! [`Theme::DARK`]: retroglyph::ui::Theme::DARK
+//! [`Theme::DARK`]: retroglyph::ui::theme::Theme::DARK
 
 #![allow(unreachable_pub)]
 
@@ -96,13 +96,13 @@ fn png_snapshot() {
 /// example's test also uses just for this one example's needs.
 ///
 /// [`Style::new()`]: retroglyph::color::Style::new
-/// [`Theme::DARK`]: retroglyph::ui::Theme::DARK
-/// [`Theme::LIGHT`]: retroglyph::ui::Theme::LIGHT
+/// [`Theme::DARK`]: retroglyph::ui::theme::Theme::DARK
+/// [`Theme::LIGHT`]: retroglyph::ui::theme::Theme::LIGHT
 #[cfg(all(feature = "software", not(target_arch = "wasm32")))]
 #[test]
 fn png_snapshot_light() {
     use retroglyph::app::Frame;
-    use retroglyph::software::SoftwareBackendBuilder;
+    use retroglyph::software::config::SoftwareBackendBuilder;
     use retroglyph::terminal::Terminal;
     use retroglyph_examples::HEADLESS_FRAME_DELTA;
     use retroglyph_window::presenter::Presenter;

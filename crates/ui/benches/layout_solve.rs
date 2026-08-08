@@ -18,7 +18,7 @@
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use retroglyph_core::grid::Rect;
-use retroglyph_ui::{Constraint, split_h, split_v};
+use retroglyph_ui::layout::{Constraint, split_h, split_v};
 use std::hint::black_box;
 
 /// A small, fixed-shape mix of every [`Constraint`] kind, repeated `panes` times, so the

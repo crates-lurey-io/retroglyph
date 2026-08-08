@@ -8,7 +8,7 @@ use retroglyph_core::event::{Event, KeyCode};
 /// Which id currently holds keyboard focus, plus Tab/Shift+Tab cycling
 /// through the ids [`register`](Self::register)ed as focusable.
 ///
-/// Like [`HitTester`](crate::HitTester), registrations are per-frame and
+/// Like [`HitTester`](crate::interact::HitTester), registrations are per-frame and
 /// draw-ordered, but [`advance`](Self::advance)/[`retreat`](Self::retreat)
 /// always walk *last* frame's finalized order: this frame's registrations
 /// aren't complete until the draw pass finishes. `current` itself, unlike
@@ -99,7 +99,7 @@ impl<Id: Copy + PartialEq> FocusRing<Id> {
 
     /// Default Tab/Shift+Tab handling: [`advance`](Self::advance) on `Tab`,
     /// [`retreat`](Self::retreat) on `BackTab` (shift+tab). Called
-    /// automatically by [`Interaction::handle_event`](crate::Interaction::handle_event);
+    /// automatically by [`Interaction::handle_event`](crate::interact::Interaction::handle_event);
     /// call it yourself if you're using `FocusRing` standalone, or skip it
     /// entirely and drive [`advance`](Self::advance)/[`retreat`](Self::retreat)
     /// from something else (a gamepad shoulder button, say) if `Tab` needs
@@ -120,7 +120,7 @@ impl<Id: Copy + PartialEq> FocusRing<Id> {
     }
 
     /// Shared wraparound math for `advance`/`retreat`, mirroring
-    /// [`ListState`](crate::ListState)'s `select_next`/`select_previous`:
+    /// [`ListState`](crate::state::ListState)'s `select_next`/`select_previous`:
     /// `delta` is `1` or `-1`, and a `current` that's missing (or not found
     /// in `order`) starts from the end opposite the direction of travel so
     /// the first press lands somewhere sensible.

@@ -160,7 +160,7 @@ impl WindowConfig {
     ///     [`Frame::delta`](retroglyph_core::app::Frame::delta), which will render one frame and then
     ///     sit still until the next stray event.
     ///   - `false` is **continuous**: a frame is rendered every tick whether or not anything
-    ///     happened, which is what a `retroglyph_ui::Tween`/
+    ///     happened, which is what a `retroglyph_ui::animate::Tween`/
     ///     [`FrameClock`](retroglyph_core::frames::FrameClock)-driven app needs.
     ///
     /// The two combine independently: `(Some(fps), false)` is the common capped-animation shape
@@ -420,7 +420,7 @@ where
 ///
 /// ```no_run
 /// use retroglyph_core::event::Event;
-/// use retroglyph_software::SoftwareBackendBuilder;
+/// use retroglyph_software::config::SoftwareBackendBuilder;
 /// use retroglyph_window::winit::{WindowConfig, run_windowed_with_proxy};
 /// use std::time::Duration;
 ///
@@ -506,7 +506,7 @@ where
 /// # Examples
 ///
 /// ```no_run
-/// use retroglyph_software::SoftwareBackendBuilder;
+/// use retroglyph_software::config::SoftwareBackendBuilder;
 /// use retroglyph_window::winit::{WindowConfig, run_windowed_with_typed_proxy};
 /// use std::time::Duration;
 ///

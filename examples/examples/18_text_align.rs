@@ -22,7 +22,9 @@ use retroglyph::event::{Event, KeyCode};
 use retroglyph::grid::Rect;
 use retroglyph::terminal::Terminal;
 use retroglyph::text::{Line, Span};
-use retroglyph::ui::{Align, Modal, Panel, PrintLine, Surface, Text, Widget};
+use retroglyph::ui::Surface;
+use retroglyph::ui::align::Align;
+use retroglyph::ui::widget::{Modal, Panel, PrintLine, Text, Widget};
 use retroglyph_examples::Example;
 
 /// State for the text-alignment example (none needed: the layout never changes).

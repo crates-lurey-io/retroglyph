@@ -2086,7 +2086,11 @@ use retroglyph::color::{Color, Style};
 use retroglyph::event::{Event, KeyCode, KeyModifiers, MouseButton, MouseEventKind};
 use retroglyph::grid::{HasSize, Pos, Rect, Size};
 use retroglyph::terminal::Terminal;
-use retroglyph::ui::{Camera, Constraint, Panel, Surface, Widget, split_h, truncate};
+use retroglyph::ui::Surface;
+use retroglyph::ui::camera::Camera;
+use retroglyph::ui::layout::{Constraint, split_h};
+use retroglyph::ui::text::truncate;
+use retroglyph::ui::widget::{Panel, Widget};
 use retroglyph_examples::Example;
 
 use world::{TILE_H, TILE_W, TileMap, World};

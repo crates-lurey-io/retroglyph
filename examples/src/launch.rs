@@ -29,14 +29,14 @@ use retroglyph::terminal::Terminal;
     feature = "gl",
     feature = "wgpu"
 ))]
-use retroglyph::ui::PerfOverlayApp;
+use retroglyph::ui::perf::PerfOverlayApp;
 #[cfg(any(
     feature = "crossterm",
     feature = "software",
     feature = "gl",
     feature = "wgpu"
 ))]
-use retroglyph::ui::Widget as _;
+use retroglyph::ui::widget::Widget as _;
 #[cfg(feature = "crossterm")]
 use std::rc::Rc;
 use std::time::Duration;
@@ -125,7 +125,7 @@ pub trait Example: Default + Sized + 'static {
     /// that animates over real time (rather than once per raw tick, which can
     /// fire at wildly different rates depending on the backend -- crossterm's
     /// `run_on` is an unthrottled spin loop, unlike the software
-    /// backend's vsync-paced redraw) should drive a [`Tween`](retroglyph::ui::Tween)
+    /// backend's vsync-paced redraw) should drive a [`Tween`](retroglyph::ui::animate::Tween)
     /// or [`FrameClock`](retroglyph::frames::FrameClock) with `frame.delta`
     /// instead of counting raw `tick` calls -- see `06_layers.rs`.
     ///
@@ -255,9 +255,9 @@ impl<B: Backend, E: Example> App<B> for ExampleApp<E> {
 
 /// Wraps `inner` in a [`PerfOverlayApp`] configured the same way for every backend: visible per
 /// `RG_FPS` (see [`crate::fps::starts_visible`]), and cycling into a richer
-/// `retroglyph-ui`-composed [`Full`](retroglyph::ui::PerfOverlayMode::Full) mode -- a
-/// bordered panel with a frame-time sparkline, via [`retroglyph::ui::PerfOverlay`] -- on top
-/// of the built-in [`Compact`](retroglyph::ui::PerfOverlayMode::Compact) readout. One toggle
+/// `retroglyph-ui`-composed [`Full`](retroglyph::ui::perf::PerfOverlayMode::Full) mode -- a
+/// bordered panel with a frame-time sparkline, via [`retroglyph::ui::widget::PerfOverlay`] -- on top
+/// of the built-in [`Compact`](retroglyph::ui::perf::PerfOverlayMode::Compact) readout. One toggle
 /// key press now cycles `Off -> Compact -> Full -> Off` for every example in the gallery; see
 /// [`PerfOverlayApp::cycle_with`] for why this needs no per-example wiring.
 #[cfg(any(
@@ -275,7 +275,7 @@ fn perf_overlay_app<E: Example>(
         .cycle_with(
             retroglyph::grid::Size::new(46, 6),
             |stats, backend, area, surface| {
-                retroglyph::ui::PerfOverlay::new(stats)
+                retroglyph::ui::widget::PerfOverlay::new(stats)
                     .backend(backend)
                     .render(&mut surface.scope(area));
             },
@@ -411,7 +411,7 @@ fn run_windowed<E: Example, B: retroglyph::PresenterBuilder>(
 #[cfg(feature = "software")]
 pub fn run_software<E: Example>() {
     run_software_with::<E>(E::configure(
-        retroglyph::software::SoftwareBackendBuilder::new()
+        retroglyph::software::config::SoftwareBackendBuilder::new()
             .grid_size(50, 25)
             .scale(2),
     ));
@@ -434,7 +434,9 @@ pub fn run_software<E: Example>() {
 /// Panics if the software backend fails to initialize, or if the event loop
 /// fails to start.
 #[cfg(feature = "software")]
-pub fn run_software_with<E: Example>(builder: retroglyph::software::SoftwareBackendBuilder) {
+pub fn run_software_with<E: Example>(
+    builder: retroglyph::software::config::SoftwareBackendBuilder,
+) {
     run_windowed::<E, _>(builder, "software");
 }
 
@@ -457,7 +459,7 @@ pub fn run_software_with<E: Example>(builder: retroglyph::software::SoftwareBack
 pub fn run_gl<E: Example>() {
     run_windowed::<E, _>(
         E::configure(
-            retroglyph::gl::GlBackendBuilder::new()
+            retroglyph::gl::config::GlBackendBuilder::new()
                 .grid_size(50, 25)
                 .scale(2),
         ),
@@ -490,7 +492,7 @@ pub fn run_gl<E: Example>() {
 pub fn run_wgpu<E: Example>() {
     run_windowed::<E, _>(
         E::configure(
-            retroglyph::wgpu::WgpuBackendBuilder::new()
+            retroglyph::wgpu::config::WgpuBackendBuilder::new()
                 .grid_size(50, 25)
                 .scale(2),
         ),
@@ -583,7 +585,7 @@ pub fn render_headless_frames<E: Example>(frames: u32) -> Vec<String> {
 /// Runs `settle_frames` plain frames first (so [`retroglyph::frames::FrameStats`] has real samples
 /// for a sparkline-drawing renderer to show), then one synthetic toggle-key press per frame for
 /// `toggles` more frames (`PerfOverlayApp`'s toggle key cycles `Off -> Compact -> Full -> Off`;
-/// see [`retroglyph::ui::PerfOverlayMode`]), then presents once. Returns `(width, height,
+/// see [`retroglyph::ui::perf::PerfOverlayMode`]), then presents once. Returns `(width, height,
 /// interleaved RGB bytes)`, the same shape `support::png_snapshot` PNG-encodes -- this function
 /// stays free of an `image` dependency (a dev-dependency of the `tests/` binaries, not of this
 /// library) by leaving the actual encoding to the caller.
@@ -604,7 +606,7 @@ pub fn render_perf_overlay_rgb<E: Example>(
     use retroglyph_window::presenter::Presenter;
 
     let renderer = E::configure(
-        retroglyph::software::SoftwareBackendBuilder::new()
+        retroglyph::software::config::SoftwareBackendBuilder::new()
             .grid_size(cols, rows)
             .scale(scale),
     )

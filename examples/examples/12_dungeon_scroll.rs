@@ -63,7 +63,7 @@ use retroglyph::grid::{Grid, Pos, Rect, Size};
 use retroglyph::surface::Layer;
 use retroglyph::terminal::Terminal;
 use retroglyph::tile::Tile;
-use retroglyph::ui::Camera;
+use retroglyph::ui::camera::Camera;
 use retroglyph_examples::Example;
 
 /// World dimensions: comfortably larger than the 50x24 viewport in both axes, so the camera

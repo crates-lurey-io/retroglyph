@@ -38,7 +38,8 @@ use retroglyph::backend::Backend;
 use retroglyph::color::{AnsiColor, Color, Style};
 use retroglyph::event::{Event, KeyCode};
 use retroglyph::terminal::Terminal;
-use retroglyph::ui::{Align, draw_clipped};
+use retroglyph::ui::align::Align;
+use retroglyph::ui::text::draw_clipped;
 use retroglyph_examples::Example;
 
 /// State for the resize example (none needed: every frame is drawn fresh from `term.area()`).

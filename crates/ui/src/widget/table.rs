@@ -4,12 +4,12 @@ use retroglyph_core::grid::Rect;
 
 use super::window::visible_window;
 use super::{Measure, StatefulWidget};
-use crate::Align;
-use crate::ListState;
 use crate::Surface;
-use crate::Theme;
+use crate::align::Align;
 use crate::draw::fill_rect;
+use crate::state::ListState;
 use crate::text::draw_clipped;
+use crate::theme::Theme;
 
 /// A fixed-column, scrollable table with a [`ListState`]-driven highlighted
 /// row.
@@ -37,7 +37,9 @@ use crate::text::draw_clipped;
 ///
 /// ```
 /// use retroglyph_core::grid::{Grid, Rect};
-/// use retroglyph_ui::{ListState, StatefulWidget, Surface, Table};
+/// use retroglyph_ui::state::ListState;
+/// use retroglyph_ui::widget::{StatefulWidget, Table};
+/// use retroglyph_ui::Surface;
 ///
 /// let headers = ["Name", "Score"];
 /// let widths = [10u16, 6];

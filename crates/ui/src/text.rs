@@ -10,7 +10,8 @@ use retroglyph_core::color::Style;
 use retroglyph_core::grid::{Pos, Rect};
 use retroglyph_core::text::{split_at_width, truncate_measured};
 
-use crate::{Align, Surface};
+use crate::Surface;
+use crate::align::Align;
 
 /// Truncate `s` so its display width is at most `max_cols` terminal columns.
 ///
@@ -58,8 +59,8 @@ pub fn truncate_owned(s: &str, max_cols: impl Into<usize>) -> String {
 /// internal width measurement agrees with `clipped_width` and produces the same offset.
 ///
 /// Reach for this instead of re-deriving the sequence by hand, the same way
-/// [`fill_rect`](crate::fill_rect) is reached for instead of a hand-rolled fill loop; see
-/// [`Text`](crate::Text)'s and [`PrintLine`](crate::PrintLine)'s own `render` for the base case.
+/// [`fill_rect`](crate::draw::fill_rect) is reached for instead of a hand-rolled fill loop; see
+/// [`Text`](crate::widget::Text)'s and [`PrintLine`](crate::widget::PrintLine)'s own `render` for the base case.
 #[must_use]
 pub fn draw_clipped(
     surface: &mut Surface<'_>,

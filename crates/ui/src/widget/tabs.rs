@@ -6,21 +6,21 @@ use retroglyph_core::grid::Rect;
 use retroglyph_core::text::truncate_measured;
 
 use super::{InteractiveWidget, Widget};
-use crate::Align;
-use crate::Response;
-use crate::Sense;
 use crate::Surface;
-use crate::Theme;
+use crate::align::Align;
 use crate::draw::fill_rect;
+use crate::interact::Response;
+use crate::interact::Sense;
 use crate::text::draw_clipped;
+use crate::theme::Theme;
 
 /// A horizontal strip of `titles` with the tab at `selected` highlighted.
 ///
 /// Unlike [`Table`](super::Table)/[`List`](super::List), `Tabs` is a plain [`Widget`], not a
 /// [`StatefulWidget`](super::StatefulWidget): there is no scroll offset for a tab strip, only a
 /// selected index, so it takes `selected: Option<usize>` directly (set via [`Tabs::select`])
-/// rather than a [`ListState`](crate::ListState): the app is free to drive that index however
-/// it likes (a plain `usize` it owns, a [`FocusRing`](crate::FocusRing), whatever fits), the same
+/// rather than a [`ListState`](crate::state::ListState): the app is free to drive that index however
+/// it likes (a plain `usize` it owns, a [`FocusRing`](crate::interact::FocusRing), whatever fits), the same
 /// "app- or interaction-machinery-driven, widget just reads it" division of labor as every other
 /// widget here.
 ///
@@ -43,7 +43,8 @@ use crate::text::draw_clipped;
 ///
 /// ```
 /// use retroglyph_core::grid::{Grid, Rect};
-/// use retroglyph_ui::{Surface, Tabs, Widget};
+/// use retroglyph_ui::widget::{Tabs, Widget};
+/// use retroglyph_ui::Surface;
 ///
 /// let titles = ["Overview", "Details", "Settings"];
 /// let area = Rect::new(0, 0, 30, 1);

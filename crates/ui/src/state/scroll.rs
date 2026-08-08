@@ -1,4 +1,4 @@
-use crate::Response;
+use crate::interact::Response;
 
 /// Configurable physics constants for [`ScrollState`].
 ///
@@ -9,7 +9,7 @@ use crate::Response;
 /// most a call-site addition rather than a rewrite:
 ///
 /// ```
-/// use retroglyph_ui::ScrollPhysics;
+/// use retroglyph_ui::state::ScrollPhysics;
 ///
 /// let physics = ScrollPhysics { friction: 6.0, ..ScrollPhysics::DEFAULT };
 /// ```
@@ -55,9 +55,9 @@ impl Default for ScrollPhysics {
 /// making it deterministic and suitable for unit tests.
 ///
 /// For a *row*-based viewport (a menu, a list of fixed-height items) where content scrolls a
-/// whole row at a time and there's no momentum to animate, reach for [`crate::ListState`]
+/// whole row at a time and there's no momentum to animate, reach for [`crate::state::ListState`]
 /// instead: its `offset` is a plain `usize`, clamped only at zero, with no velocity or physics
-/// step. The two don't compose into one type on purpose (see [`crate::ListState`]'s own doc
+/// step. The two don't compose into one type on purpose (see [`crate::state::ListState`]'s own doc
 /// comment): pick whichever one matches what's actually scrolling: continuous/pixel-ish
 /// content reaches for `ScrollState`, a discrete item list reaches for `ListState`.
 #[derive(Clone, Debug, PartialEq)]
@@ -307,7 +307,7 @@ impl ScrollState {
 
     /// Feeds a frame's resolved [`Response::scroll_delta`] straight into
     /// [`scroll_by_wheel`](Self::scroll_by_wheel), so a widget wires wheel input by calling
-    /// [`Interaction::interact`](crate::Interaction::interact) with [`Sense::SCROLL`](crate::Sense::SCROLL)
+    /// [`Interaction::interact`](crate::interact::Interaction::interact) with [`Sense::SCROLL`](crate::interact::Sense::SCROLL)
     /// and handing the [`Response`] here, instead of re-deriving it from raw
     /// [`MouseEventKind::Scroll`](retroglyph_core::event::MouseEventKind::Scroll) events the way a widget
     /// with no route to `ScrollState` has to.
@@ -317,14 +317,15 @@ impl ScrollState {
     /// isn't covered here: `Response` reports only *whether* a drag is in progress
     /// ([`Response::dragging`]), not a pointer position, so that gesture still goes through
     /// [`begin_drag`](Self::begin_drag)/[`update_drag`](Self::update_drag)/[`end_drag`](Self::end_drag)
-    /// directly, using [`Interaction::pointer`](crate::Interaction::pointer)'s position alongside
+    /// directly, using [`Interaction::pointer`](crate::interact::Interaction::pointer)'s position alongside
     /// this `Response`.
     ///
     /// # Examples
     ///
     /// ```
     /// use retroglyph_core::grid::Rect;
-    /// use retroglyph_ui::{Interaction, ScrollState, Sense};
+    /// use retroglyph_ui::interact::{Interaction, Sense};
+    /// use retroglyph_ui::state::ScrollState;
     ///
     /// #[derive(Clone, Copy, PartialEq, Eq)]
     /// struct Id;

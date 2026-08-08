@@ -342,7 +342,7 @@ fn solve_n<const N: usize>(total: u16, constraints: &[Constraint; N]) -> [u16; N
 ///
 /// ```
 /// use retroglyph_core::grid::Rect;
-/// use retroglyph_ui::{Constraint, split_v};
+/// use retroglyph_ui::layout::{Constraint, split_v};
 ///
 /// let area = Rect::new(0, 0, 20, 10);
 /// let panes = split_v(area, &[Constraint::Fixed(1), Constraint::Fill(1), Constraint::Fixed(1)]);
@@ -377,7 +377,7 @@ pub fn split_v(area: Rect, constraints: &[Constraint]) -> Vec<Rect> {
 ///
 /// ```
 /// use retroglyph_core::grid::Rect;
-/// use retroglyph_ui::{Constraint, split_v_n};
+/// use retroglyph_ui::layout::{Constraint, split_v_n};
 ///
 /// let area = Rect::new(0, 0, 20, 10);
 /// let [header, body, footer] =
@@ -409,7 +409,7 @@ pub fn split_v_n<const N: usize>(area: Rect, constraints: [Constraint; N]) -> [R
 ///
 /// ```
 /// use retroglyph_core::grid::Rect;
-/// use retroglyph_ui::{Constraint, split_h};
+/// use retroglyph_ui::layout::{Constraint, split_h};
 ///
 /// let area = Rect::new(0, 0, 100, 5);
 /// let panes = split_h(area, &[Constraint::Percent(30), Constraint::Fill(1)]);
@@ -440,7 +440,7 @@ pub fn split_h(area: Rect, constraints: &[Constraint]) -> Vec<Rect> {
 ///
 /// ```
 /// use retroglyph_core::grid::Rect;
-/// use retroglyph_ui::{Constraint, split_h_n};
+/// use retroglyph_ui::layout::{Constraint, split_h_n};
 ///
 /// let area = Rect::new(0, 0, 100, 5);
 /// let [left, right] = split_h_n(area, [Constraint::Percent(30), Constraint::Fill(1)]);
@@ -516,7 +516,7 @@ impl From<u16> for Spacing {
 ///
 /// ```
 /// use retroglyph_core::grid::Rect;
-/// use retroglyph_ui::{Constraint, Spacing, split_h_spaced};
+/// use retroglyph_ui::layout::{Constraint, Spacing, split_h_spaced};
 ///
 /// let area = Rect::new(0, 0, 59, 6);
 /// let (panes, gaps) = split_h_spaced(area, &[Constraint::Fill(1); 3], 1);
@@ -648,7 +648,7 @@ const fn spacer_span(pos: u16, size: u16, spacing: Spacing) -> (u16, u16) {
 ///
 /// ```
 /// use retroglyph_core::grid::Rect;
-/// use retroglyph_ui::{Constraint, split_h_n_spaced};
+/// use retroglyph_ui::layout::{Constraint, split_h_n_spaced};
 ///
 /// let area = Rect::new(0, 0, 59, 6);
 /// let ([a, b, c], gaps) = split_h_n_spaced(area, [Constraint::Fill(1); 3], 1);
@@ -1016,7 +1016,7 @@ impl Side {
 ///
 /// ```
 /// use retroglyph_core::grid::{Rect, Size};
-/// use retroglyph_ui::{Side, anchored_rect};
+/// use retroglyph_ui::layout::{Side, anchored_rect};
 ///
 /// let bounds = Rect::new(0, 0, 40, 20);
 /// let anchor = Rect::new(5, 5, 10, 1); // e.g. a menu label

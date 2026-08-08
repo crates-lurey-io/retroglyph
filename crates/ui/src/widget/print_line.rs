@@ -2,8 +2,8 @@
 use retroglyph_core::text::{Line, width as measured_width};
 
 use super::Widget;
-use crate::Align;
 use crate::Surface;
+use crate::align::Align;
 use crate::text::draw_clipped;
 
 /// A [`Line`], drawn on the first row of the area it's rendered into and
@@ -19,7 +19,7 @@ use crate::text::draw_clipped;
 /// use retroglyph_core::backend::Headless;
 /// use retroglyph_core::text::Line;
 /// use retroglyph_core::terminal::Terminal;
-/// use retroglyph_ui::{PrintLine, Widget};
+/// use retroglyph_ui::widget::{PrintLine, Widget};
 ///
 /// let mut term = Terminal::new(Headless::new(20, 1));
 /// let line = Line::raw("hello");

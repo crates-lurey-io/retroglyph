@@ -117,7 +117,7 @@ impl<A, R: PerfRenderer> PerfOverlayApp<A, R> {
     /// -> Full -> Off` instead of just `Off -> Compact -> Off`.
     ///
     /// A natural pairing is [`DefaultPerfRenderer`] (or a closure) at
-    /// [`Compact`](PerfOverlayMode::Compact) and [`PerfOverlay`](crate::PerfOverlay) (a bordered
+    /// [`Compact`](PerfOverlayMode::Compact) and [`PerfOverlay`](crate::widget::PerfOverlay) (a bordered
     /// panel with a frame-time sparkline) at `Full`; see the [module docs](super).
     #[must_use]
     pub fn cycle_with<F>(mut self, size: Size, renderer: F) -> Self
