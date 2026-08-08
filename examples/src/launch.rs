@@ -13,6 +13,13 @@
 //! concrete, statically-named exported symbols, which a generic function
 //! can't produce. See [`wasm_entry!`](crate::wasm_entry) for that part.
 
+#[cfg(any(
+    feature = "crossterm",
+    feature = "software",
+    feature = "gl",
+    feature = "wgpu"
+))]
+use crate::perf_overlay::PerfOverlayApp;
 use retroglyph::app::Frame;
 #[cfg(any(
     feature = "crossterm",
@@ -25,20 +32,6 @@ use retroglyph::backend::Backend;
 #[cfg(feature = "crossterm")]
 use retroglyph::backend::Output;
 use retroglyph::terminal::Terminal;
-#[cfg(any(
-    feature = "crossterm",
-    feature = "software",
-    feature = "gl",
-    feature = "wgpu"
-))]
-use retroglyph::ui::perf::PerfOverlayApp;
-#[cfg(any(
-    feature = "crossterm",
-    feature = "software",
-    feature = "gl",
-    feature = "wgpu"
-))]
-use retroglyph::ui::widget::Widget as _;
 #[cfg(feature = "crossterm")]
 use std::rc::Rc;
 use std::time::Duration;
@@ -259,12 +252,11 @@ impl<B: Backend, E: Example> App<B> for ExampleApp<E> {
 }
 
 /// Wraps `inner` in a [`PerfOverlayApp`] configured the same way for every backend: visible per
-/// `RG_FPS` (see [`crate::fps::starts_visible`]), and cycling into a richer
-/// `retroglyph-ui`-composed [`Full`](retroglyph::ui::perf::PerfOverlayMode::Full) mode -- a
-/// bordered panel with a frame-time sparkline, via [`retroglyph::ui::widget::PerfOverlay`] -- on top
-/// of the built-in [`Compact`](retroglyph::ui::perf::PerfOverlayMode::Compact) readout. One toggle
-/// key press now cycles `Off -> Compact -> Full -> Off` for every example in the gallery; see
-/// [`PerfOverlayApp::cycle_with`] for why this needs no per-example wiring.
+/// `RG_FPS` (see [`crate::fps::starts_visible`]), cycling `Off -> Compact -> Full -> Off` for
+/// every example in the gallery on one toggle key press. `Full` draws a bordered panel with a
+/// frame-time sparkline (`retroglyph_ui::widget::PerfOverlay`) on top of `Compact`'s built-in
+/// single-row readout; see [`crate::perf_overlay`] for why this lives here rather than in
+/// `retroglyph-ui` (retroglyph#1286).
 #[cfg(any(
     feature = "crossterm",
     feature = "software",
@@ -275,16 +267,7 @@ fn perf_overlay_app<E: Example>(
     inner: ExampleApp<E>,
     backend: &'static str,
 ) -> PerfOverlayApp<ExampleApp<E>> {
-    PerfOverlayApp::new(inner, backend)
-        .visible(crate::fps::starts_visible())
-        .cycle_with(
-            retroglyph::grid::Size::new(46, 6),
-            |stats, backend, area, surface| {
-                retroglyph::ui::widget::PerfOverlay::new(stats)
-                    .backend(backend)
-                    .render(&mut surface.scope(area));
-            },
-        )
+    PerfOverlayApp::new(inner, backend).visible(crate::fps::starts_visible())
 }
 
 /// Adds the wasm floating toggle button on top of a [`PerfOverlayApp`]-wrapped [`ExampleApp`] --
@@ -629,8 +612,8 @@ pub fn render_headless_frames<E: Example>(frames: u32) -> Vec<String> {
 ///
 /// Runs `settle_frames` plain frames first (so [`retroglyph::frames::FrameStats`] has real samples
 /// for a sparkline-drawing renderer to show), then one synthetic toggle-key press per frame for
-/// `toggles` more frames (`PerfOverlayApp`'s toggle key cycles `Off -> Compact -> Full -> Off`;
-/// see [`retroglyph::ui::perf::PerfOverlayMode`]), then presents once. Returns `(width, height,
+/// `toggles` more frames (`PerfOverlayApp`'s toggle key cycles `Off -> Compact -> Full -> Off`),
+/// then presents once. Returns `(width, height,
 /// interleaved RGB bytes)`, the same shape `support::png_snapshot` PNG-encodes -- this function
 /// stays free of an `image` dependency (a dev-dependency of the `tests/` binaries, not of this
 /// library) by leaving the actual encoding to the caller.
