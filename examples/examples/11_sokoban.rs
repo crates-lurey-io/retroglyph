@@ -345,9 +345,11 @@ impl Sokoban {
             .bg(Color::Default);
         surface.put_offset((level_x + px, level_y + py), (pdx, pdy), '@', style);
 
+        // ANCHOR: panel
         Panel::new()
             .title("Status")
             .render(&mut surface.scope(status_area));
+        // ANCHOR_END: panel
         let inner_x = status_area.left() + 2;
         let mut y = status_area.top() + 1;
         surface.print(

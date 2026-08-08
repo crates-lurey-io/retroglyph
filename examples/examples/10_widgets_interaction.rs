@@ -79,6 +79,7 @@ impl Default for WidgetsInteraction {
 /// Draws one button, colored by hover/press/focus state via [`Button`], and applies its click to
 /// `count`. `ui.show` resolves the click and draws the button from the one `rect`; the caller
 /// only needs `response.clicked()` for the counter logic below.
+// ANCHOR: click
 fn draw_button(ui: &mut Ui<'_, '_, ButtonId>, rect: Rect, id: ButtonId, label: &str) -> bool {
     let theme = Theme::DARK;
     let button = Button::new(label)
@@ -88,6 +89,7 @@ fn draw_button(ui: &mut Ui<'_, '_, ButtonId>, rect: Rect, id: ButtonId, label: &
         .focused_style(Style::new().fg(theme.accent).bg(theme.panel_bg));
     ui.show(rect, id, &button).clicked()
 }
+// ANCHOR_END: click
 
 impl Example for WidgetsInteraction {
     const NAME: &'static str = "10_widgets_interaction";
