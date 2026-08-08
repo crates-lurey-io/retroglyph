@@ -283,10 +283,25 @@ branch protection ruleset (`Settings -> Rules -> Protect`, or `gh api` on
 after pushing) -- it blocks force-pushes to `main` outright by design. Treat this as a rare,
 deliberate, single-purpose escape hatch, not a normal workflow.
 
+## The `ixy`/`gem` version coupling
+
+`retroglyph-core`'s most-used public types (`Pos`, `Size`, `Rect` in `crates/core/src/grid/mod.rs`)
+are bare aliases onto `ixy`'s own types, and `Tint::apply_rgb888` takes and returns `gem`'s `Rgb888`
+directly. Both `ixy` and `gem` are same-author (crates-lurey-io), pre-1.0 crates, so their version
+number alone says nothing about API stability.
+
+Rather than newtype-wrap either crate (a lot of surface to protect against a dependency under the
+same ownership), the coupling is made explicit instead: retroglyph's stability guarantee covers the
+pinned `ixy`/`gem` major version along with retroglyph's own API. A `retroglyph 1.x` release
+promises the `ixy`/`gem` major versions it was built against as part of that guarantee, not just
+retroglyph's own surface -- see `crates/core/src/lib.rs`'s crate-level "Stability" section for the
+consumer-facing wording. This makes reaching `ixy 1.0` and `gem 1.0` a prerequisite for
+`retroglyph 1.0`, tracked below.
+
 ## Non-blocking follow-ups
 
 - `license-file.workspace = true` per crate (some compliance scanners want a local `LICENSE`).
-- Same-author upstream dependencies (`gem`, `grixy`, `ixy`) are pre-1.0/alpha; their churn is a
-  transitive stability risk for consumers, worth tracking but not fixable from this repo.
+- `ixy`/`gem` reaching `1.0` is a prerequisite for `retroglyph` stabilizing (see above); `grixy` is
+  also pre-1.0/alpha but isn't part of retroglyph's public API surface today.
 - Revisit whether `no-release` earns its keep after a few real releases.
 - Reconsider a `1.0.0` stabilization and an `-rc` prerelease channel when the API settles.

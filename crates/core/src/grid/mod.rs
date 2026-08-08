@@ -194,6 +194,9 @@ impl BlendMode {
 ///
 /// This crate's `serde` feature forwards to [`ixy`]'s own `serde` feature, so `Size` gains
 /// `Serialize`/`Deserialize` from its upstream definition rather than one defined here.
+///
+/// A bare alias onto `ixy`'s own type, not a newtype: this crate's stability guarantee covers the
+/// pinned `ixy` major version, not just the alias (see the crate-level docs' "Stability" section).
 pub type Size = ixy::Size<u16>;
 
 /// Pos in the grid, in (x = column, y = row) order.
@@ -214,6 +217,9 @@ pub type Size = ixy::Size<u16>;
 ///
 /// This crate's `serde` feature forwards to [`ixy`]'s own `serde` feature, so `Pos` gains
 /// `Serialize`/`Deserialize` from its upstream definition rather than one defined here.
+///
+/// A bare alias onto `ixy`'s own type, not a newtype: this crate's stability guarantee covers the
+/// pinned `ixy` major version, not just the alias (see the crate-level docs' "Stability" section).
 pub type Pos = ixy::Pos<u16>;
 
 /// Rectangle in the grid.
@@ -230,6 +236,9 @@ pub type Pos = ixy::Pos<u16>;
 ///
 /// This crate's `serde` feature forwards to [`ixy`]'s own `serde` feature, so `Rect` gains
 /// `Serialize`/`Deserialize` from its upstream definition rather than one defined here.
+///
+/// A bare alias onto `ixy`'s own type, not a newtype: this crate's stability guarantee covers the
+/// pinned `ixy` major version, not just the alias (see the crate-level docs' "Stability" section).
 pub type Rect = ixy::Rect<u16>;
 
 /// A sub-cell pixel offset `(dx, dy)`, distinct from [`Pos`] so a caller can't transpose a

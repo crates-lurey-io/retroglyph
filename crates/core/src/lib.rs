@@ -71,6 +71,17 @@
 //! build by accident.
 //! <!-- gen-features:end -->
 //!
+//! # Stability
+//!
+//! [`Pos`](crate::grid::Pos), [`Size`](crate::grid::Size), and [`Rect`](crate::grid::Rect) are bare
+//! aliases onto `ixy`'s own types, and [`Tint::apply_rgb888`](crate::color::Tint::apply_rgb888) takes
+//! and returns `gem`'s `Rgb888` directly (see `crates/core/Cargo.toml`'s `ixy`/`gem` entries for the
+//! pinned versions). Rather than newtype-wrap those crates, retroglyph's stability guarantee
+//! covers the pinned major version of `ixy` and `gem` along with retroglyph's own API: a
+//! `retroglyph 1.x` release promises the `ixy` and `gem` major versions it was built against will
+//! not change underneath a `1.x` consumer either, not just retroglyph's own surface. See
+//! `RELEASING.md` in the workspace root for the release-process side of that commitment.
+//!
 //! # Architecture
 //!
 //! [`Terminal<B>`](crate::terminal::Terminal) owns a double-buffered [`Grid`](crate::grid::Grid) and the
