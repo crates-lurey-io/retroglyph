@@ -42,6 +42,8 @@ vt100 = { version = "0.16", optional = true }
 insta = "1.34"
 
 [features]
+# A real-pseudo-terminal capture source (`pty::capture_pty`) feeding the same `write_cast` path
+# `FrameRecorder` does, for `vhs`-like real-terminal fidelity. Adds `portable-pty`/`vt100`.
 pty = ["dep:portable-pty", "dep:vt100"]
 
 [[test]]

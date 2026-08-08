@@ -33,6 +33,19 @@
 //! output already covers the common case), or embedding `asciinema-player` in the docs site
 //! (straightforward once there's a concrete need) -- both deliberately deferred, see
 //! retroglyph#1268.
+//!
+//! # Features
+//!
+//! <!-- gen-features:start -->
+//! This crate has no default features; every feature below is optional and off unless enabled.
+//!
+//! ### `pty`
+//!
+//! ⚪ Optional.
+//!
+//! A real-pseudo-terminal capture source (`pty::capture_pty`) feeding the same `write_cast` path
+//! `FrameRecorder` does, for `vhs`-like real-terminal fidelity. Adds `portable-pty`/`vt100`.
+//! <!-- gen-features:end -->
 
 // Compile the code blocks in this crate's own README as doctests so its quick start is
 // type-checked on every test run and cannot silently rot. The `cfg(doctest)` gate keeps this out

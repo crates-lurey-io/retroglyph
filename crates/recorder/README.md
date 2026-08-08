@@ -60,4 +60,23 @@ let mut app = MyApp;
 replay_live(term, &mut app, &recording).expect("replay");
 ```
 
+## Features
+
+<!-- gen-features:start -->
+<details>
+
+<summary>Features: all optional, none enabled by default.</summary>
+
+This crate has no default features; every feature below is optional and off unless enabled.
+
+### `pty`
+
+⚪ Optional.
+
+A real-pseudo-terminal capture source (`pty::capture_pty`) feeding the same `write_cast` path
+`FrameRecorder` does, for `vhs`-like real-terminal fidelity. Adds `portable-pty`/`vt100`.
+
+</details>
+<!-- gen-features:end -->
+
 See [docs.rs](https://docs.rs/retroglyph-recorder) for the full API.
