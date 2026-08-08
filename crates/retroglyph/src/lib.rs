@@ -190,3 +190,121 @@ pub use retroglyph_window::presenter_builder::PresenterBuilder;
 pub use retroglyph_window::winit::{
     WindowConfig, Windowed, WindowedLaunchError, run_app, run_app_on,
 };
+
+// ── `run_default`: one call, no per-app `#[cfg]` table ──────────────────────────────
+//
+// Four near-identical items below, one per backend, `#[cfg]`-gated so exactly one is compiled
+// for any given feature set (never zero, never more than one: each arm excludes every
+// higher-priority feature via `not(any(...))`, the same shape `retroglyph-examples`' own
+// `launch::<E>()` dispatch table already uses). A single generic function spanning every
+// backend isn't expressible instead: `Launch::Backend` differs per implementor, and stable Rust
+// has no way to write "`A` implements `App<B>` for whichever `B` this arm turns out to be" as
+// one bound (no non-lifetime higher-ranked trait bounds; see rust#108185, and `Launch`'s own
+// doc comment above for the same limitation). Priority: `software` > `gl` > `wgpu` >
+// `crossterm`, matching the tile-demo gallery's dispatch table this replaces (retroglyph#1295),
+// with `wgpu` slotted between the other two windowed backends and the real-terminal one.
+
+/// Picks a backend from this crate's enabled Cargo features and drives `app` on it, using that
+/// backend's own default configuration.
+///
+/// See the priority order above. Each backend is built with [`PresenterBuilder::new()`] for a
+/// windowed backend, paced by [`RunOptions::default()`](app::RunOptions), or
+/// [`Crossterm::builder()`](crossterm::Crossterm::builder) for the terminal one.
+///
+/// This is the zero-config fast path, not a general-purpose driver: an app that needs a specific
+/// grid size, window title, tileset, or pacing has outgrown "default" and should call that
+/// backend's own [`Launch::launch`] directly instead, e.g. `Windowed::new(builder, "My
+/// Game").launch(app, RunOptions::animated(60))` or `Crossterm::builder().launch(app, options)`.
+///
+/// Absent entirely (not a compile error) when none of `crossterm`, `software`, `gl`, or `wgpu`
+/// is enabled: there is no backend left to pick.
+///
+/// # Errors
+///
+/// Returns the picked backend's own [`Launch::Error`] if it fails to launch; see that backend's
+/// `Launch` impl for the exact conditions (a real terminal that can't enter raw mode, a
+/// presenter that fails to build, or a window/event loop that fails to start or run).
+#[cfg(feature = "software")]
+pub fn run_default<A>(
+    app: A,
+) -> Result<(), <Windowed<software::config::SoftwareBackendBuilder> as Launch>::Error>
+where
+    A: app::App<<Windowed<software::config::SoftwareBackendBuilder> as Launch>::Backend> + 'static,
+{
+    Windowed::new(
+        software::config::SoftwareBackendBuilder::new(),
+        "retroglyph",
+    )
+    .launch(app, app::RunOptions::default())
+}
+
+/// See [`run_default`]'s `software`-enabled overload. `gl` is the other GPU windowed backend;
+/// `software` wins if both happen to be enabled.
+///
+/// # Errors
+///
+/// See [`run_default`]'s `software`-enabled overload.
+#[cfg(all(feature = "gl", not(feature = "software")))]
+pub fn run_default<A>(
+    app: A,
+) -> Result<(), <Windowed<gl::config::GlBackendBuilder> as Launch>::Error>
+where
+    A: app::App<<Windowed<gl::config::GlBackendBuilder> as Launch>::Backend> + 'static,
+{
+    Windowed::new(gl::config::GlBackendBuilder::new(), "retroglyph")
+        .launch(app, app::RunOptions::default())
+}
+
+/// See [`run_default`]'s `software`-enabled overload. `wgpu` is the other GPU windowed backend;
+/// it loses to `software`/`gl` if either is also enabled.
+///
+/// # Errors
+///
+/// See [`run_default`]'s `software`-enabled overload.
+#[cfg(all(feature = "wgpu", not(any(feature = "software", feature = "gl"))))]
+pub fn run_default<A>(
+    app: A,
+) -> Result<(), <Windowed<wgpu::config::WgpuBackendBuilder> as Launch>::Error>
+where
+    A: app::App<<Windowed<wgpu::config::WgpuBackendBuilder> as Launch>::Backend> + 'static,
+{
+    Windowed::new(wgpu::config::WgpuBackendBuilder::new(), "retroglyph")
+        .launch(app, app::RunOptions::default())
+}
+
+/// See [`run_default`]'s `software`-enabled overload. `crossterm` is the real-terminal backend;
+/// it loses to any windowed backend that's also enabled.
+///
+/// # Errors
+///
+/// See [`run_default`]'s `software`-enabled overload.
+///
+/// # Examples
+///
+/// ```no_run
+/// use retroglyph::crossterm::Crossterm;
+/// use retroglyph::prelude::*;
+///
+/// struct Game;
+///
+/// impl App<Crossterm> for Game {
+///     fn update(&mut self, term: &mut Terminal<Crossterm>, _frame: &Frame) -> Flow {
+///         term.surface().put((5, 5), '@', Style::new().fg(Color::GREEN));
+///         Flow::Continue
+///     }
+/// }
+///
+/// fn main() -> Result<(), std::io::Error> {
+///     retroglyph::run_default(Game)
+/// }
+/// ```
+#[cfg(all(
+    feature = "crossterm",
+    not(any(feature = "software", feature = "gl", feature = "wgpu"))
+))]
+pub fn run_default<A>(app: A) -> Result<(), <crossterm::CrosstermOptions as Launch>::Error>
+where
+    A: app::App<<crossterm::CrosstermOptions as Launch>::Backend> + 'static,
+{
+    crossterm::Crossterm::builder().launch(app, app::RunOptions::default())
+}
