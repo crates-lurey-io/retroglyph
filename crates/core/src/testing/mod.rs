@@ -20,6 +20,9 @@
 //! future one) disagreeing on them (retroglyph#763).
 
 pub mod conformance;
+mod recording;
+
+pub use recording::InputRecording;
 
 use crate::app::{App, Flow, Frame};
 use crate::backend::Headless;
@@ -384,6 +387,47 @@ impl TestHarness {
         Ok(())
     }
 
+    /// Creates a harness sized to `recording`'s recorded backend dimensions, ready for
+    /// [`replay`](Self::replay).
+    #[must_use]
+    pub fn from_recording(recording: &InputRecording) -> Self {
+        Self::new(recording.width(), recording.height())
+    }
+
+    /// Drives every event in `recording` into `app`, reproducing each recorded gap as whole
+    /// [`STEP_DELTA`] steps rather than collapsing it to zero.
+    ///
+    /// Each recorded `(delay, event)` pair becomes `round(delay / STEP_DELTA)` event-free
+    /// [`run_steps`](Self::run_steps) calls, then `event` is queued and settled with
+    /// [`run`](Self::run). This is what lets a replay reproduce a bug that depends on elapsed
+    /// time between inputs (a [`FrameClock`](crate::frames::FrameClock)/tween-driven cooldown, a
+    /// hold-to-charge mechanic): a naive replay that ran one `run()` per event with no delay in
+    /// between would silently fail to reproduce any of those. Sub-`STEP_DELTA` jitter in the
+    /// original recording is rounded away, which is expected and harmless -- nothing in this
+    /// harness has finer time resolution than one step to begin with.
+    ///
+    /// # Panics
+    ///
+    /// Panics if [`run`](Self::run) does (an event fails to drain within
+    /// [`DEFAULT_MAX_STEPS`]); see that method.
+    pub fn replay<A: App<Headless>>(&mut self, recording: &InputRecording, app: &mut A) {
+        for (delay, event) in recording.events() {
+            self.run_steps(app, Self::steps_for_delay(*delay));
+            self.push_event(event.clone());
+            self.run(app);
+        }
+    }
+
+    /// Rounds `delay` to the nearest whole number of [`STEP_DELTA`] steps.
+    fn steps_for_delay(delay: Duration) -> u32 {
+        let step_nanos = STEP_DELTA.as_nanos();
+        if step_nanos == 0 {
+            return 0;
+        }
+        let steps = (delay.as_nanos() + step_nanos / 2) / step_nanos;
+        u32::try_from(steps).unwrap_or(u32::MAX)
+    }
+
     /// The underlying [`Terminal`](crate::terminal::Terminal), for anything not wrapped directly (cursor position,
     /// [`Terminal::grid`](crate::terminal::Terminal::grid), a manual [`Terminal::draw`](crate::terminal::Terminal::draw) outside the `App` loop).
     #[must_use]
@@ -704,5 +748,81 @@ mod tests {
 
         let err = harness.click_text("Cancel").unwrap_err();
         assert_eq!(err.to_string(), "\"Cancel\" not found in view");
+    }
+
+    /// Registers a key press only if a cooldown started by the previous accepted press has fully
+    /// elapsed (100ms), tracked via [`Frame::delta`] rather than a step count -- exactly the
+    /// class of timer-driven state [`TestHarness::replay`]'s faithful-timing design exists to
+    /// reproduce correctly.
+    struct CooldownGate {
+        cooldown_remaining: Duration,
+        hits: u32,
+    }
+
+    impl CooldownGate {
+        const COOLDOWN: Duration = Duration::from_millis(100);
+
+        const fn new() -> Self {
+            Self {
+                cooldown_remaining: Duration::ZERO,
+                hits: 0,
+            }
+        }
+    }
+
+    impl App<Headless> for CooldownGate {
+        fn update(&mut self, term: &mut Terminal<Headless>, frame: &Frame) -> Flow {
+            self.cooldown_remaining = self.cooldown_remaining.saturating_sub(frame.delta);
+            for event in term.drain_events() {
+                if matches!(event, Event::Key(_)) && self.cooldown_remaining.is_zero() {
+                    self.hits += 1;
+                    self.cooldown_remaining = Self::COOLDOWN;
+                }
+            }
+            Flow::Continue
+        }
+    }
+
+    fn key_press(c: char) -> Event {
+        Event::Key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE))
+    }
+
+    /// Proves `replay`'s timing is faithful, not coarse: the same two key presses, 200ms apart
+    /// in the recording, register as two hits when the recorded gap is honored (the cooldown
+    /// from the first has expired by the time the second arrives) but collapse to one hit when
+    /// replayed back-to-back with the delay discarded (a naive "one `run()` per event" replay
+    /// would get this wrong).
+    #[test]
+    fn replay_reproduces_recorded_timing_not_a_coarse_back_to_back_replay() {
+        let mut recording = InputRecording::new(4, 1);
+        recording.push(Duration::ZERO, key_press('a'));
+        recording.push(Duration::from_millis(200), key_press('b'));
+
+        let mut faithful = TestHarness::from_recording(&recording);
+        let mut faithful_app = CooldownGate::new();
+        faithful.replay(&recording, &mut faithful_app);
+        assert_eq!(
+            faithful_app.hits, 2,
+            "the recorded 200ms gap should let the cooldown expire before the second press"
+        );
+
+        let mut coarse = TestHarness::new(recording.width(), recording.height());
+        let mut coarse_app = CooldownGate::new();
+        for (_, event) in recording.events() {
+            coarse.push_event(event.clone());
+            coarse.run(&mut coarse_app);
+        }
+        assert_eq!(
+            coarse_app.hits, 1,
+            "discarding the recorded delay should leave the cooldown still active for the second press"
+        );
+    }
+
+    #[test]
+    fn from_recording_sizes_the_harness_to_the_recording() {
+        let recording = InputRecording::new(7, 3);
+        let harness = TestHarness::from_recording(&recording);
+        assert_eq!(harness.term().size().width(), 7);
+        assert_eq!(harness.term().size().height(), 3);
     }
 }
