@@ -61,10 +61,7 @@ fn headless_snapshot() {
     let mut views = Vec::new();
     for (i, event) in events.iter().enumerate() {
         term.backend_mut().push_event(event.clone());
-        let frame = Frame {
-            delta: HEADLESS_FRAME_DELTA,
-            frame: i as u64,
-        };
+        let frame = Frame::new(HEADLESS_FRAME_DELTA, i as u64);
         if !state.tick(&mut term, &frame) {
             break;
         }
@@ -112,17 +109,11 @@ fn after(events: &[Event]) -> Terminal<Headless> {
     let mut state = SpritesTileset::init(&mut term);
     for (i, event) in events.iter().enumerate() {
         term.backend_mut().push_event(event.clone());
-        let frame = Frame {
-            delta: HEADLESS_FRAME_DELTA,
-            frame: i as u64,
-        };
+        let frame = Frame::new(HEADLESS_FRAME_DELTA, i as u64);
         state.tick(&mut term, &frame);
     }
     // One more tick so the final frame reflects the post-movement state.
-    let frame = Frame {
-        delta: HEADLESS_FRAME_DELTA,
-        frame: events.len() as u64,
-    };
+    let frame = Frame::new(HEADLESS_FRAME_DELTA, events.len() as u64);
     state.tick(&mut term, &frame);
     term
 }

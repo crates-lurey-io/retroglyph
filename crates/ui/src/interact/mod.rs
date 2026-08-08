@@ -1673,7 +1673,7 @@ mod tests {
     }
 
     fn frame_with_delta(delta: Duration) -> Frame {
-        Frame { delta, frame: 0 }
+        Frame::new(delta, 0)
     }
 
     // Exact float equality is intentional in the `animate_*` tests below, mirroring

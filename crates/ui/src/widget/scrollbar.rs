@@ -331,10 +331,7 @@ mod tests {
     }
 
     fn frame(delta_ms: u64) -> Frame {
-        Frame {
-            delta: core::time::Duration::from_millis(delta_ms),
-            frame: 0,
-        }
+        Frame::new(core::time::Duration::from_millis(delta_ms), 0)
     }
 
     #[test]

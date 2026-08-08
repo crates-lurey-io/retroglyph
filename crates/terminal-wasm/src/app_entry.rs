@@ -206,10 +206,7 @@ macro_rules! app_entry {
                     let now = ::web_time::Instant::now();
                     let delta = ::std::cmp::min(now.duration_since(s.last_tick), MAX_TICK_DELTA);
                     s.last_tick = now;
-                    let frame = ::retroglyph_core::app::Frame {
-                        delta,
-                        frame: s.frame_count,
-                    };
+                    let frame = ::retroglyph_core::app::Frame::new(delta, s.frame_count);
                     s.frame_count = s.frame_count.wrapping_add(1);
                     let present_count_before = s.term.present_count();
                     let flow = ::retroglyph_core::app::App::update(&mut s.app, &mut s.term, &frame);

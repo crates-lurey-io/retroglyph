@@ -272,7 +272,7 @@ pub trait MinSize {
 /// let area = Rect::new(0, 0, 4, 1);
 /// let mut grid = Grid::new(4, 1);
 /// let mut state = Duration::ZERO;
-/// let frame = Frame { delta: Duration::from_millis(100), frame: 0 };
+/// let frame = Frame::new(Duration::from_millis(100), 0);
 /// Blinker.render(&mut Surface::new(&mut grid, area, 0), &mut state, &frame);
 /// assert_eq!(state, Duration::from_millis(100));
 /// ```

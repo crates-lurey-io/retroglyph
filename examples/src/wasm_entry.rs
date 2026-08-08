@@ -181,10 +181,7 @@ macro_rules! __wasm_headless_entry {
                         return ::std::string::String::new();
                     };
                     let now = ::web_time::Instant::now();
-                    let frame = ::retroglyph::app::Frame {
-                        delta: now.duration_since(s.last_tick),
-                        frame: s.frame_count,
-                    };
+                    let frame = ::retroglyph::app::Frame::new(now.duration_since(s.last_tick), s.frame_count);
                     s.last_tick = now;
                     s.frame_count = s.frame_count.wrapping_add(1);
                     $crate::Example::tick(&mut s.state, &mut s.term, &frame);
@@ -319,10 +316,7 @@ macro_rules! __wasm_terminal_entry {
                         return ::std::string::String::new();
                     };
                     let now = ::web_time::Instant::now();
-                    let frame = ::retroglyph::app::Frame {
-                        delta: now.duration_since(s.last_tick),
-                        frame: s.frame_count,
-                    };
+                    let frame = ::retroglyph::app::Frame::new(now.duration_since(s.last_tick), s.frame_count);
                     s.last_tick = now;
                     s.frame_count = s.frame_count.wrapping_add(1);
                     $crate::Example::tick(&mut s.state, &mut s.term, &frame);

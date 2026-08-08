@@ -35,10 +35,7 @@ fn drive(events: &[Event]) -> Vec<String> {
     let mut views = Vec::new();
     for (i, event) in events.iter().enumerate() {
         term.backend_mut().push_event(event.clone());
-        let frame = Frame {
-            delta: HEADLESS_FRAME_DELTA,
-            frame: i as u64,
-        };
+        let frame = Frame::new(HEADLESS_FRAME_DELTA, i as u64);
         if !state.tick(&mut term, &frame) {
             break;
         }

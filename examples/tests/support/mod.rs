@@ -105,10 +105,7 @@ pub fn png_snapshot<E: Example>(cols: u16, rows: u16, scale: u16) -> Vec<u8> {
 
     let mut term = Terminal::new(renderer);
     let mut state = E::init(&mut term);
-    let frame = Frame {
-        delta: retroglyph_examples::HEADLESS_FRAME_DELTA,
-        frame: 0,
-    };
+    let frame = Frame::new(retroglyph_examples::HEADLESS_FRAME_DELTA, 0);
     state.tick(&mut term, &frame);
     term.present().ok();
 
