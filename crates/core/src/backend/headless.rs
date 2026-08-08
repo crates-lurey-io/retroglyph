@@ -36,6 +36,16 @@ pub struct Headless {
 }
 
 impl Headless {
+    /// The glyph [`format_view`](Self::format_view)/[`format_styled`](Self::format_styled) render in place of a literal space, so
+    /// layout is visible in text diffs.
+    ///
+    /// Public so a caller converting a rendered view back to plain text (or a search needle's
+    /// spaces into the view's own convention, as [`TestHarness::find_text`](crate::testing::TestHarness::find_text) does) has
+    /// something to match against other than a hardcoded `'·'` that could silently drift out of
+    /// sync with this backend's actual choice. Prefer [`TestHarness::readable_view`](crate::testing::TestHarness::readable_view) for the
+    /// common case of getting a plain string back for `.contains`/`assert_eq!` checks.
+    pub const SPACE_GLYPH: char = '·';
+
     /// Creates a new headless backend of the given dimensions.
     #[must_use]
     pub fn new(width: u16, height: u16) -> Self {
@@ -195,7 +205,7 @@ impl Headless {
             .flags()
             .contains(crate::tile::TileFlags::WIDE_CHAR_SPACER);
         let glyph = if cell.glyph() == ' ' {
-            '·'
+            Self::SPACE_GLYPH
         } else {
             cell.glyph()
         };
