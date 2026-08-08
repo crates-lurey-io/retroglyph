@@ -320,6 +320,24 @@ mod tests {
     }
 
     #[test]
+    fn test_rgb_and_hex_agree() {
+        // The two constructors are for different inputs (tuned channels vs. a packed literal),
+        // but must always agree on the same color.
+        assert_eq!(Color::hex(0x00DC_5A5A), Color::rgb(220, 90, 90));
+        assert_eq!(Color::hex(0x0000_0000), Color::rgb(0, 0, 0));
+        assert_eq!(Color::hex(0x00FF_FFFF), Color::rgb(255, 255, 255));
+    }
+
+    #[test]
+    fn test_hex_ignores_the_high_byte_and_does_not_expand_short_form() {
+        // The high byte (bits 24..32) is ignored, not validated.
+        assert_eq!(Color::hex(0xFF00_0000), Color::rgb(0, 0, 0));
+        // Unlike `Color::from_hex("#f80")`, which expands `#f80` to `#ff8800`, `hex(0xF80)` is
+        // just the literal 24-bit value `0x000F80`: no CSS short-form expansion.
+        assert_eq!(Color::hex(0x0F80), Color::rgb(0x00, 0x0F, 0x80));
+    }
+
+    #[test]
     fn test_resolve_rgb() {
         // Rgb passes through; Default uses the supplied fallback (per channel).
         assert_eq!(Color::rgb(10, 20, 30).resolve_rgb((1, 2, 3)), (10, 20, 30));
