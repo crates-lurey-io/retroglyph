@@ -5,12 +5,6 @@
 //! API and its own `SurfaceError`, so the renderer drives either without
 //! `cfg` in its body.
 
-// `WindowSurface` is crate-internal, so `pub(crate)` is the correct visibility
-// (`unreachable_pub` agrees). The nursery `redundant_pub_crate` lint disagrees
-// only because this module is not itself `pub`; the two lints conflict for the
-// module-per-platform pattern, and `pub(crate)` is the honest choice.
-#![allow(clippy::redundant_pub_crate)]
-
 use retroglyph_window::presenter::WindowHandle;
 use std::num::NonZeroU32;
 use std::sync::Arc;

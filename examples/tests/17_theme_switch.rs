@@ -104,7 +104,7 @@ fn png_snapshot_light() {
     use retroglyph_core::app::Frame;
     use retroglyph_core::terminal::Terminal;
     use retroglyph_examples::HEADLESS_FRAME_DELTA;
-    use retroglyph_software::SoftwareBackendBuilder;
+    use retroglyph_software::config::SoftwareBackendBuilder;
     use retroglyph_window::presenter::Presenter;
 
     let (cols, rows, scale) = (50u16, 25u16, 2u16);

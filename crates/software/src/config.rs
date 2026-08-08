@@ -83,7 +83,7 @@ impl std::error::Error for SoftwareBackendError {
 /// from `retroglyph-window`):
 ///
 /// ```no_run
-/// use retroglyph_software::SoftwareBackendBuilder;
+/// use retroglyph_software::config::SoftwareBackendBuilder;
 /// use retroglyph_window::winit::{WindowConfig, run_windowed};
 /// use retroglyph_core::event::{Event, KeyCode};
 /// use retroglyph_core::color::Style;
@@ -114,7 +114,8 @@ impl std::error::Error for SoftwareBackendError {
 /// Headless mode (useful for testing):
 ///
 /// ```
-/// use retroglyph_software::{SoftwareBackendBuilder, SoftwareRenderer};
+/// use retroglyph_software::SoftwareRenderer;
+/// use retroglyph_software::config::SoftwareBackendBuilder;
 /// use retroglyph_core::color::Style;
 /// use retroglyph_core::grid::Pos;
 /// use retroglyph_core::backend::{DrawCell, Output};
@@ -204,7 +205,7 @@ impl SoftwareBackend {
 /// # Examples
 ///
 /// ```
-/// use retroglyph_software::SoftwareBackendBuilder;
+/// use retroglyph_software::config::SoftwareBackendBuilder;
 ///
 /// // With the `default-font` feature the embedded Unscii 16 font is
 /// // used automatically.  To supply your own 8×16 bitmap font:
@@ -271,7 +272,7 @@ impl SoftwareBackendBuilder {
     /// # Examples
     ///
     /// ```
-    /// use retroglyph_software::SoftwareBackendBuilder;
+    /// use retroglyph_software::config::SoftwareBackendBuilder;
     /// use retroglyph_window::font::{BitmapFont, FontChain, unscii16};
     ///
     /// // A fallback font declaring the quadrant glyphs CP437 has no mapping for.

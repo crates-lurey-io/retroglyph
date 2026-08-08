@@ -411,7 +411,7 @@ fn run_windowed<E: Example, B: retroglyph_window::presenter_builder::PresenterBu
 #[cfg(feature = "software")]
 pub fn run_software<E: Example>() {
     run_software_with::<E>(E::configure(
-        retroglyph_software::SoftwareBackendBuilder::new()
+        retroglyph_software::config::SoftwareBackendBuilder::new()
             .grid_size(50, 25)
             .scale(2),
     ));
@@ -434,7 +434,7 @@ pub fn run_software<E: Example>() {
 /// Panics if the software backend fails to initialize, or if the event loop
 /// fails to start.
 #[cfg(feature = "software")]
-pub fn run_software_with<E: Example>(builder: retroglyph_software::SoftwareBackendBuilder) {
+pub fn run_software_with<E: Example>(builder: retroglyph_software::config::SoftwareBackendBuilder) {
     run_windowed::<E, _>(builder, "software");
 }
 
@@ -602,7 +602,7 @@ pub fn render_perf_overlay_rgb<E: Example>(
     use retroglyph_window::presenter::Presenter;
 
     let renderer = E::configure(
-        retroglyph_software::SoftwareBackendBuilder::new()
+        retroglyph_software::config::SoftwareBackendBuilder::new()
             .grid_size(cols, rows)
             .scale(scale),
     )
