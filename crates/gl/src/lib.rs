@@ -1264,8 +1264,8 @@ mod dropped_tint_tests {
 /// applies here.
 #[cfg(all(test, feature = "default-font"))]
 mod output_conformance_tests {
-    use crate::config::GlBackendBuilder;
     use crate::GlRenderer;
+    use crate::config::GlBackendBuilder;
     use retroglyph_core::backend::Output;
     use retroglyph_core::grid::HasSize;
     use retroglyph_core::grid::Size;
