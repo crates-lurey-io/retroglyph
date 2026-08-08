@@ -381,7 +381,7 @@ impl Grid {
         };
         // Every call site bounds-checks `x`/`y` (and, where relevant, the whole `x..x+width`
         // range) against `self.width`/`self.height` before reaching here (`put_tile`,
-        // `write_grapheme`, `fill_region`'s already-clipped `rect`, `blit_with`'s per-cell `dx`
+        // `write_grapheme`, `fill_rect`'s already-clipped `rect`, `blit_with`'s per-cell `dx`
         // check, and `write_span_cells`'s own footprint check). A `cx` past the row's own width
         // would still compute an `idx` `< cap` below (just landing in the next row) and clear an
         // unrelated cell instead of being treated as out of bounds, so this is asserted rather
@@ -760,7 +760,7 @@ mod tests {
         const H: u16 = 4;
 
         /// Narrow and wide (CJK) single-char glyphs, for the ops that take a plain `char`
-        /// (`put_tile`, `fill_region`, and the small stamp grids `blit`/`blit_alpha` copy from).
+        /// (`put_tile`, `fill_rect`, and the small stamp grids `blit`/`blit_alpha` copy from).
         const CHARS: &[char] = &['a', '\u{4e2d}'];
 
         /// Narrow, wide (CJK), combining-mark, and wide-emoji graphemes, for `write_grapheme`
@@ -812,7 +812,7 @@ mod tests {
 
         /// One operation from `wide_char_bookkeeping_never_desyncs`'s op alphabet. Every variant
         /// but `WriteGrapheme` is available on every feature combination, since `put_tile` (and
-        /// everything built on it: `fill_region`, `blit`, `blit_alpha`, `write_span`) writes wide
+        /// everything built on it: `fill_rect`, `blit`, `blit_alpha`, `write_span`) writes wide
         /// pairs regardless of `egc` (retroglyph#869); only `write_grapheme` itself is `egc`-only.
         #[derive(Debug, Clone)]
         enum Op {
@@ -865,7 +865,7 @@ mod tests {
                     grid.put_tile(0, (x, y), Tile::new(CHARS[gi], Style::default()));
                 }
                 Op::FillRegion(x, y, w, h, gi) => {
-                    grid.fill_region(
+                    grid.fill_rect(
                         0,
                         Rect::new(x, y, w, h),
                         Tile::new(CHARS[gi], Style::default()),
