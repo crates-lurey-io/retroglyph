@@ -41,9 +41,17 @@ impl<B: Backend> Terminal<B> {
     /// event already taken from `queued_events` (via [`poll`](Self::poll)'s queue-pop branch, or
     /// via [`requeue_events`](Self::requeue_events)) must not call `resize` again for it, or a
     /// single resize gets applied twice.
+    ///
+    /// Skips the resize when `w, h` already matches [`size`](Self::size): a windowed driver
+    /// (`retroglyph-window`'s winit driver) now resizes the terminal itself before this event is
+    /// ever polled, purely so the app doesn't have to react to it for correctness. Without this
+    /// guard, an app that *does* poll and see that same `Event::Resize` would pay for a second,
+    /// redundant grid resize/clear of a size that was already applied.
     fn poll_backend(&mut self, timeout: Duration) -> Option<Event> {
         let event = self.backend.poll_event(timeout)?;
-        if let Event::Resize(w, h) = event {
+        if let Event::Resize(w, h) = event
+            && self.size() != crate::grid::Size::new(w, h)
+        {
             self.resize(w, h);
         }
         Some(event)
@@ -405,6 +413,31 @@ mod tests {
         // plumbing (not just `resize_calls`) is covered rather than asserted by inspection.
         terminal.present().unwrap();
         terminal.backend_mut().clear().unwrap();
+    }
+
+    #[test]
+    fn test_terminal_poll_does_not_reapply_resize_already_matching_current_size() {
+        // Regression test for retroglyph#1291: a driver (`retroglyph-window`'s winit driver) can
+        // now call `Terminal::resize` itself before the matching `Event::Resize` is ever polled,
+        // purely so `Terminal::size` is never stale from the app's point of view. `poll_backend`
+        // must not pay for a second resize of a size that was already applied when the app later
+        // polls that same event.
+        let backend = ResizeCounting::new(10, 10);
+        let mut terminal = Terminal::new(backend);
+
+        // Simulate the driver: resize the terminal directly, then push the event a real driver
+        // would still deliver for an app that wants to react to it.
+        terminal.resize(8, 2);
+        assert_eq!(terminal.backend().resize_calls, 1);
+        terminal.backend_mut().push_event(Event::Resize(8, 2));
+
+        assert_eq!(terminal.poll(Duration::ZERO), Some(Event::Resize(8, 2)));
+        assert_eq!(
+            terminal.backend().resize_calls,
+            1,
+            "poll must not resize again for an event whose size already matches"
+        );
+        assert_eq!(terminal.size(), Size::new(8, 2));
     }
 
     #[test]
