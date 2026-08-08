@@ -314,6 +314,18 @@ impl TestHarness {
         self.term.backend().format_view()
     }
 
+    /// [`view`](Self::view), with [`Headless::SPACE_GLYPH`] converted back to a literal space.
+    ///
+    /// `view` renders a blank cell as `·` rather than a space so layout is visible in text
+    /// diffs (see [`Headless::format_view`](crate::backend::Headless::format_view)); that's the
+    /// right default for snapshot tests, but it defeats an ordinary plain-text assertion like
+    /// `view.contains("New Game")`, since the label's actual space never appears literally. Use
+    /// this instead of `view` for that case.
+    #[must_use]
+    pub fn readable_view(&self) -> String {
+        self.view().replace(Headless::SPACE_GLYPH, " ")
+    }
+
     /// The [`Pos`] of `needle`'s first occurrence in the current [`view`](Self::view), or
     /// `None` if it doesn't appear.
     ///
@@ -336,7 +348,7 @@ impl TestHarness {
         // caller pass a natural, space-separated label instead of pre-encoding it themselves.
         let needle: String = needle
             .chars()
-            .map(|c| if c == ' ' { '·' } else { c })
+            .map(|c| if c == ' ' { Headless::SPACE_GLYPH } else { c })
             .collect();
         for (y, row) in self.view().lines().enumerate() {
             if let Some(byte_index) = row.find(needle.as_str()) {
@@ -636,6 +648,19 @@ mod tests {
         // `"Save Game"` never appears literally: `format_view` renders the space between the
         // words as `·`. This only passes if `find_text` accounts for that substitution itself.
         assert_eq!(harness.find_text("Save Game"), Some(Pos::new(2, 2)));
+    }
+
+    #[test]
+    fn readable_view_converts_the_middle_dot_back_to_a_literal_space() {
+        let mut harness = TestHarness::new(12, 4);
+        let mut app = Labels { clicks: 0 };
+        harness.step(&mut app);
+
+        // `view()` renders the space in "Save Game" as `·`, so a naive `.contains("Save Game")`
+        // against it would fail even though the label is on screen; `readable_view` is what lets
+        // that assertion pass without the caller hand-rolling the substitution themselves.
+        assert!(!harness.view().contains("Save Game"));
+        assert!(harness.readable_view().contains("Save Game"));
     }
 
     #[test]
