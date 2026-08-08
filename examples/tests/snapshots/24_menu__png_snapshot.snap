@@ -1,0 +1,6 @@
+---
+source: examples/tests/24_menu.rs
+expression: png
+extension: png
+snapshot_kind: binary
+---
