@@ -2,13 +2,14 @@
 use alloc::vec::Vec;
 
 use retroglyph_core::color::{Color, Style};
-use retroglyph_core::grid::Rect;
-use retroglyph_core::text::truncate_measured;
+use retroglyph_core::grid::{Rect, Size};
+use retroglyph_core::text::{truncate_measured, width};
 
-use super::{InteractiveWidget, Widget};
+use super::{InteractiveWidget, MinSize, Widget};
 use crate::Surface;
 use crate::align::Align;
 use crate::draw::fill_rect;
+use crate::interact::Density;
 use crate::interact::Response;
 use crate::interact::Sense;
 use crate::text::draw_clipped;
@@ -230,6 +231,24 @@ impl Tabs<'_> {
     }
 }
 
+impl MinSize for Tabs<'_> {
+    /// Every title's display width, `column_spacing` columns apart, one row tall, floored at
+    /// `density`'s [`min_target_size`](Density::min_target_size) the same way [`Button`](super::Button)
+    /// floors its own label: unlike the drawing routine, this ignores any drawing-time
+    /// truncation, since `min_size` answers how much room the strip needs, not how it degrades
+    /// when denied that room.
+    fn min_size(&self, density: Density) -> Size {
+        let mut content_width = 0u16;
+        for (index, &title) in self.titles.iter().enumerate() {
+            content_width = content_width.saturating_add(width(title));
+            if index + 1 < self.titles.len() {
+                content_width = content_width.saturating_add(self.column_spacing);
+            }
+        }
+        Size::new(content_width, 1).max(density.min_target_size())
+    }
+}
+
 impl Widget for Tabs<'_> {
     fn render(&self, surface: &mut Surface<'_>) {
         self.draw(surface, self.selected);
@@ -262,7 +281,7 @@ impl<Id> InteractiveWidget<Id> for Tabs<'_> {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::grid::{Grid, Pos};
+    use retroglyph_core::grid::{Grid, HasSize as _, Pos};
 
     use super::*;
 
@@ -509,5 +528,32 @@ mod tests {
         // (4 + column_spacing 1), never inside "設定"'s own span.
         assert_eq!(columns[0], (0, 0, 4));
         assert_eq!(columns[1].1, 5);
+    }
+
+    #[test]
+    fn min_size_sums_title_widths_and_spacing() {
+        // "One" (3) + spacing (1) + "Two" (3) = 7 cols, past either density's 6-cell floor, and
+        // a mouse density's 1-row floor doesn't grow the height, so the natural width wins.
+        let titles = ["One", "Two"];
+        let size = Tabs::new(&titles).min_size(Density::Mouse);
+        assert_eq!(size.width(), 7);
+        assert_eq!(size.height(), 1);
+    }
+
+    #[test]
+    fn min_size_floors_a_narrow_strip_at_the_density_minimum() {
+        // A single 1-col title is nowhere near either density's 6-cell width floor.
+        let titles = ["A"];
+        let size = Tabs::new(&titles).min_size(Density::Touch);
+        assert_eq!(size, Density::Touch.min_target_size());
+    }
+
+    #[test]
+    fn min_size_respects_custom_column_spacing() {
+        // "A" (1) + spacing (3) + "B" (1) = 5 cols, still under the 6-cell floor, so the floor
+        // wins; this only proves the spacing was actually added into the sum before flooring.
+        let titles = ["A", "B"];
+        let size = Tabs::new(&titles).column_spacing(3).min_size(Density::Mouse);
+        assert_eq!(size.width(), 6);
     }
 }
