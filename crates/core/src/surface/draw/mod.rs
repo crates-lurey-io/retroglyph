@@ -110,7 +110,7 @@ impl Surface<'_> {
         if !self.wide_spacer_fits(x, y, grapheme.width()) {
             return false;
         }
-        let wrote = self.grid.write_grapheme(self.layer, x, y, grapheme, style);
+        let wrote = self.grid.write_grapheme(self.layer, x, y, grapheme, style).is_some();
         if wrote {
             self.apply_tint(x, y);
         }
