@@ -7,17 +7,13 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
-
 ## [0.5.3+retroglyph-window](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-window-v0.5.2...retroglyph-window-v0.5.3) - 2026-08-08
 
 ### Bug Fixes
 
-- [215e53f](
-https://github.com/crates-lurey-io/retroglyph/commit/215e53f90f3b72003a2fe8038f1dddabeef38a3c) *(window)* Disable arboard's image-data feature to drop zune-jpeg from the build by `@crates-lurey-io-agent[bot]` in [#1255](
-https://github.com/crates-lurey-io/retroglyph/pull/1255)
+- [215e53f](https://github.com/crates-lurey-io/retroglyph/commit/215e53f90f3b72003a2fe8038f1dddabeef38a3c) _(window)_ Disable arboard's image-data feature to drop zune-jpeg from the build by `@crates-lurey-io-agent[bot]` in [#1255](https://github.com/crates-lurey-io/retroglyph/pull/1255)
 
 **Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-window-v0.5.2...retroglyph-window-v0.5.3
-
 
 ## [0.5.2+retroglyph-window](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-window-v0.5.1...retroglyph-window-v0.5.2) - 2026-08-07
 

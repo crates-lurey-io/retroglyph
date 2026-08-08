@@ -7,7 +7,6 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
-
 ## [0.6.2+retroglyph-software](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-software-v0.6.1...retroglyph-software-v0.6.2) - 2026-08-07
 
 ### Documentation

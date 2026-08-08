@@ -7,7 +7,6 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
-
 ## [0.3.2+retroglyph-terminal-wasm](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v0.3.1...retroglyph-terminal-wasm-v0.3.2) - 2026-08-07
 
 ### Documentation

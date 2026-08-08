@@ -7,27 +7,19 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
-
 ## [0.7.2+retroglyph-core](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.7.1...retroglyph-core-v0.7.2) - 2026-08-08
 
 ### Features
 
-- [8a890b3](
-https://github.com/crates-lurey-io/retroglyph/commit/8a890b38da0da0b885a005c678b1ddcc9cd20113) *(core)* Add Headless::SPACE_GLYPH and TestHarness::readable_view by `@crates-lurey-io-agent[bot]` in [#1266](
-https://github.com/crates-lurey-io/retroglyph/pull/1266)
+- [8a890b3](https://github.com/crates-lurey-io/retroglyph/commit/8a890b38da0da0b885a005c678b1ddcc9cd20113) _(core)_ Add Headless::SPACE_GLYPH and TestHarness::readable_view by `@crates-lurey-io-agent[bot]` in [#1266](https://github.com/crates-lurey-io/retroglyph/pull/1266)
 
-- [6611dd9](
-https://github.com/crates-lurey-io/retroglyph/commit/6611dd9e641a3db769ecd7ad4d665beccf5a1882) *(core)* TestHarness::find_text and click_text by `@crates-lurey-io-agent[bot]` in [#1263](
-https://github.com/crates-lurey-io/retroglyph/pull/1263)
+- [6611dd9](https://github.com/crates-lurey-io/retroglyph/commit/6611dd9e641a3db769ecd7ad4d665beccf5a1882) _(core)_ TestHarness::find_text and click_text by `@crates-lurey-io-agent[bot]` in [#1263](https://github.com/crates-lurey-io/retroglyph/pull/1263)
 
 ### Bug Fixes
 
-- [909860e](
-https://github.com/crates-lurey-io/retroglyph/commit/909860e52bf16369e731884996ea18723578bff6) *(core)* TestHarness::settle/run resolve the trailing frame a batched click needs by `@crates-lurey-io-agent[bot]` in [#1264](
-https://github.com/crates-lurey-io/retroglyph/pull/1264)
+- [909860e](https://github.com/crates-lurey-io/retroglyph/commit/909860e52bf16369e731884996ea18723578bff6) _(core)_ TestHarness::settle/run resolve the trailing frame a batched click needs by `@crates-lurey-io-agent[bot]` in [#1264](https://github.com/crates-lurey-io/retroglyph/pull/1264)
 
 **Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.7.1...retroglyph-core-v0.7.2
-
 
 ## [0.7.1+retroglyph-core](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.7.0...retroglyph-core-v0.7.1) - 2026-08-07
 
