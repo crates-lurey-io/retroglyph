@@ -119,13 +119,7 @@ impl Surface<'_> {
     /// distinct from the clip check above, so `apply_tint` is gated on its own `bool` too rather
     /// than assumed to always land once `wide_spacer_fits` passes.
     #[cfg(feature = "egc")]
-    pub(super) fn put_grapheme_at(
-        &mut self,
-        x: u16,
-        y: u16,
-        grapheme: &str,
-        style: Style,
-    ) -> bool {
+    pub(super) fn put_grapheme_at(&mut self, x: u16, y: u16, grapheme: &str, style: Style) -> bool {
         use unicode_width::UnicodeWidthStr;
 
         if !self.wide_spacer_fits(x, y, grapheme.width()) {
