@@ -143,8 +143,13 @@ retroglyph = { path = "../crates/retroglyph", default-features = false, features
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 # PNG snapshots of the software (headless) renderer's pixel buffer.
 image = { version = "0.25", default-features = false, features = ["png"] }
-# PTY + vt100 SVG snapshots of the crossterm backend's ANSI output.
-portable-pty = "0.9"
+# `examples/tests/support`'s PTY capture (`capture_pty_until`) drives the crossterm binary
+# through `retroglyph-recorder`'s `pty::PtySession` (retroglyph#1320) rather than opening a PTY
+# and spawning a reader thread itself; `pty` is otherwise unused off the test target, so this is
+# a dev-dependency even though the crate is already a normal one above.
+retroglyph-recorder = { path = "../crates/recorder", version = "0.1.0", features = ["pty"] }
+# `vt100` SVG rendering of the crossterm backend's ANSI output (`svg_snapshot`) -- the PTY capture
+# itself goes through `retroglyph-recorder`'s `pty` feature above, which brings in its own copy.
 vt100 = "0.16"
 
 [[example]]

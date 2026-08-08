@@ -6,9 +6,11 @@ use retroglyph_core::color::{Color, Style};
 use retroglyph_core::grid::Size;
 use retroglyph_core::text::{split_at_width, width, width_usize};
 
-use super::{MinSize, StatefulWidget};
+use super::{InteractiveWidget, MinSize, StatefulWidget};
 use crate::Surface;
 use crate::interact::Density;
+use crate::interact::Response;
+use crate::interact::Sense;
 use crate::state::TextInputState;
 use crate::text::truncate as truncate_to_cols;
 use crate::theme::Theme;
@@ -35,9 +37,14 @@ use crate::theme::Theme;
 /// on every backend. An app that wants a blinking, backend-native caret instead can position
 /// one itself from `state.cursor()`/`state.scroll()` alongside this widget.
 ///
-/// This widget draws one field, nothing more: which field is focused (and therefore routed
-/// input), what Enter does, validation, and layout are all the app's job. IME/text composition
-/// and multi-line editing are out of scope for this crate entirely.
+/// As an [`InteractiveWidget`], [`sense`](InteractiveWidget::sense) is [`Sense::click`]: a click
+/// (or Tab) focuses the field the same way it would a [`Button`](super::Button), via the shared
+/// [`Interaction`](crate::interact::Interaction)'s [`FocusRing`](crate::interact::FocusRing).
+/// Routing keystrokes to whichever field currently holds focus is still the app's job, via
+/// [`TextInputState::handle_event`]: [`InteractiveWidget::render`] never sees raw input events,
+/// only the already-resolved [`Response`], so it can't do that itself. What Enter does,
+/// validation, and layout are the app's job too. IME/text composition and multi-line editing are
+/// out of scope for this crate entirely.
 ///
 /// # Examples
 ///
@@ -144,21 +151,12 @@ impl Default for TextInput<'_> {
     }
 }
 
-impl MinSize for TextInput<'_> {
-    /// [`placeholder`](TextInput::placeholder)'s display width (`0` with no placeholder set)
-    /// plus 2 columns of padding on each side, matching [`Button`](super::Button)'s own padding,
-    /// one row tall, floored at `density`'s [`min_target_size`](Density::min_target_size) so an
-    /// empty field still claims a usable click/tap target.
-    fn min_size(&self, density: Density) -> Size {
-        let content_width = self.placeholder.map_or(0, width).saturating_add(4);
-        Size::new(content_width, 1).max(density.min_target_size())
-    }
-}
-
-impl StatefulWidget for TextInput<'_> {
-    type State = TextInputState;
-
-    fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State) {
+impl TextInput<'_> {
+    /// The shared drawing routine both [`StatefulWidget::render`] and
+    /// [`InteractiveWidget::render`] use: this widget's appearance never depends on a
+    /// [`Response`] (unlike [`Button`](super::Button)'s hovered/pressed/focused styling), so both
+    /// impls delegate here unchanged.
+    fn draw(&self, surface: &mut Surface<'_>, state: &TextInputState) {
         let width = surface.width();
         if width == 0 {
             return;
@@ -198,6 +196,43 @@ impl StatefulWidget for TextInput<'_> {
     }
 }
 
+impl MinSize for TextInput<'_> {
+    /// [`placeholder`](TextInput::placeholder)'s display width (`0` with no placeholder set)
+    /// plus 2 columns of padding on each side, matching [`Button`](super::Button)'s own padding,
+    /// one row tall, floored at `density`'s [`min_target_size`](Density::min_target_size) so an
+    /// empty field still claims a usable click/tap target.
+    fn min_size(&self, density: Density) -> Size {
+        let content_width = self.placeholder.map_or(0, width).saturating_add(4);
+        Size::new(content_width, 1).max(density.min_target_size())
+    }
+}
+
+impl StatefulWidget for TextInput<'_> {
+    type State = TextInputState;
+
+    fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State) {
+        self.draw(surface, state);
+    }
+}
+
+impl<Id> InteractiveWidget<Id> for TextInput<'_> {
+    type State = TextInputState;
+
+    /// [`Sense::click`], the same as [`Button`](super::Button)/[`List`](super::List): a click
+    /// focuses the field (and joins the shared [`Interaction`](crate::interact::Interaction)'s
+    /// Tab order) via [`Sense::FOCUSABLE`], which [`Sense::click`] already includes. This impl's
+    /// `render` still never reads `response`: routing keystrokes to whichever field holds focus,
+    /// and calling [`TextInputState::handle_event`] on it, is the caller's job, the same as
+    /// [`List`](super::List) leaves arrow-key row navigation to the caller.
+    fn sense(&self) -> Sense {
+        Sense::click()
+    }
+
+    fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State, _response: Response<Id>) {
+        self.draw(surface, state);
+    }
+}
+
 /// Replace every character in `s` with `mask`, preserving its display width for scroll/caret
 /// math: single-column masks (the common case, `'*'`) keep the same byte-for-column
 /// correspondence as the real value.
@@ -226,7 +261,11 @@ mod tests {
         let mut state = TextInputState::new();
         state.set_value("hi");
 
-        TextInput::new().render(&mut Surface::new(&mut grid, area, 0), &mut state);
+        StatefulWidget::render(
+            &TextInput::new(),
+            &mut Surface::new(&mut grid, area, 0),
+            &mut state,
+        );
 
         assert_eq!(grid[Pos::new(0, 0)].glyph(), 'h');
         assert_eq!(grid[Pos::new(1, 0)].glyph(), 'i');
@@ -244,16 +283,20 @@ mod tests {
         let mut grid = Grid::new(10, 1);
         let mut state = TextInputState::new();
 
-        TextInput::new()
-            .placeholder("name")
-            .render(&mut Surface::new(&mut grid, area, 0), &mut state);
+        StatefulWidget::render(
+            &TextInput::new().placeholder("name"),
+            &mut Surface::new(&mut grid, area, 0),
+            &mut state,
+        );
         assert_eq!(grid[Pos::new(0, 0)].glyph(), 'n');
 
         let mut grid = Grid::new(10, 1);
         state.insert('x');
-        TextInput::new()
-            .placeholder("name")
-            .render(&mut Surface::new(&mut grid, area, 0), &mut state);
+        StatefulWidget::render(
+            &TextInput::new().placeholder("name"),
+            &mut Surface::new(&mut grid, area, 0),
+            &mut state,
+        );
         assert_eq!(grid[Pos::new(0, 0)].glyph(), 'x');
     }
 
@@ -264,9 +307,11 @@ mod tests {
         let mut state = TextInputState::new();
         state.set_value("secret");
 
-        TextInput::new()
-            .mask('*')
-            .render(&mut Surface::new(&mut grid, area, 0), &mut state);
+        StatefulWidget::render(
+            &TextInput::new().mask('*'),
+            &mut Surface::new(&mut grid, area, 0),
+            &mut state,
+        );
 
         assert_eq!(grid[Pos::new(0, 0)].glyph(), '*');
         assert_eq!(grid[Pos::new(5, 0)].glyph(), '*');
@@ -280,7 +325,11 @@ mod tests {
         state.set_value("hello world");
         state.ensure_visible(5);
 
-        TextInput::new().render(&mut Surface::new(&mut grid, area, 0), &mut state);
+        StatefulWidget::render(
+            &TextInput::new(),
+            &mut Surface::new(&mut grid, area, 0),
+            &mut state,
+        );
 
         // Scrolled to keep the end-of-value cursor in view: last 5 columns of "hello world".
         assert_eq!(grid[Pos::new(0, 0)].glyph(), 'o');
@@ -296,7 +345,11 @@ mod tests {
         state.move_home();
         state.move_right(); // cursor after 'a', before the 2-wide 'あ'
 
-        TextInput::new().render(&mut Surface::new(&mut grid, area, 0), &mut state);
+        StatefulWidget::render(
+            &TextInput::new(),
+            &mut Surface::new(&mut grid, area, 0),
+            &mut state,
+        );
 
         // Caret is at column 1 (display width of "a"), not column 1 by char count coincidentally
         // matching: column 2 would be wrong if this used byte/char counting for a value with a
@@ -322,12 +375,110 @@ mod tests {
         // A neighbor widget occupies columns 4..6, to the right of the 4-wide text field.
         Surface::new(&mut grid, Rect::new(0, 0, 6, 1), 0).print((4, 0), "Z", Style::default());
 
-        TextInput::new().render(
+        StatefulWidget::render(
+            &TextInput::new(),
             &mut Surface::new(&mut grid, Rect::new(0, 0, 4, 1), 0),
             &mut state,
         );
 
         assert_eq!(grid[Pos::new(4, 0)].glyph(), 'Z');
+    }
+
+    #[test]
+    fn interactive_render_draws_the_same_as_stateful_render() {
+        // `InteractiveWidget::render` never reads `response` (see its own doc comment), so it
+        // must draw identically to `StatefulWidget::render` regardless of what's in it.
+        let area = Rect::new(0, 0, 10, 1);
+        let mut state = TextInputState::new();
+        state.set_value("hi");
+
+        let mut stateful_grid = Grid::new(10, 1);
+        StatefulWidget::render(
+            &TextInput::new(),
+            &mut Surface::new(&mut stateful_grid, area, 0),
+            &mut state,
+        );
+
+        let response: Response<()> = Response {
+            hovered: true,
+            focused: true,
+            ..Response::default()
+        };
+        let mut interactive_grid = Grid::new(10, 1);
+        InteractiveWidget::render(
+            &TextInput::new(),
+            &mut Surface::new(&mut interactive_grid, area, 0),
+            &mut state,
+            response,
+        );
+
+        for x in 0..10 {
+            let pos = Pos::new(x, 0);
+            assert_eq!(stateful_grid[pos].glyph(), interactive_grid[pos].glyph());
+            assert_eq!(stateful_grid[pos].style(), interactive_grid[pos].style());
+        }
+    }
+
+    #[test]
+    fn sense_is_click_so_a_click_focuses_the_field_through_a_shared_interaction() {
+        // End-to-end proof that `TextInput` now participates in the same click-to-focus/Tab-ring
+        // routing `24_settings_form` already demonstrates by hand: `Sense::click()` includes
+        // `Sense::FOCUSABLE`, so registering it via `Interaction::interact` is enough.
+        use retroglyph_core::event::{
+            Event, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+        };
+
+        use crate::interact::Interaction;
+
+        #[derive(Clone, Copy, PartialEq, Eq)]
+        enum Id {
+            Name,
+        }
+
+        let area = Rect::new(0, 0, 10, 1);
+        let mut grid = Grid::new(10, 1);
+        let mut state = TextInputState::new();
+        let mut interaction = Interaction::<Id>::new();
+        let text_input = TextInput::new();
+
+        let sense = <TextInput as InteractiveWidget<Id>>::sense(&text_input);
+        assert_eq!(sense, Sense::click());
+
+        // Frame 1: registers the field as focusable for the frame that follows.
+        interaction.begin_frame();
+        let response = interaction.interact(area, Id::Name, sense);
+        InteractiveWidget::render(
+            &text_input,
+            &mut Surface::new(&mut grid, area, 0),
+            &mut state,
+            response,
+        );
+        interaction.end_frame();
+
+        // Click lands on the field between frames, same as `interact/mod.rs`'s own click tests.
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Down(MouseButton::Left),
+            Pos::new(2, 0),
+            KeyModifiers::NONE,
+        )));
+        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
+            MouseEventKind::Up(MouseButton::Left),
+            Pos::new(2, 0),
+            KeyModifiers::NONE,
+        )));
+
+        // Frame 2: resolves the click and requests focus, but (like `Response::hovered`) a
+        // `request`ed-this-call focus isn't visible on `Response` until the frame after: see
+        // `interact`'s own `is_focused`-before-`request` ordering.
+        interaction.begin_frame();
+        let _ = interaction.interact(area, Id::Name, sense);
+        interaction.end_frame();
+
+        // Frame 3: now reports focused.
+        interaction.begin_frame();
+        let response = interaction.interact(area, Id::Name, sense);
+        assert!(response.focused());
+        interaction.end_frame();
     }
 
     #[test]

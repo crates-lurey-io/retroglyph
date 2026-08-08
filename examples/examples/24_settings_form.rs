@@ -8,10 +8,14 @@
 //! Tab/Shift+Tab cycles all five in draw order, clicking any of them focuses it, and Enter saves
 //! regardless of which one is focused.
 //!
-//! `TextInput` has no [`InteractiveWidget`](retroglyph::ui::widget::InteractiveWidget) impl (unlike
-//! `List`, `Scrollbar`, and `Button`; see `retroglyph#1284`), so each field is wired by hand via
-//! [`Ui::region`]: `Sense::click()` still registers it in the focus ring and still turns a click
-//! (or Enter/Space while focused) into a focus request, `Ui` just isn't drawing it for us.
+//! `TextInput` does implement [`InteractiveWidget`](retroglyph::ui::widget::InteractiveWidget)
+//! (see `retroglyph#1331`), the same as `List`, `Scrollbar`, and `Button`, but each field here is
+//! still wired by hand via [`Ui::region`] rather than `Ui::show_stateful`: this form draws a
+//! focus-highlighted [`Panel`] border around each field, and `TextInput`'s own impl only owns the
+//! field's own area, not a wrapping border. `Sense::click()` still registers it in the focus ring
+//! and still turns a click (or Enter/Space while focused) into a focus request, exactly as
+//! `InteractiveWidget::sense`/`render` would resolve for it, this form just also needs to draw
+//! something around it.
 //!
 //! ```sh
 //! cargo run --example 24_settings_form --features crossterm
@@ -91,12 +95,13 @@ impl Default for SettingsForm {
     }
 }
 
-/// Draws one bordered `TextInput` field, highlighting its border when focused. `TextInput` isn't
-/// an [`retroglyph::ui::widget::InteractiveWidget`], so this hand-rolls what `ui.show`/
-/// `ui.show_stateful` do for one automatically: [`Ui::region`] registers `area`/`id` with
+/// Draws one bordered `TextInput` field, highlighting its border when focused. `ui.show_stateful`
+/// would draw `TextInput`'s own [`retroglyph::ui::widget::InteractiveWidget`] impl directly, but
+/// that impl only owns the field's own area, not a wrapping border, so this hand-rolls what
+/// `ui.show_stateful` does for one automatically: [`Ui::region`] registers `area`/`id` with
 /// `Sense::click()` (hit-testing, focus-ring membership, and click-to-focus) and hands back a
-/// surface scoped to it, then the field is drawn into that same surface -- the "one `id`-one
-/// `area`" guarantee `Ui::show`'s own doc comment describes, kept by hand.
+/// surface scoped to it, then the border and field are drawn into that same surface -- the "one
+/// `id`-one `area`" guarantee `Ui::show`'s own doc comment describes, kept by hand.
 fn draw_field(
     ui: &mut Ui<'_, '_, FieldId>,
     area: Rect,
