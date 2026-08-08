@@ -61,3 +61,86 @@ pub fn sgr_color(color: Color, bg: bool) -> Option<String> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::color::AnsiColor;
+    use alloc::borrow::ToOwned as _;
+
+    #[test]
+    fn sgr_color_is_none_for_default() {
+        assert_eq!(sgr_color(Color::Default, false), None);
+        assert_eq!(sgr_color(Color::Default, true), None);
+    }
+
+    #[test]
+    fn sgr_color_standard_ansi_uses_30_40_base() {
+        assert_eq!(
+            sgr_color(Color::Ansi(AnsiColor::Red), false),
+            Some("31".to_owned())
+        );
+        assert_eq!(
+            sgr_color(Color::Ansi(AnsiColor::Red), true),
+            Some("41".to_owned())
+        );
+    }
+
+    #[test]
+    fn sgr_color_bright_ansi_uses_90_100_base() {
+        assert_eq!(
+            sgr_color(Color::Ansi(AnsiColor::BrightRed), false),
+            Some("91".to_owned())
+        );
+        assert_eq!(
+            sgr_color(Color::Ansi(AnsiColor::BrightRed), true),
+            Some("101".to_owned())
+        );
+    }
+
+    #[test]
+    fn sgr_color_indexed_and_rgb() {
+        assert_eq!(
+            sgr_color(Color::Indexed(200), false),
+            Some("38;5;200".to_owned())
+        );
+        assert_eq!(
+            sgr_color(Color::Indexed(200), true),
+            Some("48;5;200".to_owned())
+        );
+        assert_eq!(
+            sgr_color(Color::Rgb { r: 1, g: 2, b: 3 }, false),
+            Some("38;2;1;2;3".to_owned())
+        );
+        assert_eq!(
+            sgr_color(Color::Rgb { r: 1, g: 2, b: 3 }, true),
+            Some("48;2;1;2;3".to_owned())
+        );
+    }
+
+    #[test]
+    fn push_sgr_emits_nothing_for_a_fully_default_style() {
+        let mut out = String::new();
+        push_sgr(&mut out, Style::default());
+        assert_eq!(out, "");
+    }
+
+    #[test]
+    fn push_sgr_combines_fg_and_bg_into_one_escape() {
+        let mut out = String::new();
+        push_sgr(
+            &mut out,
+            Style::new()
+                .fg(Color::Ansi(AnsiColor::Red))
+                .bg(Color::Ansi(AnsiColor::Blue)),
+        );
+        assert_eq!(out, "\x1b[31;44m");
+    }
+
+    #[test]
+    fn push_sgr_emits_only_the_non_default_channel() {
+        let mut out = String::new();
+        push_sgr(&mut out, Style::new().bg(Color::Ansi(AnsiColor::Blue)));
+        assert_eq!(out, "\x1b[44m");
+    }
+}
