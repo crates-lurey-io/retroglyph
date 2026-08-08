@@ -16,16 +16,16 @@
 //! Click outside the bar/popup to close it the same way. `q`/Escape quits while nothing is open,
 //! or close the window.
 
-use retroglyph_core::app::Frame;
-use retroglyph_core::backend::Backend;
-use retroglyph_core::color::{Color, Style};
-use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::grid::{Rect, Size};
-use retroglyph_core::terminal::Terminal;
+use retroglyph::app::Frame;
+use retroglyph::backend::Backend;
+use retroglyph::color::{Color, Style};
+use retroglyph::event::{Event, KeyCode};
+use retroglyph::grid::{Rect, Size};
+use retroglyph::terminal::Terminal;
+use retroglyph::ui::interact::Interaction;
+use retroglyph::ui::state::MenuBarState;
+use retroglyph::ui::widget::{Marker, MenuBar, MenuBarIds, MenuRow};
 use retroglyph_examples::Example;
-use retroglyph_ui::interact::Interaction;
-use retroglyph_ui::state::MenuBarState;
-use retroglyph_ui::widget::{Marker, MenuBar, MenuBarIds, MenuRow};
 
 /// Identifies the two hit-testable regions [`MenuBar::show`] needs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
