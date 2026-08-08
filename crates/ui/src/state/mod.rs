@@ -7,9 +7,11 @@
 //! it so every consumer doesn't hand-roll its own selection-cursor math.
 
 mod list;
+mod menu;
 mod scroll;
 mod text_input;
 
 pub use list::{ListState, SelectionWrap};
+pub use menu::MenuState;
 pub use scroll::{ScrollPhysics, ScrollState};
 pub use text_input::TextInputState;

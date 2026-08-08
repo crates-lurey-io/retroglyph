@@ -1,6 +1,6 @@
 //! Benchmarks for layer compositing (`Grid::flatten_into`), the per-frame step
 //! `Terminal::present` runs for every backend that doesn't composite layers itself (see
-//! `crate::backend::Output::composites_layers`): currently `Headless` and `retroglyph-crossterm`.
+//! `crate::backend::Output::compositing`): currently `Headless` and `retroglyph-crossterm`.
 //!
 //! retroglyph#269 asks for coverage of this hot path across 1/4/16 layers: `flatten_into` walks
 //! every allocated layer for every cell unconditionally (see `grid.rs`'s module doc, "No
@@ -9,7 +9,7 @@
 //!
 //! `flatten_into` itself is crate-private (only `Terminal::present` calls it), so this drives it
 //! through that public entry point: a `Terminal<Headless>` (which never overrides
-//! `composites_layers`, so it takes the flatten path) with `n` layers populated, calling
+//! `compositing`, so it takes the flatten path) with `n` layers populated, calling
 //! `present()` once per iteration. `present()` also diffs the flattened frame against the
 //! previous one, but that diff cost is invariant across the layer counts compared here, while the
 //! flatten cost is not, so the scaling this benchmark reports is attributable to `flatten_into`.
@@ -35,11 +35,7 @@ fn terminal_with_layers(cols: u16, rows: u16, layers: u8) -> Terminal<Headless> 
     let mut term = Terminal::new(Headless::new(cols, rows));
     let mut rng = fastrand::Rng::with_seed(42);
     for layer in 0..layers {
-        let style = Style::new().fg(Color::Rgb {
-            r: rng.u8(..),
-            g: rng.u8(..),
-            b: rng.u8(..),
-        });
+        let style = Style::new().fg(Color::rgb(rng.u8(..), rng.u8(..), rng.u8(..)));
         let glyph = char::from_u32(u32::from(b'A') + u32::from(layer)).unwrap_or('?');
         for y in 0..rows {
             for x in 0..cols {

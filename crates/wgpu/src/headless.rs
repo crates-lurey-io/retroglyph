@@ -38,8 +38,9 @@
 //! and its blend resolves to exactly the source or exactly the destination. No intermediate value,
 //! and so no rounding, ever reaches the framebuffer.
 
+use crate::WgpuRenderer;
+use crate::config::WgpuBackendBuilder;
 use crate::gpu::GpuContext;
-use crate::{WgpuBackendBuilder, WgpuRenderer};
 use retroglyph_core::backend::{DrawCell, Output};
 use retroglyph_core::color::{Color, Style};
 use retroglyph_core::grid::Pos;
@@ -206,7 +207,7 @@ fn renderer(cols: u16, rows: u16, scale: u16) -> WgpuRenderer {
 
 /// A software renderer over the same grid, the CPU parity reference.
 fn software(cols: u16, rows: u16, scale: u16) -> retroglyph_software::SoftwareRenderer {
-    retroglyph_software::SoftwareBackendBuilder::new()
+    retroglyph_software::config::SoftwareBackendBuilder::new()
         .grid_size(cols, rows)
         .scale(scale)
         .build()
@@ -231,15 +232,6 @@ fn paint_layers(out: &mut impl Output, cells: &[(u8, Pos, Tile)]) {
 const RED: (u8, u8, u8) = (0xFF, 0x00, 0x00);
 const GREEN: (u8, u8, u8) = (0x00, 0xFF, 0x00);
 const BLUE: (u8, u8, u8) = (0x00, 0x00, 0xFF);
-
-/// `(r, g, b)` -> a [`Color::Rgb`].
-const fn rgb(c: (u8, u8, u8)) -> Color {
-    Color::Rgb {
-        r: c.0,
-        g: c.1,
-        b: c.2,
-    }
-}
 
 /// Asserts a readback frame equals the software backend's pixel buffer, reporting the first
 /// mismatch with both colors rather than dumping the whole frame.
@@ -270,9 +262,11 @@ fn sample_grid(cols: u16, rows: u16) -> Vec<(Pos, Tile)> {
         for x in 0..cols {
             let i = usize::from(y) * usize::from(cols) + usize::from(x);
             let glyph = [' ', 'A', '\u{2588}', '#', 'w', '.'][i % 6];
+            let fg = [RED, GREEN, BLUE][i % 3];
+            let bg = [BLUE, RED, GREEN][i % 3];
             let style = Style::new()
-                .fg(rgb([RED, GREEN, BLUE][i % 3]))
-                .bg(rgb([BLUE, RED, GREEN][i % 3]));
+                .fg(Color::rgb(fg.0, fg.1, fg.2))
+                .bg(Color::rgb(bg.0, bg.1, bg.2));
             let tile = match i % 5 {
                 // A sub-cell offset, so the two backends must agree on spill as well as placement.
                 3 => Tile::new(glyph, style).with_offset(-2, 1),
@@ -300,11 +294,16 @@ fn sample_layered(cols: u16, rows: u16) -> Vec<(u8, Pos, Tile)> {
                 0 => Tile::default(),
                 // Occupied, default background: opaque, inherits the base background, erases the
                 // base glyph, draws its own.
-                1 => Tile::new('*', Style::new().fg(rgb(GREEN))),
+                1 => Tile::new('*', Style::new().fg(Color::rgb(GREEN.0, GREEN.1, GREEN.2))),
                 // Occupied space, default background: opaque erase with no visible glyph.
-                2 => Tile::new(' ', Style::new().fg(rgb(RED))),
+                2 => Tile::new(' ', Style::new().fg(Color::rgb(RED.0, RED.1, RED.2))),
                 // Occupied with its own background: fully opaque, own colors.
-                _ => Tile::new('o', Style::new().fg(rgb(BLUE)).bg(rgb(GREEN))),
+                _ => Tile::new(
+                    'o',
+                    Style::new()
+                        .fg(Color::rgb(BLUE.0, BLUE.1, BLUE.2))
+                        .bg(Color::rgb(GREEN.0, GREEN.1, GREEN.2)),
+                ),
             };
             cells.push((1, Pos::new(x, y), tile));
         }
@@ -337,11 +336,21 @@ fn full_block_cell_is_all_foreground_blank_cell_is_all_background() {
         &[
             (
                 Pos::new(0, 0),
-                Tile::new('\u{2588}', Style::new().fg(rgb(RED)).bg(rgb(BLUE))),
+                Tile::new(
+                    '\u{2588}',
+                    Style::new()
+                        .fg(Color::rgb(RED.0, RED.1, RED.2))
+                        .bg(Color::rgb(BLUE.0, BLUE.1, BLUE.2)),
+                ),
             ),
             (
                 Pos::new(1, 0),
-                Tile::new(' ', Style::new().fg(rgb(RED)).bg(rgb(GREEN))),
+                Tile::new(
+                    ' ',
+                    Style::new()
+                        .fg(Color::rgb(RED.0, RED.1, RED.2))
+                        .bg(Color::rgb(GREEN.0, GREEN.1, GREEN.2)),
+                ),
             ),
         ],
     );
@@ -372,7 +381,12 @@ fn glyph_coverage_leaves_the_surface_opaque() {
         &mut r,
         &[(
             Pos::new(0, 0),
-            Tile::new('A', Style::new().fg(rgb(RED)).bg(rgb(BLUE))),
+            Tile::new(
+                'A',
+                Style::new()
+                    .fg(Color::rgb(RED.0, RED.1, RED.2))
+                    .bg(Color::rgb(BLUE.0, BLUE.1, BLUE.2)),
+            ),
         )],
     );
 
@@ -415,7 +429,12 @@ fn glyph_matches_font_coverage_fg_vs_bg() {
         &mut r,
         &[(
             Pos::new(0, 0),
-            Tile::new('A', Style::new().fg(rgb(RED)).bg(rgb(BLUE))),
+            Tile::new(
+                'A',
+                Style::new()
+                    .fg(Color::rgb(RED.0, RED.1, RED.2))
+                    .bg(Color::rgb(BLUE.0, BLUE.1, BLUE.2)),
+            ),
         )],
     );
 
@@ -495,8 +514,13 @@ fn sub_cell_offsets_spill_the_same_way_as_the_cpu_rasterizer() {
         for x in 0..cols {
             #[allow(clippy::cast_possible_wrap)]
             let (dx, dy) = (x as i16 - 1, y as i16 - 1);
-            let tile = Tile::new('\u{2588}', Style::new().fg(rgb(GREEN)).bg(rgb(BLUE)))
-                .with_offset(dx * 3, dy * 3);
+            let tile = Tile::new(
+                '\u{2588}',
+                Style::new()
+                    .fg(Color::rgb(GREEN.0, GREEN.1, GREEN.2))
+                    .bg(Color::rgb(BLUE.0, BLUE.1, BLUE.2)),
+            )
+            .with_offset(dx * 3, dy * 3);
             cells.push((Pos::new(x, y), tile));
         }
     }
@@ -528,7 +552,11 @@ fn matches_software_backend_for_a_span_covered_cells_default_background() {
     let mut grid = Grid::new(cols, rows);
     for x in 0..cols {
         let bg = if x % 2 == 0 { RED } else { GREEN };
-        grid.put_tile(0, (x, 0), Tile::new('.', Style::new().bg(rgb(bg))));
+        grid.put_tile(
+            0,
+            (x, 0),
+            Tile::new('.', Style::new().bg(Color::rgb(bg.0, bg.1, bg.2))),
+        );
     }
     // A 2-wide span with a `Default` background over columns 0 (red) and 1 (green).
     grid.write_span(1, 0, 0, &["C="], Style::new())
@@ -564,7 +592,11 @@ fn matches_software_backend_for_multicell_spans() {
     let mut grid = Grid::new(cols, rows);
     for y in 0..rows {
         for x in 0..cols {
-            grid.put_tile(0, (x, y), Tile::new('.', Style::new().fg(rgb(BLUE))));
+            grid.put_tile(
+                0,
+                (x, y),
+                Tile::new('.', Style::new().fg(Color::rgb(BLUE.0, BLUE.1, BLUE.2))),
+            );
         }
     }
     // A 2x2 span with its own background, so both the footprint and the backdrop are exercised.
@@ -573,7 +605,9 @@ fn matches_software_backend_for_multicell_spans() {
         0,
         0,
         &["AB", "CD"],
-        Style::new().fg(rgb(GREEN)).bg(rgb(RED)),
+        Style::new()
+            .fg(Color::rgb(GREEN.0, GREEN.1, GREEN.2))
+            .bg(Color::rgb(RED.0, RED.1, RED.2)),
     )
     .expect("2x2 span fits");
     let scene: Vec<(u8, Pos, Tile)> = grid
@@ -594,11 +628,11 @@ fn matches_software_backend_for_multicell_spans() {
 #[cfg(feature = "tilesets")]
 mod sprites {
     use super::{
-        BLUE, Frame, GREEN, RED, assert_frames_match, device_or_skip, paint_layers,
-        render_to_frame, rgb,
+        BLUE, Frame, GREEN, RED, assert_frames_match, device_or_skip, paint_layers, render_to_frame,
     };
-    use crate::{WgpuBackendBuilder, WgpuRenderer};
-    use retroglyph_core::color::Style;
+    use crate::WgpuRenderer;
+    use crate::config::WgpuBackendBuilder;
+    use retroglyph_core::color::{Color, Style};
     use retroglyph_core::grid::Pos;
     use retroglyph_core::tile::Tile;
     use retroglyph_window::tileset::{Codepage, SheetColor, TilesetOptions};
@@ -641,7 +675,7 @@ mod sprites {
             .tileset(opts())
             .build()
             .expect("tileset builds");
-        let cpu = retroglyph_software::SoftwareBackendBuilder::new()
+        let cpu = retroglyph_software::config::SoftwareBackendBuilder::new()
             .grid_size(cols, rows)
             .scale(scale)
             .tileset(opts())
@@ -664,8 +698,18 @@ mod sprites {
 
         // '@' is the sheet's only tile; the cell's contrasting foreground makes a sprite that was
         // wrongly drawn as a font glyph obvious.
-        let sprite = Tile::new('@', Style::new().fg(rgb(RED)).bg(rgb(BLUE)));
-        let plain = Tile::new('A', Style::new().fg(rgb(RED)).bg(rgb(BLUE)));
+        let sprite = Tile::new(
+            '@',
+            Style::new()
+                .fg(Color::rgb(RED.0, RED.1, RED.2))
+                .bg(Color::rgb(BLUE.0, BLUE.1, BLUE.2)),
+        );
+        let plain = Tile::new(
+            'A',
+            Style::new()
+                .fg(Color::rgb(RED.0, RED.1, RED.2))
+                .bg(Color::rgb(BLUE.0, BLUE.1, BLUE.2)),
+        );
         let cells = [(0u8, Pos::new(0, 0), sprite), (0u8, Pos::new(1, 0), plain)];
         paint_layers(&mut gpu, &cells);
         paint_layers(&mut cpu, &cells);
@@ -692,7 +736,12 @@ mod sprites {
         let cells = [(
             0u8,
             Pos::new(0, 0),
-            Tile::new('@', Style::new().fg(rgb(fg)).bg(rgb(BLUE))),
+            Tile::new(
+                '@',
+                Style::new()
+                    .fg(Color::rgb(fg.0, fg.1, fg.2))
+                    .bg(Color::rgb(BLUE.0, BLUE.1, BLUE.2)),
+            ),
         )];
         paint_layers(&mut gpu, &cells);
         paint_layers(&mut cpu, &cells);

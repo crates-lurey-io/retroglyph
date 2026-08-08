@@ -350,7 +350,7 @@ fn blend_color(mode: BlendMode, src: Color, dst: Color, t: f32) -> Color {
                     )
                 },
             );
-            Color::Rgb { r, g, b }
+            Color::rgb(r, g, b)
         }
         (src, _) => src,
     }
@@ -617,11 +617,7 @@ mod tests {
             (0, 0),
             Tile::default()
                 .with_glyph('X')
-                .with_style(Style::new().fg(Color::Rgb {
-                    r: 204,
-                    g: 204,
-                    b: 204,
-                })),
+                .with_style(Style::new().fg(Color::rgb(204, 204, 204))),
         );
 
         let mut dst = Grid::new(1, 1);
@@ -630,11 +626,7 @@ mod tests {
             (0, 0),
             Tile::default()
                 .with_glyph('_')
-                .with_style(Style::new().fg(Color::Rgb {
-                    r: 102,
-                    g: 102,
-                    b: 102,
-                })),
+                .with_style(Style::new().fg(Color::rgb(102, 102, 102))),
         );
 
         dst.blit_alpha(
@@ -647,14 +639,7 @@ mod tests {
             1.0,
             1.0,
         );
-        assert_eq!(
-            dst[Pos::new(0, 0)].style.fg,
-            Color::Rgb {
-                r: 224,
-                g: 224,
-                b: 224
-            }
-        );
+        assert_eq!(dst[Pos::new(0, 0)].style.fg, Color::rgb(224, 224, 224));
     }
 
     /// Same as `blit_alpha_screen_blends_fg`, but for `style.bg` and `bg_alpha`: both
@@ -668,16 +653,8 @@ mod tests {
             (0, 0),
             Tile::default().with_glyph('X').with_style(
                 Style::new()
-                    .fg(Color::Rgb {
-                        r: 204,
-                        g: 204,
-                        b: 204,
-                    })
-                    .bg(Color::Rgb {
-                        r: 204,
-                        g: 204,
-                        b: 204,
-                    }),
+                    .fg(Color::rgb(204, 204, 204))
+                    .bg(Color::rgb(204, 204, 204)),
             ),
         );
 
@@ -687,16 +664,8 @@ mod tests {
             (0, 0),
             Tile::default().with_glyph('_').with_style(
                 Style::new()
-                    .fg(Color::Rgb {
-                        r: 102,
-                        g: 102,
-                        b: 102,
-                    })
-                    .bg(Color::Rgb {
-                        r: 102,
-                        g: 102,
-                        b: 102,
-                    }),
+                    .fg(Color::rgb(102, 102, 102))
+                    .bg(Color::rgb(102, 102, 102)),
             ),
         );
 
@@ -711,23 +680,9 @@ mod tests {
             0.5,
         );
         // `fg_alpha == 1.0`: fully mixed, same as `blit_alpha_screen_blends_fg`.
-        assert_eq!(
-            dst[Pos::new(0, 0)].style.fg,
-            Color::Rgb {
-                r: 224,
-                g: 224,
-                b: 224
-            }
-        );
+        assert_eq!(dst[Pos::new(0, 0)].style.fg, Color::rgb(224, 224, 224));
         // `bg_alpha == 0.5`: only half-lerped from the destination toward that same mix.
-        assert_eq!(
-            dst[Pos::new(0, 0)].style.bg,
-            Color::Rgb {
-                r: 163,
-                g: 163,
-                b: 163
-            }
-        );
+        assert_eq!(dst[Pos::new(0, 0)].style.bg, Color::rgb(163, 163, 163));
     }
 
     /// retroglyph#268: same wraparound guard as `blit`'s
@@ -770,14 +725,10 @@ mod tests {
             (0, 0),
             Tile::default()
                 .with_glyph('X')
-                .with_style(Style::new().fg(Color::Rgb {
-                    r: 255,
-                    g: 255,
-                    b: 255,
-                })),
+                .with_style(Style::new().fg(Color::rgb(255, 255, 255))),
         );
 
-        let dst_color = Color::Rgb { r: 0, g: 0, b: 0 };
+        let dst_color = Color::rgb(0, 0, 0);
         let at = |t: f32| {
             let mut dst = Grid::new(1, 1);
             dst.put_tile(
@@ -801,14 +752,7 @@ mod tests {
         };
 
         assert_eq!(at(0.0), dst_color);
-        assert_eq!(
-            at(1.0),
-            Color::Rgb {
-                r: 255,
-                g: 255,
-                b: 255
-            }
-        );
+        assert_eq!(at(1.0), Color::rgb(255, 255, 255));
         let Color::Rgb { r, g, b } = at(0.5) else {
             panic!("expected Color::Rgb");
         };
@@ -830,7 +774,7 @@ mod tests {
             BlendMode::Multiply,
         ] {
             assert_eq!(
-                blend_color(mode, Color::Default, Color::Rgb { r: 1, g: 2, b: 3 }, 0.5),
+                blend_color(mode, Color::Default, Color::rgb(1, 2, 3), 0.5),
                 Color::Default
             );
             assert_eq!(

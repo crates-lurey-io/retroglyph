@@ -23,7 +23,11 @@ use retroglyph_core::grid::Rect;
 use retroglyph_core::terminal::Terminal;
 use retroglyph_core::text::{Line, Span};
 use retroglyph_examples::Example;
-use retroglyph_ui::{Align, Modal, Panel, PrintLine, Surface, Text, Widget};
+use retroglyph_ui::align::Align;
+
+use retroglyph_ui::widget::{Modal, Panel, PrintLine, Text, Widget};
+
+use retroglyph_ui::Surface;
 
 /// State for the text-alignment example (none needed: the layout never changes).
 #[derive(Default)]

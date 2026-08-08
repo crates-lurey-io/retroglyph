@@ -42,7 +42,7 @@ use retroglyph_core::event::{Event, KeyCode};
 use retroglyph_core::frames::FrameClock;
 use retroglyph_core::terminal::Terminal;
 use retroglyph_examples::Example;
-use retroglyph_ui::{Easing, Tween, oscillate_with_phase};
+use retroglyph_ui::animate::{Easing, Tween, oscillate_with_phase};
 use std::time::Duration;
 
 /// Row the ball travels along.

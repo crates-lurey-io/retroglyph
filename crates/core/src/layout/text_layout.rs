@@ -150,10 +150,8 @@ impl<'a> TextLayout<'a> {
 
 #[cfg(test)]
 mod tests {
-    use ixy::HasSize;
-
     use super::*;
-    use crate::grid::Pos;
+    use crate::grid::{HasSize, Pos};
     use alloc::string::String;
 
     #[test]

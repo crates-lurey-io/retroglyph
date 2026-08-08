@@ -1,10 +1,9 @@
 //! Multi-cell sprite spans: [`put_span`](Surface::put_span) and its uniform/pixel-offset twins.
 
 use crate::color::Style;
-use crate::grid::{Offset, Pos, Size};
+use crate::grid::{HasSize, Offset, Pos, Size};
 #[cfg(not(feature = "egc"))]
 use crate::tile::Tile;
-use ixy::HasSize;
 #[cfg(not(feature = "egc"))]
 use unicode_width::UnicodeWidthChar;
 
@@ -177,7 +176,7 @@ impl Surface<'_> {
         let wrote = {
             let mut buf = [0u8; 4];
             let s = ch.encode_utf8(&mut buf);
-            self.write_grapheme_at(x, y, s, style)
+            self.put_grapheme_at(x, y, s, style)
         };
         #[cfg(not(feature = "egc"))]
         let wrote = {

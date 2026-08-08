@@ -17,7 +17,7 @@ struct ButtonState {
 /// match over three fixed variants rather than a `HashMap`: no allocation,
 /// no hashing, and the array stays small/`Copy`: fits this crate's
 /// dependency-minimal, `no_std`-friendly habits (see
-/// [`Sense`](crate::Sense)'s doc comment for the same reasoning applied to
+/// [`Sense`](crate::interact::Sense)'s doc comment for the same reasoning applied to
 /// bitflags).
 ///
 /// `MouseButton` is `#[non_exhaustive]`, so any future variant this crate
@@ -36,9 +36,9 @@ const fn button_slot(button: MouseButton) -> Option<usize> {
 /// every [`Event`] you receive.
 ///
 /// Tracks all three [`MouseButton`] variants independently (unlike
-/// [`Interaction`](crate::Interaction)'s higher-level click/drag/focus
+/// [`Interaction`](crate::interact::Interaction)'s higher-level click/drag/focus
 /// resolution, which only ever resolves the primary button plus a narrower
-/// secondary-click signal; see [`Sense::SECONDARY_CLICK`](crate::Sense::SECONDARY_CLICK)).
+/// secondary-click signal; see [`Sense::SECONDARY_CLICK`](crate::interact::Sense::SECONDARY_CLICK)).
 /// Mirrors [`KeyState`](retroglyph_core::event::KeyState)'s "feed events in, query
 /// state out" shape.
 ///

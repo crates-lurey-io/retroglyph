@@ -3,7 +3,7 @@ use retroglyph_core::color::{Color, Style};
 
 use super::Widget;
 use crate::Surface;
-use crate::Theme;
+use crate::theme::Theme;
 
 /// A horizontal progress bar that fills `value / max` of the area it's
 /// rendered into.
@@ -16,7 +16,8 @@ use crate::Theme;
 ///
 /// ```
 /// use retroglyph_core::grid::{Grid, Rect};
-/// use retroglyph_ui::{ProgressBar, Surface, Widget};
+/// use retroglyph_ui::widget::{ProgressBar, Widget};
+/// use retroglyph_ui::Surface;
 ///
 /// let area = Rect::new(0, 0, 10, 1);
 /// let mut grid = Grid::new(10, 1);

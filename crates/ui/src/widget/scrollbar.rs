@@ -1,14 +1,16 @@
 //! [`Scrollbar`]: a vertical track+thumb indicator.
 use retroglyph_core::app::Frame;
 use retroglyph_core::color::{Color, Style};
+use retroglyph_core::grid::Size;
 
-use super::{AnimatedWidget, InteractiveWidget, Widget};
-use crate::Response;
-use crate::ScrollState;
-use crate::Sense;
+use super::{AnimatedWidget, InteractiveWidget, MinSize, Widget};
 use crate::Surface;
-use crate::Theme;
 use crate::draw::{offset_for_pos, thumb_geometry};
+use crate::interact::Density;
+use crate::interact::Response;
+use crate::interact::Sense;
+use crate::state::ScrollState;
+use crate::theme::Theme;
 
 /// A vertical scrollbar (typically one cell wide) covering `total_len`
 /// items in a `visible_len`-row viewport.
@@ -25,8 +27,8 @@ use crate::draw::{offset_for_pos, thumb_geometry};
 /// As a plain [`Widget`], `Scrollbar` is purely a display: `offset` is whatever the caller last
 /// set, unaffected by the pointer. [`InteractiveWidget`]'s `type State = ScrollState` makes it
 /// draggable and wheel-scrollable instead: `sense()` is
-/// <code>[Sense::drag]() | [Sense::CLICK](crate::Sense::CLICK) |
-/// [Sense::SCROLL](crate::Sense::SCROLL)</code>, and its `render` reads the thumb's position from
+/// <code>[Sense::drag]() | [Sense::CLICK](crate::interact::Sense::CLICK) |
+/// [Sense::SCROLL](crate::interact::Sense::SCROLL)</code>, and its `render` reads the thumb's position from
 /// `state.integer_offset()`, drives a drag via [`offset_for_pos`]/[`ScrollState::update_drag`]/
 /// [`ScrollState::end_drag`] using [`Response::pointer_pos`], and applies wheel input via
 /// [`ScrollState::apply`].
@@ -35,7 +37,8 @@ use crate::draw::{offset_for_pos, thumb_geometry};
 ///
 /// ```
 /// use retroglyph_core::grid::{Grid, Rect};
-/// use retroglyph_ui::{Scrollbar, Surface, Widget};
+/// use retroglyph_ui::widget::{Scrollbar, Widget};
+/// use retroglyph_ui::Surface;
 ///
 /// let area = Rect::new(0, 0, 1, 10);
 /// let mut grid = Grid::new(1, 10);
@@ -148,6 +151,17 @@ impl Scrollbar {
     }
 }
 
+impl MinSize for Scrollbar {
+    /// One column wide, `visible_len` rows tall (the natural track height, saturating at
+    /// [`u16::MAX`] for an implausibly large `visible_len`), floored at `density`'s
+    /// [`min_target_size`](Density::min_target_size) so a touch-sized thumb still has room to
+    /// grab.
+    fn min_size(&self, density: Density) -> Size {
+        let track_height = u16::try_from(self.visible_len).unwrap_or(u16::MAX);
+        Size::new(1, track_height).max(density.min_target_size())
+    }
+}
+
 impl Widget for Scrollbar {
     fn render(&self, surface: &mut Surface<'_>) {
         self.draw(surface, self.offset);
@@ -203,9 +217,9 @@ impl AnimatedWidget for Scrollbar {
     type State = ScrollState;
 
     /// Ticks `state`'s momentum/rubber-band physics forward by `frame.delta` (a no-op while
-    /// [`ScrollState::dragging`](crate::ScrollState::dragging) is `true`, per [`ScrollState::tick`]'s
+    /// [`ScrollState::dragging`](crate::state::ScrollState::dragging) is `true`, per [`ScrollState::tick`]'s
     /// own docs), then draws the thumb at the resulting
-    /// [`integer_offset`](crate::ScrollState::integer_offset): the [`Widget::render`] this type
+    /// [`integer_offset`](crate::state::ScrollState::integer_offset): the [`Widget::render`] this type
     /// already has, just with `self.offset` replaced by `state`'s current one. `max_offset` is
     /// `total_len - visible_len` (floored at `0`), matching [`thumb_geometry`]'s own definition, so
     /// the physics and the drawn thumb position are always in terms of the same bound.
@@ -223,7 +237,7 @@ impl AnimatedWidget for Scrollbar {
 // accumulated float results, so exact equality is the correct check, not a bug.
 mod tests {
     use retroglyph_core::color::Color;
-    use retroglyph_core::grid::{Grid, Pos, Rect};
+    use retroglyph_core::grid::{Grid, HasSize as _, Pos, Rect};
 
     use super::*;
     use crate::Surface;
@@ -232,8 +246,8 @@ mod tests {
     fn draws_a_plain_track_with_no_thumb_when_nothing_to_scroll() {
         let area = Rect::new(0, 0, 1, 5);
         let mut grid = Grid::new(1, 5);
-        let track = Style::new().bg(Color::Rgb { r: 1, g: 1, b: 1 });
-        let thumb = Style::new().bg(Color::Rgb { r: 2, g: 2, b: 2 });
+        let track = Style::new().bg(Color::rgb(1, 1, 1));
+        let thumb = Style::new().bg(Color::rgb(2, 2, 2));
         let scrollbar = Scrollbar::new(3, 5).track_style(track).thumb_style(thumb);
         Widget::render(&scrollbar, &mut Surface::new(&mut grid, area, 0));
         for y in 0..5 {
@@ -248,8 +262,8 @@ mod tests {
     fn draws_the_thumb_over_the_track() {
         let area = Rect::new(0, 0, 1, 10);
         let mut grid = Grid::new(1, 10);
-        let track = Style::new().bg(Color::Rgb { r: 1, g: 1, b: 1 });
-        let thumb = Style::new().bg(Color::Rgb { r: 2, g: 2, b: 2 });
+        let track = Style::new().bg(Color::rgb(1, 1, 1));
+        let thumb = Style::new().bg(Color::rgb(2, 2, 2));
         let scrollbar = Scrollbar::new(20, 5)
             .offset(0)
             .track_style(track)
@@ -307,8 +321,8 @@ mod tests {
     fn offset_defaults_to_zero() {
         let area = Rect::new(0, 0, 1, 10);
         let mut grid = Grid::new(1, 10);
-        let track = Style::new().bg(Color::Rgb { r: 1, g: 1, b: 1 });
-        let thumb = Style::new().bg(Color::Rgb { r: 2, g: 2, b: 2 });
+        let track = Style::new().bg(Color::rgb(1, 1, 1));
+        let thumb = Style::new().bg(Color::rgb(2, 2, 2));
         let scrollbar = Scrollbar::new(20, 5).track_style(track).thumb_style(thumb);
         Widget::render(&scrollbar, &mut Surface::new(&mut grid, area, 0));
 
@@ -382,7 +396,7 @@ mod tests {
             Event, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
         };
 
-        use crate::Interaction;
+        use crate::interact::Interaction;
 
         #[derive(Clone, Copy, PartialEq, Eq)]
         enum Id {
@@ -479,5 +493,23 @@ mod tests {
             response,
         );
         assert!(state.velocity() > 0.0);
+    }
+
+    #[test]
+    fn min_size_is_one_column_by_visible_len_rows() {
+        // 10 rows is well past either density's height floor (1 for Mouse, 3 for Touch), and
+        // the natural 1-column width is below the 6-cell floor, so the floor wins on width only.
+        let scrollbar = Scrollbar::new(100, 10);
+        let size = scrollbar.min_size(Density::Mouse);
+        assert_eq!(size.width(), 6);
+        assert_eq!(size.height(), 10);
+    }
+
+    #[test]
+    fn min_size_floors_a_short_track_at_the_density_minimum() {
+        // A 1-row-tall track is nowhere near Touch's 3-row height floor.
+        let scrollbar = Scrollbar::new(100, 1);
+        let size = scrollbar.min_size(Density::Touch);
+        assert_eq!(size, Density::Touch.min_target_size());
     }
 }

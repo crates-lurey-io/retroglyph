@@ -82,7 +82,7 @@ pub fn headless_snapshot<E: Example>(frames: u32) -> String {
 #[must_use]
 pub fn png_snapshot<E: Example>(cols: u16, rows: u16, scale: u16) -> Vec<u8> {
     use retroglyph_core::terminal::Terminal;
-    use retroglyph_software::SoftwareBackendBuilder;
+    use retroglyph_software::config::SoftwareBackendBuilder;
     use retroglyph_window::presenter::Presenter;
 
     let builder = E::configure(
@@ -322,10 +322,10 @@ pub fn capture_pty_with_env(
     capture_pty_until(bin, input, rows, cols, ready_marker, env, &|_| true)
 }
 
-/// Blocks until `ready_marker` appears in `output`, which the caller's reader thread is filling.
+/// Blocks until `ready_marker` appears in `session`'s output.
 ///
-/// `bin` and `child` exist only to enrich the empty-capture panic below: when the child closes the
-/// PTY having printed nothing at all, the bare message used to say only that, with no way to tell
+/// `bin` exists only to enrich the empty-capture panic below: when the child closes the PTY
+/// having printed nothing at all, the bare message used to say only that, with no way to tell
 /// "the example panicked on startup" apart from "the harness spawned a half-written binary"
 /// (retroglyph#976). Naming the binary's path, size, and mtime alongside the child's exit status
 /// turns that guess into an answer.
@@ -338,12 +338,13 @@ pub fn capture_pty_with_env(
 #[cfg(not(target_arch = "wasm32"))]
 fn wait_for_marker(
     bin: &Path,
-    child: &mut dyn portable_pty::Child,
-    output: &std::sync::Arc<std::sync::Mutex<Vec<u8>>>,
-    reader_done: &std::sync::Arc<std::sync::Mutex<bool>>,
+    session: &mut retroglyph_recorder::pty::PtySession,
     ready_marker: &str,
 ) {
     use std::time::Instant;
+
+    let output = session.output();
+    let reader_done = session.reader_done();
 
     let hard_deadline = Instant::now() + READY_HARD_TIMEOUT;
     let mut idle_deadline = Instant::now() + READY_IDLE_TIMEOUT;
@@ -380,7 +381,7 @@ fn wait_for_marker(
                 Ok(meta) => format!("{} bytes, mtime {:?}", meta.len(), meta.modified().ok()),
                 Err(err) => format!("<stat failed: {err}>"),
             };
-            let exit_desc = match child.try_wait() {
+            let exit_desc = match session.try_wait() {
                 Ok(Some(status)) => format!("{status:?}"),
                 Ok(None) => "<still running>".to_owned(),
                 Err(err) => format!("<wait failed: {err}>"),
@@ -436,66 +437,23 @@ pub fn capture_pty_until(
     env: &[(&str, &str)],
     settled: &dyn Fn(&str) -> bool,
 ) -> Vec<u8> {
-    use portable_pty::{CommandBuilder, PtySize, native_pty_system};
-    use std::io::{Read, Write};
-    use std::sync::{Arc, Mutex};
+    use retroglyph_recorder::pty::PtySession;
     use std::time::{Duration, Instant};
 
-    let pty = native_pty_system();
-    let pair = pty
-        .openpty(PtySize {
-            rows,
-            cols,
-            pixel_width: 0,
-            pixel_height: 0,
-        })
-        .expect("openpty");
-
-    let mut cmd = CommandBuilder::new(bin);
-    cmd.env("TERM", "xterm-256color");
-    for (key, value) in env {
-        cmd.env(key, value);
-    }
-    let mut child = pair.slave.spawn_command(cmd).expect("spawn");
-    drop(pair.slave);
-
-    let mut reader = pair.master.try_clone_reader().expect("reader");
-    let mut writer = pair.master.take_writer().expect("writer");
-
-    let output = Arc::new(Mutex::new(Vec::new()));
-    let output_clone = Arc::clone(&output);
-    let reader_done = Arc::new(Mutex::new(false));
-    let reader_done_clone = Arc::clone(&reader_done);
-    // Keep the `JoinHandle` (rather than only the `reader_done` flag below): setting that flag
-    // and this closure actually *returning* (dropping `output_clone`, its `Arc` clone) are two
-    // separate steps, so polling the flag alone races the still-unwinding thread -- the poll can
-    // observe `true` and reach `Arc::try_unwrap` below a moment before `output_clone` is actually
-    // dropped, which fails non-deterministically (this is what used to intermittently panic
-    // here). `.join()` blocks until the thread function has fully returned, which is the only way
-    // to be sure the second `Arc` reference is gone.
-    let reader_handle = std::thread::spawn(move || {
-        let mut buf = [0u8; 4096];
-        loop {
-            match reader.read(&mut buf) {
-                Ok(0) | Err(_) => break,
-                Ok(n) => output_clone.lock().unwrap().extend_from_slice(&buf[..n]),
-            }
-        }
-        *reader_done_clone.lock().unwrap() = true;
-        drop(reader);
-    });
+    let mut session = PtySession::spawn(bin, &[], env, cols, rows).expect("spawn PTY session");
 
     // Nothing is typed until the example has drawn a frame. Before that it hasn't enabled raw
     // mode yet, so the line discipline would hold the bytes in its canonical-mode line buffer and
     // echo them straight back into the capture.
-    wait_for_marker(bin, child.as_mut(), &output, &reader_done, ready_marker);
+    wait_for_marker(bin, &mut session, ready_marker);
 
     if !input.is_empty() {
-        writer.write_all(input).expect("write input");
+        session.write_all(input).expect("write input");
 
         // Feeds only the bytes that arrived since the last poll, so a capture that grows to
         // megabytes (the crossterm driver is an unthrottled spin loop, and a visible FPS overlay
         // redraws its readout every frame) stays linear instead of re-parsing from scratch.
+        let output = session.output();
         let mut screen = vt100::Parser::new(rows, cols, 0);
         let mut parsed = 0usize;
         let deadline = Instant::now() + Duration::from_secs(10);
@@ -524,12 +482,16 @@ pub fn capture_pty_until(
     // cases apart without adding a real wait of its own; a `try_wait` error is treated the same
     // as "still running" so every existing caller (whose child is always alive here) keeps
     // sending `q` exactly as before.
-    if !matches!(child.try_wait(), Ok(Some(_))) {
-        writer.write_all(b"q").expect("write quit");
+    if !matches!(session.try_wait(), Ok(Some(_))) {
+        session.write_all(b"q").expect("write quit");
     }
-    drop(writer);
-    let _ = child.wait();
+    session.close_writer();
+    session.wait();
 
+    // Keep polling the `reader_done` flag (rather than going straight to `PtySession::finish`'s
+    // unconditional join) so a reader thread that never sees EOF fails with a clear timeout
+    // instead of hanging the test forever.
+    let reader_done = session.reader_done();
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
         if *reader_done.lock().unwrap() {
@@ -538,9 +500,9 @@ pub fn capture_pty_until(
         assert!(Instant::now() <= deadline);
         std::thread::sleep(POLL_INTERVAL);
     }
-    reader_handle.join().expect("reader thread panicked");
+    drop(reader_done);
 
-    Arc::try_unwrap(output).unwrap().into_inner().unwrap()
+    session.finish().expect("reader thread panicked")
 }
 
 /// Feeds `raw` PTY bytes through a fresh `vt100::Parser` and renders the

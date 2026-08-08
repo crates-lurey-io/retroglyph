@@ -7,7 +7,7 @@
 //! Both headless tests drive synthetic input through [`Headless::push_event`], mirroring
 //! `04_mouse`'s and `03_keyboard`'s decode-and-echo proofs -- but here what's being proven is
 //! `Interaction`'s resolution, not raw event decode: a mouse click resolves one frame after the
-//! press/release pair arrives (see [`Interaction`](retroglyph_ui::Interaction)'s own doc
+//! press/release pair arrives (see [`Interaction`](retroglyph_ui::interact::Interaction)'s own doc
 //! comment on why), while Tab-focus and Enter-activation resolve the same frame their event
 //! arrives, since `FocusRing` state is read live rather than snapshotted.
 

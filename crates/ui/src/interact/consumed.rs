@@ -1,9 +1,9 @@
-//! [`Consumed`]: whether [`Interaction::handle_event`](crate::Interaction::handle_event) claimed
+//! [`Consumed`]: whether [`Interaction::handle_event`](crate::interact::Interaction::handle_event) claimed
 //! an event.
 
-/// Whether an [`Interaction`](crate::Interaction) claimed an event.
+/// Whether an [`Interaction`](crate::interact::Interaction) claimed an event.
 ///
-/// Reported by [`handle_event`](crate::Interaction::handle_event), so a caller with more than one
+/// Reported by [`handle_event`](crate::interact::Interaction::handle_event), so a caller with more than one
 /// interaction context (a menu bar above a screen stack, a dropdown above a form) knows whether to
 /// keep routing the same event further down. A coarse substitute, like "is the menu currently
 /// open", answers a different and less useful question: it stays `true` for events the menu

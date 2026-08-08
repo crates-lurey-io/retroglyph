@@ -24,7 +24,7 @@ use retroglyph_core::backend::Output;
 use retroglyph_core::color::{Color, Style};
 use retroglyph_core::grid::Pos;
 use retroglyph_core::tile::Tile;
-use retroglyph_software::SoftwareBackendBuilder;
+use retroglyph_software::config::SoftwareBackendBuilder;
 use retroglyph_window::font::unscii16;
 
 #[cfg(feature = "tilesets")]
@@ -39,7 +39,7 @@ fn to_content(frame: &[(u8, Pos, Tile)]) -> impl Iterator<Item = DrawCell<'_>> {
 }
 
 fn glyph_frame(cols: u16, rows: u16) -> Vec<(u8, Pos, Tile)> {
-    let style = Style::new().fg(Color::Rgb { r: 0, g: 255, b: 0 });
+    let style = Style::new().fg(Color::rgb(0, 255, 0));
     let mut out = Vec::with_capacity(usize::from(cols) * usize::from(rows));
     for y in 0..rows {
         for x in 0..cols {

@@ -1,12 +1,12 @@
 //! Pointer and keyboard focus tracking for interactive widgets, without a
 //! retained widget tree.
 //!
-//! [`ListState`](crate::ListState) answers "where is this list scrolled to
+//! [`ListState`](crate::state::ListState) answers "where is this list scrolled to
 //! and what's selected"; this module answers the sibling question, "what
 //! did the user just do to this widget" (hover, click, drag, focus,
 //! scroll) for widgets that don't have a natural selection index of their
 //! own (buttons, tabs, draggable panes, ...). Four independently usable
-//! pieces, composed by [`Interaction`] the way [`ListState`](crate::ListState)
+//! pieces, composed by [`Interaction`] the way [`ListState`](crate::state::ListState)
 //! composes with [`crate::widget::Table`]:
 //!
 //! - [`Pointer`]: raw mouse position/button/scroll state from a stream of
@@ -24,7 +24,7 @@
 //! use retroglyph_core::backend::{Backend, Headless};
 //! use retroglyph_core::grid::Rect;
 //! use retroglyph_core::terminal::Terminal;
-//! use retroglyph_ui::{Interaction, Sense};
+//! use retroglyph_ui::interact::{Interaction, Sense};
 //!
 //! #[derive(Clone, Copy, PartialEq, Eq)]
 //! enum WidgetId {
@@ -75,8 +75,8 @@ use retroglyph_core::event::{Event, KeyCode, MouseButton};
 use retroglyph_core::grid::{Pos, Rect};
 use retroglyph_core::surface::Surface;
 
-use crate::Ui;
 use crate::animate::Tween;
+use crate::ui::Ui;
 
 /// Default [`Interaction::with_drag_threshold`].
 ///
@@ -121,7 +121,7 @@ pub const DEFAULT_DOUBLE_CLICK_WINDOW: u16 = 30;
 /// use retroglyph_core::backend::{Backend, Headless};
 /// use retroglyph_core::grid::Rect;
 /// use retroglyph_core::terminal::Terminal;
-/// use retroglyph_ui::{Interaction, Sense};
+/// use retroglyph_ui::interact::{Interaction, Sense};
 ///
 /// #[derive(Clone, Copy, PartialEq, Eq)]
 /// enum WidgetId {
@@ -161,7 +161,7 @@ pub const DEFAULT_DOUBLE_CLICK_WINDOW: u16 = 30;
 ///    *this* frame: uniformly for hover, press, release, click, and
 ///    scroll, all resolved from that one snapshot. At typical redraw rates
 ///    this is imperceptible; it's the same kind of trade-off
-///    [`ListState::ensure_visible`](crate::ListState::ensure_visible)
+///    [`ListState::ensure_visible`](crate::state::ListState::ensure_visible)
 ///    documents for a different reason (only the caller knows the current
 ///    viewport height), applied here because only the *previous* frame
 ///    knows the full hit list and the pointer's position as of the input
@@ -210,7 +210,7 @@ pub const DEFAULT_DOUBLE_CLICK_WINDOW: u16 = 30;
 ///
 /// Consistently with that: everything here holds its state in a plain,
 /// explicitly-owned struct threaded through `&mut self`, the same
-/// convention [`ListState`](crate::ListState) uses, rather than the
+/// convention [`ListState`](crate::state::ListState) uses, rather than the
 /// interior-mutability/global-context pattern egui's `Memory` relies on to
 /// keep its implicit ids from needing to be threaded everywhere.
 // Several of these are independent one-shot snapshots (primary/secondary
@@ -565,7 +565,7 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
     /// Register `rect` as a barrier: a pointer inside it never resolves to anything registered by
     /// an earlier [`interact`](Self::interact) call, no matter how the two overlap.
     ///
-    /// [`Ui::modal`](crate::Ui::modal) is the documented way to use this; call it directly only
+    /// [`Ui::modal`](crate::ui::Ui::modal) is the documented way to use this; call it directly only
     /// when driving [`interact`](Self::interact) without a [`Ui`].
     pub fn push_barrier(&mut self, rect: Rect) {
         self.hits.push_barrier(rect);

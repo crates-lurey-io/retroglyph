@@ -15,7 +15,7 @@ impl Camera {
     ///
     /// ```
     /// use retroglyph_core::grid::{Pos, Rect, Size};
-    /// use retroglyph_ui::Camera;
+    /// use retroglyph_ui::camera::Camera;
     ///
     /// // A 10x10 viewport near the bottom-right corner of a 12x12 world: the origin clamps
     /// // to (2, 2), so the visible rect is narrower than the viewport rather than reading
@@ -70,7 +70,7 @@ impl Camera {
     ///
     /// ```
     /// use retroglyph_core::grid::{Pos, Rect, Size};
-    /// use retroglyph_ui::Camera;
+    /// use retroglyph_ui::camera::Camera;
     ///
     /// let mut cam = Camera::new(Rect::new(0, 0, 10, 10), Size::new(100, 100));
     /// cam.center_on(Pos::new(50, 50));
@@ -119,7 +119,7 @@ impl Camera {
     /// use retroglyph_core::color::Style;
     /// use retroglyph_core::grid::{Grid, Pos, Rect, Size};
     /// use retroglyph_core::surface::Surface;
-    /// use retroglyph_ui::Camera;
+    /// use retroglyph_ui::camera::Camera;
     ///
     /// let mut grid = Grid::new(20, 20);
     /// let mut root = Surface::new(&mut grid, Rect::new(0, 0, 20, 20), 0);
@@ -144,7 +144,7 @@ impl Camera {
     /// use retroglyph_core::color::Style;
     /// use retroglyph_core::grid::{Grid, Pos, Rect, Size};
     /// use retroglyph_core::surface::Surface;
-    /// use retroglyph_ui::Camera;
+    /// use retroglyph_ui::camera::Camera;
     ///
     /// let mut grid = Grid::new(20, 20);
     /// let mut root = Surface::new(&mut grid, Rect::new(0, 0, 20, 20), 0);
@@ -180,7 +180,7 @@ impl Camera {
     ///
     /// ```
     /// use retroglyph_core::grid::{Pos, Rect, Size};
-    /// use retroglyph_ui::Camera;
+    /// use retroglyph_ui::camera::Camera;
     ///
     /// let mut cam = Camera::new(Rect::new(5, 5, 10, 10), Size::new(100, 100));
     /// cam.center_on(Pos::new(50, 50));
@@ -222,7 +222,7 @@ impl Camera {
     ///
     /// ```
     /// use retroglyph_core::grid::{Pos, Rect, Size};
-    /// use retroglyph_ui::Camera;
+    /// use retroglyph_ui::camera::Camera;
     ///
     /// let mut cam = Camera::new(Rect::new(5, 5, 10, 10), Size::new(100, 100));
     /// cam.center_on(Pos::new(50, 50));
@@ -258,6 +258,160 @@ impl Camera {
                 (Pos::new(wx, wy), screen)
             })
         })
+    }
+
+    /// The absolute screen rect a world cell's tile footprint covers, and (in `i32`, so it can
+    /// go negative or past `u16::MAX`) that footprint's ideal, unclipped top-left -- the ongoing
+    /// reference point every screen cell inside the tile is measured from, even once the visible
+    /// rect below has been clipped down to a smaller slice of it.
+    fn tile_geometry(&self, world: Pos) -> (Rect, (i32, i32)) {
+        let zoom_w = i64::from(self.zoom.width());
+        let zoom_h = i64::from(self.zoom.height());
+        let ox = i64::from(self.viewport.left())
+            + (i64::from(world.x) - i64::from(self.origin.x)) * zoom_w;
+        let oy = i64::from(self.viewport.top())
+            + (i64::from(world.y) - i64::from(self.origin.y)) * zoom_h;
+
+        let ideal = ixy::Rect::<i64>::new(ox, oy, zoom_w, zoom_h);
+        let bounds = ixy::Rect::<i64>::new(
+            i64::from(self.viewport.left()),
+            i64::from(self.viewport.top()),
+            i64::from(self.viewport.width()),
+            i64::from(self.viewport.height()),
+        );
+        let clipped = ideal.intersect(bounds);
+
+        let left = u16::try_from(clipped.left()).unwrap_or(u16::MAX);
+        let top = u16::try_from(clipped.top()).unwrap_or(u16::MAX);
+        let width = u16::try_from(clipped.width()).unwrap_or(0);
+        let height = u16::try_from(clipped.height()).unwrap_or(0);
+
+        let ox = i32::try_from(ox).unwrap_or(if ox < 0 { i32::MIN } else { i32::MAX });
+        let oy = i32::try_from(oy).unwrap_or(if oy < 0 { i32::MIN } else { i32::MAX });
+
+        (Rect::new(left, top, width, height), (ox, oy))
+    }
+
+    /// The zoomed equivalent of [`world_to_screen`](Self::world_to_screen): the absolute screen
+    /// rect a world cell's tile footprint covers at this camera's [`zoom`](Self::zoom), clipped
+    /// to the viewport. An empty `Rect` (zero width or height) means no part of the tile is
+    /// visible, the rect equivalent of `world_to_screen`'s `None`.
+    ///
+    /// At the default 1x1 zoom this is always a single cell, matching `world_to_screen` (minus
+    /// the `world`-bounds check `world_to_screen` also applies -- `tile_rect` only clips to the
+    /// viewport, not to [`world`](Self::world), since a tile's existence in the world is the
+    /// caller's own concern, the same way [`world_to_offset`](Self::world_to_offset) leaves it).
+    ///
+    /// A tile straddling the viewport edge reports only the visible slice of its full,
+    /// ideal-sized footprint, not the full footprint or `None`, matching how
+    /// [`Camera::surface`](Self::surface) clips a multi-cell draw that's only partially on
+    /// screen instead of dropping it entirely.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::grid::{Pos, Rect, Size};
+    /// use retroglyph_ui::camera::Camera;
+    ///
+    /// let mut cam = Camera::new(Rect::new(0, 0, 10, 10), Size::new(20, 20));
+    /// cam.set_zoom(Size::new(3, 2));
+    ///
+    /// // world (0, 0) is drawn at origin (0, 0) here, so its tile covers a 3x2 block.
+    /// assert_eq!(cam.tile_rect(Pos::new(0, 0)), Rect::new(0, 0, 3, 2));
+    ///
+    /// // A tile straddling the viewport's right edge is clipped to what's actually visible.
+    /// let mut cam = Camera::new(Rect::new(0, 0, 4, 4), Size::new(20, 20));
+    /// cam.set_zoom(Size::new(3, 3));
+    /// assert_eq!(cam.tile_rect(Pos::new(1, 0)), Rect::new(3, 0, 1, 3));
+    /// ```
+    #[must_use]
+    pub fn tile_rect(&self, world: Pos) -> Rect {
+        self.tile_geometry(world).0
+    }
+
+    /// The zoomed equivalent of [`surface`](Self::surface): a view of `surface` scoped to one
+    /// world cell's tile footprint at this camera's [`zoom`](Self::zoom), or `None` if none of
+    /// that footprint is visible.
+    ///
+    /// The returned surface's own coordinate space is tile-local: `(0, 0)` is the tile's own
+    /// top-left corner, and `put`/`print`/the rest of `Surface`'s drawing methods take positions
+    /// in `0..zoom.width()` by `0..zoom.height()`, the same way a small standalone `Surface`
+    /// would for a `zoom.width() x zoom.height()` sprite. A tile straddling the viewport edge is
+    /// still clipped automatically: only the on-screen slice of it accepts writes, the same
+    /// clip-and-forget guarantee [`Camera::surface`](Self::surface) already gives a 1x1 world
+    /// cell.
+    ///
+    /// This is the piece `TileCamera`-shaped callers otherwise hand-roll: a tile range plus a
+    /// per-cell offset, with projection and clipping left to every call site. Calling this once
+    /// per visible world cell (for example every `(world, _)` pair from [`cells`](Self::cells))
+    /// replaces that by-hand math with one drawable region per tile.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Pos, Rect, Size};
+    /// use retroglyph_core::surface::Surface;
+    /// use retroglyph_ui::camera::Camera;
+    ///
+    /// let mut grid = Grid::new(10, 10);
+    /// let mut root = Surface::new(&mut grid, Rect::new(0, 0, 10, 10), 0);
+    ///
+    /// let mut cam = Camera::new(Rect::new(0, 0, 10, 10), Size::new(20, 20));
+    /// cam.set_zoom(Size::new(3, 2));
+    ///
+    /// // world (1, 0)'s tile covers screen cells (3, 0)..(6, 2); draw distinct glyphs at two
+    /// // corners of it in tile-local coordinates.
+    /// let mut tile = cam.tile_surface(Pos::new(1, 0), &mut root).expect("tile is visible");
+    /// tile.put(Pos::new(0, 0), '[', Style::default());
+    /// tile.put(Pos::new(2, 1), ']', Style::default());
+    ///
+    /// assert_eq!(grid[Pos::new(3, 0)].glyph(), '[');
+    /// assert_eq!(grid[Pos::new(5, 1)].glyph(), ']');
+    /// ```
+    ///
+    /// A tile straddling the viewport edge only accepts writes to its visible slice; the rest is
+    /// silently dropped, like any other out-of-clip `Surface` write.
+    ///
+    /// ```
+    /// use retroglyph_core::color::Style;
+    /// use retroglyph_core::grid::{Grid, Pos, Rect, Size};
+    /// use retroglyph_core::surface::Surface;
+    /// use retroglyph_ui::camera::Camera;
+    ///
+    /// let mut grid = Grid::new(10, 10);
+    /// let mut cam = Camera::new(Rect::new(0, 0, 4, 4), Size::new(20, 20));
+    /// cam.set_zoom(Size::new(3, 3));
+    ///
+    /// // This tile's ideal footprint is (3, 0, 3, 3); only its leftmost column (3, 0)..(4, 3)
+    /// // is inside the 4-wide viewport.
+    /// {
+    ///     let mut root = Surface::new(&mut grid, Rect::new(0, 0, 10, 10), 0);
+    ///     let mut tile = cam.tile_surface(Pos::new(1, 0), &mut root).expect("tile is visible");
+    ///     tile.put(Pos::new(0, 0), 'L', Style::default()); // the tile's own visible column.
+    ///     tile.put(Pos::new(2, 0), 'R', Style::default()); // clipped off past the viewport edge.
+    /// }
+    ///
+    /// assert_eq!(grid[Pos::new(3, 0)].glyph(), 'L');
+    /// assert_eq!(grid[Pos::new(5, 0)].glyph(), ' ');
+    ///
+    /// // A tile entirely outside the viewport has nothing visible to draw into.
+    /// let mut root = Surface::new(&mut grid, Rect::new(0, 0, 10, 10), 0);
+    /// assert!(cam.tile_surface(Pos::new(10, 10), &mut root).is_none());
+    /// ```
+    #[must_use]
+    pub fn tile_surface<'a>(
+        &self,
+        world: Pos,
+        surface: &'a mut Surface<'_>,
+    ) -> Option<Surface<'a>> {
+        let (area, (ox, oy)) = self.tile_geometry(world);
+        if area.is_empty() {
+            return None;
+        }
+        let origin_x = i32::from(area.left()).saturating_sub(ox);
+        let origin_y = i32::from(area.top()).saturating_sub(oy);
+        Some(surface.clip_translate(area, (origin_x, origin_y)))
     }
 }
 
@@ -520,5 +674,97 @@ mod tests {
 
         assert_eq!(grid[Pos::new(0, 0)].glyph(), '@');
         assert_eq!(grid[Pos::new(10, 10)].glyph(), ' ');
+    }
+
+    #[test]
+    fn tile_rect_matches_world_to_screen_at_the_default_1x1_zoom() {
+        let mut c = cam();
+        c.center_on(Pos::new(50, 50));
+        assert_eq!(c.tile_rect(Pos::new(50, 50)), Rect::new(5, 5, 1, 1));
+        assert_eq!(c.tile_rect(Pos::new(44, 50)), Rect::new(0, 0, 0, 0));
+    }
+
+    #[test]
+    fn tile_rect_covers_a_zoom_sized_block() {
+        let mut c = Camera::new(Rect::new(0, 0, 10, 10), Size::new(20, 20));
+        c.set_zoom(Size::new(3, 2));
+        assert_eq!(c.tile_rect(Pos::new(0, 0)), Rect::new(0, 0, 3, 2));
+        assert_eq!(c.tile_rect(Pos::new(1, 0)), Rect::new(3, 0, 3, 2));
+    }
+
+    #[test]
+    fn tile_rect_clips_a_tile_straddling_the_viewport_edge() {
+        let mut c = Camera::new(Rect::new(0, 0, 4, 4), Size::new(20, 20));
+        c.set_zoom(Size::new(3, 3));
+        // Ideal footprint (3, 0, 3, 3); only one column is inside the 4-wide viewport.
+        assert_eq!(c.tile_rect(Pos::new(1, 0)), Rect::new(3, 0, 1, 3));
+    }
+
+    #[test]
+    fn tile_rect_is_empty_for_a_tile_entirely_off_viewport() {
+        let c = Camera::new(Rect::new(0, 0, 4, 4), Size::new(20, 20));
+        assert_eq!(c.tile_rect(Pos::new(10, 10)), Rect::new(0, 0, 0, 0));
+    }
+
+    #[test]
+    fn set_zoom_clamps_a_zero_axis_to_one() {
+        let mut c = cam();
+        c.set_zoom(Size::new(0, 0));
+        assert_eq!(c.zoom(), Size::new(1, 1));
+    }
+
+    #[test]
+    fn tile_surface_draws_within_a_single_tile_footprint() {
+        use retroglyph_core::color::Style;
+        use retroglyph_core::grid::Grid;
+
+        let mut grid = Grid::new(10, 10);
+        let mut root = Surface::new(&mut grid, Rect::new(0, 0, 10, 10), 0);
+
+        let mut c = Camera::new(Rect::new(0, 0, 10, 10), Size::new(20, 20));
+        c.set_zoom(Size::new(3, 2));
+
+        let mut tile = c.tile_surface(Pos::new(1, 0), &mut root).expect("visible");
+        tile.put(Pos::new(0, 0), '[', Style::default());
+        tile.put(Pos::new(2, 1), ']', Style::default());
+        // Outside the tile's own 3x2 footprint: dropped, not drawn into the next tile over.
+        tile.put(Pos::new(3, 0), 'X', Style::default());
+
+        assert_eq!(grid[Pos::new(3, 0)].glyph(), '[');
+        assert_eq!(grid[Pos::new(5, 1)].glyph(), ']');
+        assert_eq!(grid[Pos::new(6, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    fn tile_surface_clips_a_tile_straddling_the_viewport_edge() {
+        use retroglyph_core::color::Style;
+        use retroglyph_core::grid::Grid;
+
+        let mut grid = Grid::new(10, 10);
+        let mut c = Camera::new(Rect::new(0, 0, 4, 4), Size::new(20, 20));
+        c.set_zoom(Size::new(3, 3));
+
+        {
+            let mut root = Surface::new(&mut grid, Rect::new(0, 0, 10, 10), 0);
+            let mut tile = c.tile_surface(Pos::new(1, 0), &mut root).expect("visible");
+            // Tile-local (0, 0) is the tile's own leftmost column, the only part on screen.
+            tile.put(Pos::new(0, 0), 'L', Style::default());
+            // Tile-local (2, 0) falls past the viewport's right edge: dropped.
+            tile.put(Pos::new(2, 0), 'R', Style::default());
+        }
+
+        assert_eq!(grid[Pos::new(3, 0)].glyph(), 'L');
+        assert_eq!(grid[Pos::new(5, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    fn tile_surface_is_none_for_a_tile_entirely_off_viewport() {
+        use retroglyph_core::grid::Grid;
+
+        let mut grid = Grid::new(10, 10);
+        let mut root = Surface::new(&mut grid, Rect::new(0, 0, 10, 10), 0);
+        let c = Camera::new(Rect::new(0, 0, 4, 4), Size::new(20, 20));
+
+        assert!(c.tile_surface(Pos::new(10, 10), &mut root).is_none());
     }
 }

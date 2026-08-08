@@ -24,7 +24,7 @@ use retroglyph_core::backend::Output;
 use retroglyph_core::color::{Color, Style};
 use retroglyph_core::grid::Pos;
 use retroglyph_core::tile::Tile;
-use retroglyph_software::SoftwareBackendBuilder;
+use retroglyph_software::config::SoftwareBackendBuilder;
 use retroglyph_window::font::unscii16;
 
 #[cfg(feature = "tilesets")]
@@ -40,11 +40,7 @@ fn glyph_frame(cols: u16, rows: u16) -> Vec<(u8, Pos, Tile)> {
     for y in 0..rows {
         for x in 0..cols {
             let glyph = glyphs[rng.usize(0..glyphs.len())];
-            let style = Style::new().fg(Color::Rgb {
-                r: rng.u8(..),
-                g: rng.u8(..),
-                b: rng.u8(..),
-            });
+            let style = Style::new().fg(Color::rgb(rng.u8(..), rng.u8(..), rng.u8(..)));
             out.push((0, Pos::new(x, y), Tile::new(glyph, style)));
         }
     }

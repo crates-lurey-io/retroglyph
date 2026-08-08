@@ -34,7 +34,7 @@ use retroglyph_core::backend::Output;
 use retroglyph_core::color::{Color, Style};
 use retroglyph_core::grid::Pos;
 use retroglyph_core::tile::Tile;
-use retroglyph_software::SoftwareBackendBuilder;
+use retroglyph_software::config::SoftwareBackendBuilder;
 use retroglyph_window::font::unscii16;
 use std::cell::RefCell;
 
@@ -67,12 +67,8 @@ fn to_content(frame: &[(u8, Pos, Tile)]) -> impl Iterator<Item = DrawCell<'_>> {
         .map(|(layer, pos, tile)| DrawCell::on_layer(*layer, *pos, tile))
 }
 
-const BASE: Color = Color::Rgb {
-    r: 20,
-    g: 20,
-    b: 20,
-};
-const CHANGED: Color = Color::Rgb { r: 200, g: 0, b: 0 };
+const BASE: Color = Color::rgb(20, 20, 20);
+const CHANGED: Color = Color::rgb(200, 0, 0);
 
 /// Registers `no_change` / `one_cell_changed` / `all_changed` cases for one
 /// grid size, benchmarking `draw_layers` alone (isolating diff cost) and

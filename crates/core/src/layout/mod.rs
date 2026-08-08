@@ -9,9 +9,9 @@
 //! [`TextLayout::measure`](crate::layout::TextLayout::measure). [`wrap`] exposes that same word-wrap pass standalone, for callers
 //! that need the broken-apart [`crate::text::Line`]s rather than a rendered surface.
 //!
-//! [`TextLayout`](crate::layout::TextLayout) and [`wrap`] are only available when the `egc` feature is enabled (requires
-//! `alloc`): both call into `unicode-segmentation`/`unicode-width` directly, with no non-`egc`
-//! fallback path.
+//! [`TextLayout`](crate::layout::TextLayout), [`wrap`], and [`wrap_str`] are only available when the `egc` feature is
+//! enabled (requires `alloc`): all three call into `unicode-segmentation`/`unicode-width`
+//! directly, with no non-`egc` fallback path.
 
 mod align;
 #[cfg(feature = "egc")]
@@ -23,4 +23,4 @@ pub use align::{HAlign, VAlign};
 #[cfg(feature = "egc")]
 pub use text_layout::TextLayout;
 #[cfg(feature = "egc")]
-pub use word_wrap::wrap;
+pub use word_wrap::{wrap, wrap_str};

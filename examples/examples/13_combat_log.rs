@@ -39,7 +39,11 @@ use retroglyph_core::surface::Surface;
 use retroglyph_core::terminal::Terminal;
 use retroglyph_core::text::Line;
 use retroglyph_examples::Example;
-use retroglyph_ui::{Interaction, Log, Modal, ScrollState, Scrollbar, Sense, StatBar, Widget};
+use retroglyph_ui::interact::{Interaction, Sense};
+
+use retroglyph_ui::state::ScrollState;
+
+use retroglyph_ui::widget::{Log, Modal, Scrollbar, StatBar, Widget};
 
 const PLAYER_MAX_HP: u32 = 30;
 const ENEMY_MAX_HP: u32 = 40;

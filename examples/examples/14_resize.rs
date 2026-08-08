@@ -39,7 +39,9 @@ use retroglyph_core::color::{AnsiColor, Color, Style};
 use retroglyph_core::event::{Event, KeyCode};
 use retroglyph_core::terminal::Terminal;
 use retroglyph_examples::Example;
-use retroglyph_ui::{Align, draw_clipped};
+use retroglyph_ui::align::Align;
+
+use retroglyph_ui::text::draw_clipped;
 
 /// State for the resize example (none needed: every frame is drawn fresh from `term.area()`).
 #[derive(Default)]

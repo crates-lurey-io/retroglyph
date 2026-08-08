@@ -26,7 +26,7 @@ use retroglyph_core::backend::Output;
 use retroglyph_core::color::{AnsiColor, Color, Style};
 use retroglyph_core::grid::Pos;
 use retroglyph_core::tile::Tile;
-use retroglyph_software::SoftwareBackendBuilder;
+use retroglyph_software::config::SoftwareBackendBuilder;
 use retroglyph_window::font::unscii16;
 
 const GRID: (u16, u16) = (80, 24);
@@ -53,14 +53,7 @@ fn resolve_color(c: &mut Criterion) {
 
     let cases: &[(&str, Color)] = &[
         ("default", Color::Default),
-        (
-            "rgb",
-            Color::Rgb {
-                r: 12,
-                g: 200,
-                b: 44,
-            },
-        ),
+        ("rgb", Color::rgb(12, 200, 44)),
         ("ansi", Color::Ansi(AnsiColor::BrightGreen)),
         ("indexed", Color::Indexed(200)),
     ];

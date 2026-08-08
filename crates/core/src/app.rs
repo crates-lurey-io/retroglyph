@@ -48,7 +48,7 @@ pub enum Flow {
     /// previous frame on screen.
     ///
     /// For turn-based apps that only need to redraw in response to player input, not on every
-    /// tick of the driver's loop. Returning `Idle` while a `retroglyph_ui::Tween`- or
+    /// tick of the driver's loop. Returning `Idle` while a `retroglyph_ui::animate::Tween`- or
     /// [`FrameClock`](crate::frames::FrameClock)-driven animation is still in flight is an
     /// app bug, not a valid use: an in-progress animation has something new to show every frame,
     /// which is exactly what `Idle` tells the driver isn't true.
@@ -86,6 +86,21 @@ pub struct Frame {
 /// }
 /// ```
 pub trait App<B: Backend> {
+    /// Runs once, before the first [`update`](Self::update) call, with the first live `term` for
+    /// whichever backend is actually running.
+    ///
+    /// The hook for anything whose initial state depends on the real starting grid size
+    /// (`term.backend().size()`), which varies by backend: crossterm reports the actual terminal
+    /// size, a windowed backend reports whatever grid it was configured with. Every driver in
+    /// this crate ([`run_on_with`](crate::app::run_on_with), [`TestHarness::step`](crate::testing::TestHarness::step),
+    /// `retroglyph-recorder`'s `replay_live`) and `retroglyph-window`'s windowed driver call this
+    /// exactly once, before the first `update`.
+    ///
+    /// Default: does nothing. An app with no backend-dependent startup state never needs to
+    /// override this; one that does can build its state here instead of deferring construction
+    /// behind an `Option<State>` field lazily initialized on the first `update` call.
+    fn init(&mut self, _term: &mut Terminal<B>) {}
+
     /// Advance and render one frame.
     ///
     /// Draw into `term`, read input via `term`, and return [`Flow::Exit`](crate::app::Flow::Exit) to stop the loop.
@@ -144,7 +159,7 @@ impl RunOptions {
     /// Options for a continuously-rendering, [`target_fps`](Self::target_fps)-paced loop.
     ///
     /// [`event_driven`](Self::event_driven) is `false`: [`Flow::Idle`](crate::app::Flow::Idle) only skips `present`, it
-    /// never blocks. Use this for apps that drive a `retroglyph_ui::Tween`/
+    /// never blocks. Use this for apps that drive a `retroglyph_ui::animate::Tween`/
     /// [`FrameClock`](crate::frames::FrameClock) from [`Frame::delta`](crate::app::Frame::delta) and need `update`
     /// called every tick regardless of input.
     ///
@@ -264,6 +279,7 @@ where
     B: Backend,
     A: App<B>,
 {
+    app.init(&mut term);
     let mut clock = options.target_fps().map(crate::frames::FrameClock::new);
     let mut frame_count = 0u64;
     let mut last = std::time::Instant::now();
@@ -525,6 +541,50 @@ mod tests {
         // Runs until the queued key is observed. Reaching the next line proves
         // the loop terminated on Flow::Exit rather than spinning forever.
         run_on(term, app).expect("run_on");
+    }
+
+    /// Records the backend size [`App::init`](crate::app::App::init) saw and how many times it
+    /// ran, plus whether `update` had already run by the time `init` fired -- enough to prove
+    /// `init` runs exactly once, before the first `update`, with a live `term` already sized.
+    struct RecordsInit<'a> {
+        recorded_size: &'a mut Option<crate::grid::Size>,
+        init_calls: &'a mut u32,
+        update_ran_before_init: &'a mut bool,
+    }
+
+    impl App<Headless> for RecordsInit<'_> {
+        fn init(&mut self, term: &mut Terminal<Headless>) {
+            *self.init_calls += 1;
+            *self.recorded_size = Some(term.size());
+        }
+
+        fn update(&mut self, _term: &mut Terminal<Headless>, _frame: &Frame) -> Flow {
+            if *self.init_calls == 0 {
+                *self.update_ran_before_init = true;
+            }
+            Flow::Exit
+        }
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn run_on_calls_init_once_before_the_first_update_with_the_real_size() {
+        let mut recorded_size = None;
+        let mut init_calls = 0;
+        let mut update_ran_before_init = false;
+        let term = Terminal::new(Headless::new(9, 5));
+        run_on(
+            term,
+            RecordsInit {
+                recorded_size: &mut recorded_size,
+                init_calls: &mut init_calls,
+                update_ran_before_init: &mut update_ran_before_init,
+            },
+        )
+        .expect("run_on");
+        assert_eq!(recorded_size, Some(crate::grid::Size::new(9, 5)));
+        assert_eq!(init_calls, 1);
+        assert!(!update_ran_before_init);
     }
 
     /// An app that never draws and always returns `Idle` except on the last frame: proves

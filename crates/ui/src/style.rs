@@ -3,6 +3,12 @@
 //! Renders content into a standalone [`Grid`], independent of any
 //! [`Backend`](retroglyph_core::backend::Backend)/[`Terminal`](retroglyph_core::terminal::Terminal).
 //!
+//! For a box drawn straight into a [`Surface`](crate::Surface) you already own -- with titles,
+//! `BorderType` glyph sets, and theming -- use [`Panel`](crate::widget::Panel) instead. Reach
+//! for `BoxStyle` when composing a box outside a frame, laying boxes out with
+//! [`join_h`](crate::block::join_h)/[`join_v`](crate::block::join_v), or needing `margin` (space
+//! outside the border, which `Panel` has no concept of).
+//!
 //! `BoxStyle` does not word-wrap: it lays out already-broken lines (only
 //! `'\n'` is treated specially).
 //!
@@ -115,12 +121,15 @@ impl Sides {
 /// Margin cells are left empty (transparent, per [`Grid::new`]'s default
 /// tiles), matching CSS margin being outside the box's own background.
 ///
+/// See [`Panel`](crate::widget::Panel) for drawing a bordered, titled box directly into a
+/// [`Surface`](crate::Surface) instead.
+///
 /// # Examples
 ///
 /// ```
 /// use retroglyph_core::color::Style;
 /// use retroglyph_core::grid::Pos;
-/// use retroglyph_ui::{BoxStyle, Sides};
+/// use retroglyph_ui::style::{BoxStyle, Sides};
 ///
 /// let grid = BoxStyle::new(Style::new())
 ///     .border(true)

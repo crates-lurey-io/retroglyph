@@ -21,10 +21,12 @@
 //! wrap; [`Panel`] reports its border-plus-padding chrome height, since it
 //! owns no content of its own to measure.
 use retroglyph_core::app::Frame;
+use retroglyph_core::grid::Size;
 
-use crate::Response;
-use crate::Sense;
 use crate::Surface;
+use crate::interact::Density;
+use crate::interact::Response;
+use crate::interact::Sense;
 
 mod bar;
 mod border_type;
@@ -35,6 +37,7 @@ mod highlight_spacing;
 mod list;
 mod list_direction;
 mod log;
+mod menu;
 mod meter;
 mod modal;
 mod panel;
@@ -59,6 +62,7 @@ pub use highlight_spacing::HighlightSpacing;
 pub use list::List;
 pub use list_direction::ListDirection;
 pub use log::Log;
+pub use menu::{Marker, Menu, MenuRow};
 pub use meter::Meter;
 pub use modal::Modal;
 pub use panel::{Panel, PanelTitle, TitlePosition};
@@ -82,7 +86,8 @@ pub use text_input::TextInput;
 /// ```
 /// use retroglyph_core::color::Style;
 /// use retroglyph_core::grid::{Grid, Rect};
-/// use retroglyph_ui::{Surface, Widget};
+/// use retroglyph_ui::widget::Widget;
+/// use retroglyph_ui::Surface;
 ///
 /// struct Marker(char);
 ///
@@ -111,14 +116,15 @@ pub trait Widget {
 
 /// Like [`Widget`], but for widgets that read (and may update) externally
 /// owned state (a selection index, a scroll offset) that outlives a
-/// single render call. See [`crate::ListState`].
+/// single render call. See [`crate::state::ListState`].
 ///
 /// # Examples
 ///
 /// ```
 /// use retroglyph_core::color::Style;
 /// use retroglyph_core::grid::{Grid, Rect};
-/// use retroglyph_ui::{Surface, StatefulWidget};
+/// use retroglyph_ui::widget::StatefulWidget;
+/// use retroglyph_ui::Surface;
 ///
 /// struct Counter;
 ///
@@ -161,7 +167,7 @@ pub trait StatefulWidget {
 /// # Examples
 ///
 /// ```
-/// use retroglyph_ui::Measure;
+/// use retroglyph_ui::widget::Measure;
 ///
 /// struct FixedHeight(u16);
 ///
@@ -179,9 +185,49 @@ pub trait Measure {
     fn height_for(&self, width: u16) -> u16;
 }
 
+/// A widget that can report the smallest size its content and [`Density`] allow, before ever
+/// being rendered.
+///
+/// This is a different question from [`Measure::height_for`]: `height_for` answers "how tall are
+/// you, given this width" (content wrapped into a fixed width); `min_size` answers "how small
+/// can you be at all" (a floor driven by both content and the [`Density`] a caller is targeting).
+/// Conflating the two into one trait/method would force every `Measure` impl to also take a
+/// `Density` it doesn't need, and every `MinSize` impl to accept a `width` it can't use to answer
+/// "how small can you get". Kept separate on purpose; a widget can implement either, both, or
+/// neither.
+///
+/// Interactive widgets ([`Button`], [`Tabs`], [`Scrollbar`], [`TextInput`]) are the intended
+/// implementors: [`Density::min_target_size`] exists specifically so a caller sizing a
+/// clickable/tappable control doesn't have to invent its own touch-target floor, and `min_size`
+/// is how a widget applies that floor to its own content.
+///
+/// # Examples
+///
+/// ```
+/// use retroglyph_core::grid::Size;
+/// use retroglyph_ui::interact::Density;
+/// use retroglyph_ui::widget::MinSize;
+///
+/// struct FixedSize(Size);
+///
+/// impl MinSize for FixedSize {
+///     fn min_size(&self, density: Density) -> Size {
+///         self.0.max(density.min_target_size())
+///     }
+/// }
+///
+/// let small = FixedSize(Size::new(1, 1));
+/// assert_eq!(small.min_size(Density::Mouse), Density::Mouse.min_target_size());
+/// ```
+pub trait MinSize {
+    /// The smallest size, in cells, this widget can be drawn at without clipping its content or
+    /// falling below `density`'s minimum interactive target size.
+    fn min_size(&self, density: Density) -> Size;
+}
+
 /// Like [`StatefulWidget`], but for widgets whose state evolves with wall-clock time.
 ///
-/// Covers state like [`crate::ScrollState`]'s momentum/rubber-band physics or a
+/// Covers state like [`crate::state::ScrollState`]'s momentum/rubber-band physics or a
 /// [`Tween`](crate::animate::Tween)-driven transition, which advance on their own rather than
 /// only in response to input.
 ///
@@ -191,14 +237,14 @@ pub trait Measure {
 /// enforces that call happening before `render` rather than after it: the two orders differ by
 /// one frame of animation, silently. `AnimatedWidget` closes that gap with a single call that both
 /// advances and draws, so the ordering question doesn't arise. See [`Scrollbar`]'s impl for a
-/// worked example: it ticks [`crate::ScrollState`]'s physics forward by `frame.delta`, then draws
+/// worked example: it ticks [`crate::state::ScrollState`]'s physics forward by `frame.delta`, then draws
 /// the thumb at the resulting offset, in one call.
 ///
 /// A sibling of [`StatefulWidget`], not a replacement: a widget with no time-based state (a
 /// selection index that only moves on a keypress, say) has no use for `frame` and should keep
 /// implementing [`StatefulWidget`] instead. Nothing stops a widget from implementing both, the way
 /// [`Scrollbar`] implements [`Widget`] (a plain, offset-at-a-fixed-value track+thumb) alongside
-/// this trait (an animated one driven by [`crate::ScrollState`]).
+/// this trait (an animated one driven by [`crate::state::ScrollState`]).
 ///
 /// # Examples
 ///
@@ -206,7 +252,8 @@ pub trait Measure {
 /// use core::time::Duration;
 /// use retroglyph_core::app::Frame;
 /// use retroglyph_core::grid::{Grid, Rect};
-/// use retroglyph_ui::{AnimatedWidget, Surface};
+/// use retroglyph_ui::widget::AnimatedWidget;
+/// use retroglyph_ui::Surface;
 ///
 /// struct Blinker;
 ///
@@ -229,7 +276,7 @@ pub trait Measure {
 /// ```
 pub trait AnimatedWidget {
     /// The externally owned, time-evolving state this widget reads and/or updates while
-    /// rendering, e.g. [`crate::ScrollState`].
+    /// rendering, e.g. [`crate::state::ScrollState`].
     type State;
 
     /// Advances `state` by `frame.delta`, then draws this widget into `surface.area()`, both in
@@ -244,18 +291,18 @@ pub trait AnimatedWidget {
 /// A composite widget like [`Button`], [`Scrollbar`], [`List`], or [`Tabs`] needs to know what
 /// happened to it this frame (hovered, pressed, clicked, dragged) to pick its style and resolve
 /// its own hit-testing, but never calls
-/// [`Interaction::interact`](crate::Interaction::interact) itself: doing so would let it register
+/// [`Interaction::interact`](crate::interact::Interaction::interact) itself: doing so would let it register
 /// the wrong rect, or let a call site register it with a [`Sense`] its presentation doesn't
 /// match (a click handler drawn without ever showing a hover state, say). [`sense`](Self::sense)
 /// fixes what the widget needs so a call site can't get that pairing wrong, and
 /// [`render`](Self::render) takes the resulting [`Response`] as a plain argument rather than
 /// calling `interact` itself: the widget never receives an
-/// [`Interaction`](crate::Interaction), and has no `Id` type parameter, so it can't call
+/// [`Interaction`](crate::interact::Interaction), and has no `Id` type parameter, so it can't call
 /// `interact` with the wrong rect because it has nothing to call `interact` on.
 ///
 /// `type State` covers widgets with no state ([`Button`], [`Tabs`]: `()`), a scroll position
-/// ([`Scrollbar`]: [`ScrollState`](crate::ScrollState)), or a selection/scroll index ([`List`]:
-/// [`ListState`](crate::ListState)), the same [`Widget`]/[`StatefulWidget`] split applied to
+/// ([`Scrollbar`]: [`ScrollState`](crate::state::ScrollState)), or a selection/scroll index ([`List`]:
+/// [`ListState`](crate::state::ListState)), the same [`Widget`]/[`StatefulWidget`] split applied to
 /// interactive widgets rather than a separate `InteractiveStatefulWidget` trait.
 ///
 /// Has no generic method, so `dyn InteractiveWidget<Id, State = ()>` is object-safe,
@@ -267,7 +314,9 @@ pub trait AnimatedWidget {
 /// ```
 /// use retroglyph_core::color::Style;
 /// use retroglyph_core::grid::{Grid, Rect};
-/// use retroglyph_ui::{InteractiveWidget, Response, Sense, Surface};
+/// use retroglyph_ui::interact::{Response, Sense};
+/// use retroglyph_ui::widget::InteractiveWidget;
+/// use retroglyph_ui::Surface;
 ///
 /// struct Marker(char);
 ///
@@ -294,7 +343,7 @@ pub trait InteractiveWidget<Id> {
     fn sense(&self) -> Sense;
 
     /// Draw into `surface`, styled by `response`, which the caller already resolved (via
-    /// [`Interaction::interact`](crate::Interaction::interact)) for `surface.area()` and
+    /// [`Interaction::interact`](crate::interact::Interaction::interact)) for `surface.area()` and
     /// [`sense`](Self::sense).
     fn render(&self, surface: &mut Surface<'_>, state: &mut Self::State, response: Response<Id>);
 }

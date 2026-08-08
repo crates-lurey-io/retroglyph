@@ -7,13 +7,15 @@ use retroglyph_core::text::truncate_measured;
 
 use super::{BorderType, BoxBorder, Measure, Widget};
 use crate::Surface;
+use crate::align::Align;
 use crate::draw::fill_rect;
 use crate::style::Sides;
 use crate::text::draw_clipped;
-use crate::{Align, Theme};
+use crate::theme::Theme;
 
 /// Which border edge a [`PanelTitle`] is drawn into.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum TitlePosition {
     /// The top border row, the same edge [`Panel::title`]'s sugar title is drawn into.
     #[default]
@@ -48,11 +50,18 @@ pub struct PanelTitle<'a> {
 /// than via `title_align`), use [`Panel::add_title`], which is fully additive: it never disturbs
 /// `title`/`title_align`, and multiple `add_title` calls stack rather than overwrite each other.
 ///
+/// `Panel` draws in place into a [`Surface`] the caller already owns and has no concept of
+/// margin. For a standalone box rendered into its own `Grid` -- composed outside a frame, laid
+/// out with `join_h`/`join_v`, or needing margin (space outside the border) -- see
+/// [`BoxStyle`](crate::style::BoxStyle) instead.
+///
 /// # Examples
 ///
 /// ```
 /// use retroglyph_core::grid::{Grid, Rect};
-/// use retroglyph_ui::{Align, Panel, Surface, TitlePosition, Widget};
+/// use retroglyph_ui::align::Align;
+/// use retroglyph_ui::widget::{Panel, TitlePosition, Widget};
+/// use retroglyph_ui::Surface;
 ///
 /// let area = Rect::new(0, 0, 20, 5);
 /// let mut grid = Grid::new(20, 5);
@@ -175,7 +184,8 @@ impl<'a> Panel<'a> {
     ///
     /// ```
     /// use retroglyph_core::grid::Rect;
-    /// use retroglyph_ui::{Panel, Sides};
+    /// use retroglyph_ui::style::Sides;
+    /// use retroglyph_ui::widget::Panel;
     ///
     /// let panel = Panel::new().padding(Sides::symmetric(0, 1));
     /// let area = Rect::new(0, 0, 20, 5);
@@ -327,7 +337,8 @@ impl TitleCursor {
         match align {
             Align::Left => self.lo = title_x + padded,
             Align::Right => self.hi = title_x,
-            Align::Center => self.hi = self.lo,
+            // `Align::Center`, and any future variant, centers by collapsing the title span.
+            _ => self.hi = self.lo,
         }
     }
 }

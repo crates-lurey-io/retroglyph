@@ -3,7 +3,7 @@ use retroglyph_core::color::{Color, Style};
 
 use super::{BorderType, Widget};
 use crate::Surface;
-use crate::Theme;
+use crate::theme::Theme;
 
 /// A single-line box border drawn around a [`Rect`](retroglyph_core::grid::Rect).
 ///
@@ -15,7 +15,8 @@ use crate::Theme;
 ///
 /// ```
 /// use retroglyph_core::grid::{Grid, Rect};
-/// use retroglyph_ui::{BoxBorder, Surface, Widget};
+/// use retroglyph_ui::widget::{BoxBorder, Widget};
+/// use retroglyph_ui::Surface;
 ///
 /// let area = Rect::new(0, 0, 10, 4);
 /// let mut grid = Grid::new(10, 4);

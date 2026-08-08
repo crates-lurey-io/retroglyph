@@ -139,7 +139,7 @@ impl TestHarness {
     /// [`App::update`](crate::app::App::update), replacing [`STEP_DELTA`] (builder style).
     ///
     /// For an app under test whose animation timing is calibrated against a different fixed
-    /// delta than [`STEP_DELTA`]'s 16ms (a `retroglyph_ui::Tween`/[`FrameClock`](crate::frames::FrameClock)
+    /// delta than [`STEP_DELTA`]'s 16ms (a `retroglyph_ui::animate::Tween`/[`FrameClock`](crate::frames::FrameClock)
     /// tuned in real seconds, for example): matching that calibration here keeps however many
     /// `step` calls an animation takes to settle the same as what tuned it, rather than retuning
     /// the animation (or the test's assertions) around the harness's own default instead.
@@ -218,7 +218,13 @@ impl TestHarness {
     ///
     /// Draining only one queued event per call, rather than the whole queue at once, is what
     /// reproduces the two-frame rule described on [`TestHarness`](crate::testing::TestHarness) instead of masking it.
+    ///
+    /// Calls [`App::init`](crate::app::App::init) first, on frame 0 only, mirroring what every
+    /// other driver in this crate does before its own first `update`.
     pub fn step<A: App<Headless>>(&mut self, app: &mut A) -> Flow {
+        if self.frame == 0 {
+            app.init(&mut self.term);
+        }
         if let Some(event) = self.queued.pop_front() {
             self.term.backend_mut().push_event(event);
         }
@@ -494,7 +500,7 @@ mod tests {
     use crate::app::Flow;
     use crate::backend::Backend;
     use crate::color::Style;
-    use ixy::HasSize;
+    use crate::grid::HasSize;
 
     struct Clicker {
         clicks: u32,
@@ -516,6 +522,34 @@ mod tests {
             term.surface().put((0, 0), 'x', Style::default());
             Flow::Continue
         }
+    }
+
+    #[test]
+    fn step_calls_init_once_before_the_first_update() {
+        struct RecordsInit {
+            init_calls: u32,
+            updates: u32,
+        }
+        impl<B: Backend> App<B> for RecordsInit {
+            fn init(&mut self, _term: &mut Terminal<B>) {
+                self.init_calls += 1;
+            }
+            fn update(&mut self, _term: &mut Terminal<B>, _frame: &Frame) -> Flow {
+                self.updates += 1;
+                Flow::Continue
+            }
+        }
+
+        let mut harness = TestHarness::new(3, 1);
+        let mut app = RecordsInit {
+            init_calls: 0,
+            updates: 0,
+        };
+        harness.step(&mut app);
+        harness.step(&mut app);
+        harness.step(&mut app);
+        assert_eq!(app.init_calls, 1, "init must run exactly once");
+        assert_eq!(app.updates, 3);
     }
 
     #[test]

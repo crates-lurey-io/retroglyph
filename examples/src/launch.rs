@@ -13,6 +13,13 @@
 //! concrete, statically-named exported symbols, which a generic function
 //! can't produce. See [`wasm_entry!`](crate::wasm_entry) for that part.
 
+#[cfg(any(
+    feature = "crossterm",
+    feature = "software",
+    feature = "gl",
+    feature = "wgpu"
+))]
+use crate::perf_overlay::PerfOverlayApp;
 use retroglyph_core::app::Frame;
 #[cfg(any(
     feature = "crossterm",
@@ -22,21 +29,9 @@ use retroglyph_core::app::Frame;
 ))]
 use retroglyph_core::app::{App, Flow};
 use retroglyph_core::backend::Backend;
+#[cfg(feature = "crossterm")]
+use retroglyph_core::backend::Output;
 use retroglyph_core::terminal::Terminal;
-#[cfg(any(
-    feature = "crossterm",
-    feature = "software",
-    feature = "gl",
-    feature = "wgpu"
-))]
-use retroglyph_ui::PerfOverlayApp;
-#[cfg(any(
-    feature = "crossterm",
-    feature = "software",
-    feature = "gl",
-    feature = "wgpu"
-))]
-use retroglyph_ui::Widget as _;
 #[cfg(feature = "crossterm")]
 use std::rc::Rc;
 use std::time::Duration;
@@ -125,7 +120,7 @@ pub trait Example: Default + Sized + 'static {
     /// that animates over real time (rather than once per raw tick, which can
     /// fire at wildly different rates depending on the backend -- crossterm's
     /// `run_on` is an unthrottled spin loop, unlike the software
-    /// backend's vsync-paced redraw) should drive a [`Tween`](retroglyph_ui::Tween)
+    /// backend's vsync-paced redraw) should drive a [`Tween`](retroglyph_ui::animate::Tween)
     /// or [`FrameClock`](retroglyph_core::frames::FrameClock) with `frame.delta`
     /// instead of counting raw `tick` calls -- see `06_layers.rs`.
     ///
@@ -165,8 +160,9 @@ struct ExampleApp<E> {
     time_scale: f64,
 }
 
-/// Multiplier applied to every [`Frame::delta`] handed to [`Example::tick`], read once from the
-/// `RG_TIME_SCALE` environment variable. Defaults to `1.0`, i.e. real time.
+/// Multiplier applied to every [`Frame::delta`] handed to [`Example::tick`], from `--time-scale`
+/// (see [`crate::args`]) or, if that flag isn't passed, the `RG_TIME_SCALE` environment
+/// variable. Defaults to `1.0`, i.e. real time.
 ///
 /// This exists for captures, not for viewers. An example that animates over real elapsed time
 /// takes real seconds to reach its end state, and the ones that deliberately park there
@@ -192,7 +188,9 @@ struct ExampleApp<E> {
     feature = "wgpu"
 ))]
 fn time_scale() -> f64 {
-    scale_from_env(std::env::var("RG_TIME_SCALE").ok().as_deref())
+    crate::args::parsed()
+        .time_scale
+        .unwrap_or_else(|| scale_from_env(std::env::var("RG_TIME_SCALE").ok().as_deref()))
 }
 
 /// [`time_scale`]'s parsing, split out so it's testable without mutating the process environment
@@ -254,12 +252,11 @@ impl<B: Backend, E: Example> App<B> for ExampleApp<E> {
 }
 
 /// Wraps `inner` in a [`PerfOverlayApp`] configured the same way for every backend: visible per
-/// `RG_FPS` (see [`crate::fps::starts_visible`]), and cycling into a richer
-/// `retroglyph-ui`-composed [`Full`](retroglyph_ui::PerfOverlayMode::Full) mode -- a
-/// bordered panel with a frame-time sparkline, via [`retroglyph_ui::PerfOverlay`] -- on top
-/// of the built-in [`Compact`](retroglyph_ui::PerfOverlayMode::Compact) readout. One toggle
-/// key press now cycles `Off -> Compact -> Full -> Off` for every example in the gallery; see
-/// [`PerfOverlayApp::cycle_with`] for why this needs no per-example wiring.
+/// `RG_FPS` (see [`crate::fps::starts_visible`]), cycling `Off -> Compact -> Full -> Off` for
+/// every example in the gallery on one toggle key press. `Full` draws a bordered panel with a
+/// frame-time sparkline (`retroglyph_ui::widget::PerfOverlay`) on top of `Compact`'s built-in
+/// single-row readout; see [`crate::perf_overlay`] for why this lives here rather than in
+/// `retroglyph-ui` (retroglyph#1286).
 #[cfg(any(
     feature = "crossterm",
     feature = "software",
@@ -270,16 +267,7 @@ fn perf_overlay_app<E: Example>(
     inner: ExampleApp<E>,
     backend: &'static str,
 ) -> PerfOverlayApp<ExampleApp<E>> {
-    PerfOverlayApp::new(inner, backend)
-        .visible(crate::fps::starts_visible())
-        .cycle_with(
-            retroglyph_core::grid::Size::new(46, 6),
-            |stats, backend, area, surface| {
-                retroglyph_ui::PerfOverlay::new(stats)
-                    .backend(backend)
-                    .render(&mut surface.scope(area));
-            },
-        )
+    PerfOverlayApp::new(inner, backend).visible(crate::fps::starts_visible())
 }
 
 /// Adds the wasm floating toggle button on top of a [`PerfOverlayApp`]-wrapped [`ExampleApp`] --
@@ -411,7 +399,7 @@ fn run_windowed<E: Example, B: retroglyph_window::presenter_builder::PresenterBu
 #[cfg(feature = "software")]
 pub fn run_software<E: Example>() {
     run_software_with::<E>(E::configure(
-        retroglyph_software::SoftwareBackendBuilder::new()
+        retroglyph_software::config::SoftwareBackendBuilder::new()
             .grid_size(50, 25)
             .scale(2),
     ));
@@ -434,7 +422,7 @@ pub fn run_software<E: Example>() {
 /// Panics if the software backend fails to initialize, or if the event loop
 /// fails to start.
 #[cfg(feature = "software")]
-pub fn run_software_with<E: Example>(builder: retroglyph_software::SoftwareBackendBuilder) {
+pub fn run_software_with<E: Example>(builder: retroglyph_software::config::SoftwareBackendBuilder) {
     run_windowed::<E, _>(builder, "software");
 }
 
@@ -457,7 +445,7 @@ pub fn run_software_with<E: Example>(builder: retroglyph_software::SoftwareBacke
 pub fn run_gl<E: Example>() {
     run_windowed::<E, _>(
         E::configure(
-            retroglyph_gl::GlBackendBuilder::new()
+            retroglyph_gl::config::GlBackendBuilder::new()
                 .grid_size(50, 25)
                 .scale(2),
         ),
@@ -490,7 +478,7 @@ pub fn run_gl<E: Example>() {
 pub fn run_wgpu<E: Example>() {
     run_windowed::<E, _>(
         E::configure(
-            retroglyph_wgpu::WgpuBackendBuilder::new()
+            retroglyph_wgpu::config::WgpuBackendBuilder::new()
                 .grid_size(50, 25)
                 .scale(2),
         ),
@@ -501,6 +489,11 @@ pub fn run_wgpu<E: Example>() {
 // ── Crossterm backend ───────────────────────────────────────────────────────
 
 /// Runs `E` on the crossterm (real TTY) backend, blocking until it quits.
+///
+/// When `--record <path>` is passed (see [`crate::args`]), wraps the backend in a
+/// [`retroglyph_recorder::FrameRecorder`] and writes an asciicast `.cast` to `path` once `E`
+/// quits -- this is the one native, text-oriented backend `--record` covers; see that flag's own
+/// docs on [`launch`] for why the windowed backends don't get it.
 ///
 /// # Errors
 ///
@@ -519,7 +512,42 @@ pub fn run_crossterm<E: Example>() -> std::io::Result<()> {
         inner: perf_overlay_app(ExampleApp::<E>::new(), "crossterm"),
         presses,
     };
-    retroglyph_core::app::run_on(Terminal::new(filter), app)
+
+    match crate::args::parsed().record.clone() {
+        None => retroglyph_core::app::run_on(Terminal::new(filter), app),
+        Some(path) => {
+            let recorder = retroglyph_recorder::FrameRecorder::new(filter);
+            let handle = recorder.handle();
+            let size = recorder.inner().size();
+            // `run_on` takes `Terminal<B>` (and so this `FrameRecorder`) by value and never
+            // hands it back -- `handle`, taken before this call, is how the captured frames
+            // survive it. Runs to completion (propagating any error) before saving, so a
+            // recording is only written for a session that actually ran; see `save_cast` for why
+            // a save failure itself doesn't override that result.
+            let result = retroglyph_core::app::run_on(Terminal::new(recorder), app);
+            save_cast(&handle, size, &path);
+            result
+        }
+    }
+}
+
+/// Writes `handle`'s captured frames to `path` as asciicast v3, via
+/// [`retroglyph_recorder::write_cast`]. Errors are logged to stderr rather than propagated: by
+/// the time this runs, `E` has already quit (successfully or not) and the process is about to
+/// exit either way, so failing to save the recording shouldn't also turn an otherwise-successful
+/// run into a nonzero exit code.
+#[cfg(not(target_arch = "wasm32"))]
+fn save_cast(
+    handle: &retroglyph_recorder::FrameRecorderHandle,
+    size: retroglyph_core::grid::Size,
+    path: &std::path::Path,
+) {
+    let frames = handle.frames();
+    let result = std::fs::File::create(path)
+        .and_then(|mut file| retroglyph_recorder::write_cast(&mut file, size, &frames));
+    if let Err(error) = result {
+        eprintln!("--record: failed to write {}: {error}", path.display());
+    }
 }
 
 // ── Headless (stdout) fallback ──────────────────────────────────────────────
@@ -580,8 +608,8 @@ pub fn render_headless_frames<E: Example>(frames: u32) -> Vec<String> {
 ///
 /// Runs `settle_frames` plain frames first (so [`retroglyph_core::frames::FrameStats`] has real samples
 /// for a sparkline-drawing renderer to show), then one synthetic toggle-key press per frame for
-/// `toggles` more frames (`PerfOverlayApp`'s toggle key cycles `Off -> Compact -> Full -> Off`;
-/// see [`retroglyph_ui::PerfOverlayMode`]), then presents once. Returns `(width, height,
+/// `toggles` more frames (`PerfOverlayApp`'s toggle key cycles `Off -> Compact -> Full -> Off`),
+/// then presents once. Returns `(width, height,
 /// interleaved RGB bytes)`, the same shape `support::png_snapshot` PNG-encodes -- this function
 /// stays free of an `image` dependency (a dev-dependency of the `tests/` binaries, not of this
 /// library) by leaving the actual encoding to the caller.
@@ -602,7 +630,7 @@ pub fn render_perf_overlay_rgb<E: Example>(
     use retroglyph_window::presenter::Presenter;
 
     let renderer = E::configure(
-        retroglyph_software::SoftwareBackendBuilder::new()
+        retroglyph_software::config::SoftwareBackendBuilder::new()
             .grid_size(cols, rows)
             .scale(scale),
     )
@@ -667,19 +695,69 @@ pub fn render_perf_overlay_rgb<E: Example>(
 /// build`-able) with the crate's default feature set, and so
 /// `examples/src/bin/runner.rs` can offer a "Headless" backend option
 /// uniformly across examples instead of requiring each one to opt in
-/// individually. Frame count defaults to 3 and can be overridden with the
-/// `RG_HEADLESS_FRAMES` environment variable.
+/// individually. Frame count defaults to 3 and can be overridden with `--headless-frames` (see
+/// [`crate::args`]) or, if that flag isn't passed, the `RG_HEADLESS_FRAMES` environment
+/// variable.
+#[cfg(target_arch = "wasm32")]
 pub fn run_headless_stdout<E: Example>() {
-    let frames: u32 = std::env::var("RG_HEADLESS_FRAMES")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .filter(|&n| n > 0)
-        .unwrap_or(3);
-
+    let frames = headless_frame_count();
     for (i, view) in render_headless_frames::<E>(frames).into_iter().enumerate() {
         println!("--- Frame {} ---", i + 1);
         println!("{view}");
     }
+}
+
+/// Native counterpart to the `wasm32` [`run_headless_stdout`] above.
+///
+/// Adds `--record <path>` support: wraps the backend in a [`retroglyph_recorder::FrameRecorder`]
+/// and writes an asciicast `.cast` to `path` once `E` quits. A separate loop (rather than adding
+/// an optional `FrameRecorder` parameter to [`render_headless_frames`], which stays exactly as it
+/// was) since `retroglyph-recorder` is a native-only dependency (see `examples/Cargo.toml`).
+#[cfg(not(target_arch = "wasm32"))]
+pub fn run_headless_stdout<E: Example>() {
+    use retroglyph_core::backend::{Headless, Output as _};
+
+    let frames = headless_frame_count();
+
+    let Some(path) = crate::args::parsed().record.clone() else {
+        for (i, view) in render_headless_frames::<E>(frames).into_iter().enumerate() {
+            println!("--- Frame {} ---", i + 1);
+            println!("{view}");
+        }
+        return;
+    };
+
+    let backend = retroglyph_recorder::FrameRecorder::new(Headless::new(50, 25));
+    let mut term = Terminal::new(backend);
+    let mut state = E::init(&mut term);
+    for i in 0..frames {
+        let frame = Frame {
+            delta: HEADLESS_FRAME_DELTA,
+            frame: u64::from(i),
+        };
+        if !state.tick(&mut term, &frame) {
+            break;
+        }
+        term.present().ok();
+        println!("--- Frame {} ---", i + 1);
+        println!("{}", term.backend().inner().format_view());
+    }
+    let handle = term.backend().handle();
+    let size = term.backend().inner().size();
+    save_cast(&handle, size, &path);
+}
+
+/// The frame count [`run_headless_stdout`] renders, from `--headless-frames` (see
+/// [`crate::args`]) or, if that flag isn't passed, the `RG_HEADLESS_FRAMES` environment
+/// variable. Defaults to 3.
+fn headless_frame_count() -> u32 {
+    crate::args::parsed().headless_frames.unwrap_or_else(|| {
+        std::env::var("RG_HEADLESS_FRAMES")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .filter(|&n| n > 0)
+            .unwrap_or(3)
+    })
 }
 
 // ── Backend dispatch ─────────────────────────────────────────────────────────
@@ -693,6 +771,14 @@ pub fn run_headless_stdout<E: Example>() {
 
 /// Picks a backend from the crate's enabled Cargo features and runs `E` on
 /// it. Call this (and nothing else) from every example's `main`.
+///
+/// `--record <path>` (see [`crate::args`]) is honored by the crossterm and headless-stdout
+/// arms only, not this windowed (software) one: [`retroglyph_recorder::write_cast`] exports
+/// text/ANSI output, and this backend presents pixels, not `DrawCell` glyph diffs, so there is
+/// nothing meaningful for a `FrameRecorder` to capture here. Passing `--record` to a
+/// software/gl/wgpu build is silently ignored rather than an error, matching this crate's
+/// existing convention for a flag or env var a particular build doesn't apply to (see
+/// `time_scale`'s `wasm32` note for the same convention elsewhere).
 #[cfg(feature = "software")]
 pub fn launch<E: Example>() {
     run_software::<E>();

@@ -3,8 +3,8 @@
 //!
 //! # Architecture
 //!
-//! [`GlBackendBuilder`] holds configuration (fonts, grid size, integer scale) and
-//! [`build`](GlBackendBuilder::build)s a [`GlRenderer`]. The glyph source is a static
+//! [`config::GlBackendBuilder`] holds configuration (fonts, grid size, integer scale) and
+//! [`build`](config::GlBackendBuilder::build)s a [`GlRenderer`]. The glyph source is a static
 //! [`FontChain`] (a single [`BitmapFont`] is a chain of one); every font in the chain is
 //! grid-packed into one `TEXTURE_2D_ARRAY` atlas and addressed by a flat slot id (issue #367's
 //! grid-packing half, lifting the 256-layer cap). The renderer maintains
@@ -28,14 +28,13 @@
 //! ```
 //!
 //! This backend composites grid layers itself on the GPU
-//! ([`composites_layers`](retroglyph_core::backend::Output::composites_layers) returns `true`): it
+//! ([`compositing`](retroglyph_core::backend::Output::compositing) returns
+//! [`retroglyph_core::backend::Compositing::PixelLayered`]): it
 //! receives the raw layered stream from the core `Terminal` and draws each layer back-to-front, so
 //! an empty cell in a higher layer lets the layer beneath show through while an occupied cell is
 //! opaque (issue #368), matching `retroglyph-software`'s per-pixel occlusion. It requests full
-//! frames
-//! ([`needs_full_frame`](retroglyph_core::backend::Output::needs_full_frame) returns `true`) and
-//! redraws every cell of every layer each frame, so there is no orphaned-pixel problem from
-//! sub-cell glyph spill.
+//! frames (`needs_full_frame: true`) and redraws every cell of every layer each frame, so there
+//! is no orphaned-pixel problem from sub-cell glyph spill.
 //!
 //! # Platform split
 //!
@@ -92,7 +91,7 @@
 
 pub mod config;
 
-mod error;
+pub mod error;
 mod renderer;
 mod shaders;
 #[cfg(feature = "tilesets")]
@@ -124,16 +123,18 @@ mod context;
 #[path = "context_wasm.rs"]
 mod context;
 
-pub use config::{GlBackendBuilder, GlBackendError};
-pub use error::SurfaceError;
-// Re-export the font types so a consumer can build a custom atlas without a separate dependency.
+// Re-exports a dependency's own public types so a consumer can build a custom atlas without a
+// separate direct dependency on retroglyph-window (STYLE_GUIDE.md exception 3).
 pub use retroglyph_window::font::{self as font, BitmapFont, FontChain};
 
 use context::GlContext;
+use error::SurfaceError;
 use renderer::{FLAG_HAS_BG, FLAG_HAS_GLYPH, GlResources, Instance};
+use retroglyph_core::backend::Compositing;
 use retroglyph_core::backend::DrawCell;
 use retroglyph_core::backend::Output;
 use retroglyph_core::color::Color;
+use retroglyph_core::dev_only;
 use retroglyph_core::grid::HasSize;
 use retroglyph_core::grid::Size;
 use retroglyph_core::tile::Tile;
@@ -164,7 +165,7 @@ struct ReadmeDoctests;
 /// no-op cursor, so a duplicate queue here would only ever be dead. See the sub-cell offset note
 /// on [`Presenter`] for the shared rendering contract.
 ///
-/// Build one with [`GlBackendBuilder`]. Before the windowing loop calls
+/// Build one with [`config::GlBackendBuilder`]. Before the windowing loop calls
 /// [`init_surface`](Presenter::init_surface) there is no GL context; drawing updates only the
 /// CPU-side instance array, and [`present`](Presenter::present) is a no-op. Once the surface
 /// exists, `present` uploads changed cells and issues the single instanced draw call.
@@ -199,6 +200,10 @@ pub struct GlRenderer {
     /// instead of every frame. See `retroglyph_window::sprite_cache::warn_tint_needs_sprite`.
     #[cfg(feature = "tilesets")]
     warned_dropped_tint: std::collections::BTreeSet<char>,
+    /// Characters already reported as resolving to the atlas's notdef fallback rather than their
+    /// own glyph, so a redraw loop logs each one once instead of every frame. See
+    /// `retroglyph_window::diagnostics::warn_notdef_glyph`.
+    warned_notdef: std::collections::BTreeSet<char>,
     /// The current surface size in physical pixels (set by [`resize_surface`](Presenter::resize_surface)).
     surface_size: (u32, u32),
     /// GL context + resources. `None` until [`init_surface`](Presenter::init_surface).
@@ -214,7 +219,7 @@ struct Gpu {
 
 impl GlRenderer {
     /// Builds a renderer for the given glyph cache, grid size, and scale. Called by
-    /// [`GlBackendBuilder::build`].
+    /// [`config::GlBackendBuilder::build`].
     ///
     /// Glyph cells wider or taller than 255 unscaled pixels are clamped to 255 (the
     /// [`CellGeometry`] limit).
@@ -241,13 +246,15 @@ impl GlRenderer {
             warned_oversized: std::collections::BTreeSet::new(),
             #[cfg(feature = "tilesets")]
             warned_dropped_tint: std::collections::BTreeSet::new(),
+            warned_notdef: std::collections::BTreeSet::new(),
             surface_size: geometry.surface_size(cols, rows),
             gpu: None,
         }
     }
 
-    /// Attaches a decoded sprite atlas (issue #366). Called by [`GlBackendBuilder::build`] when a
-    /// tileset was registered; the GPU atlas is built later in [`build_resources`](Self::build_resources).
+    /// Attaches a decoded sprite atlas (issue #366). Called by
+    /// [`config::GlBackendBuilder::build`] when a tileset was registered; the GPU atlas is built
+    /// later in [`build_resources`](Self::build_resources).
     #[cfg(feature = "tilesets")]
     pub(crate) fn set_sprites(&mut self, set: SpriteSet) {
         self.sprite_set = Some(set);
@@ -296,6 +303,24 @@ impl GlRenderer {
         );
     }
 
+    /// Reports a character that resolved to the atlas's substituted "not defined" glyph rather
+    /// than its own shape: a legitimate cell on its own (a solid block can be drawn on purpose),
+    /// so this is the only place a caller finds out no font in the chain actually covers `ch`
+    /// (retroglyph#1292).
+    ///
+    /// Shares `retroglyph-window`'s diagnostic with the software backend so both name the same
+    /// fix. `self.glyphs.resolve` returns a flat slot with no notdef bit, so unlike the software
+    /// backend (which already has a `ResolvedGlyph` in hand from the resolve it needs anyway for
+    /// rendering) this re-resolves `ch` through [`GlyphAtlas::is_notdef`] to find out. The whole
+    /// check sits inside [`dev_only!`], so a release build pays for neither call.
+    fn warn_if_notdef_glyph(&mut self, ch: char) {
+        dev_only!({
+            if self.glyphs.is_notdef(ch) {
+                retroglyph_window::diagnostics::warn_notdef_glyph(&mut self.warned_notdef, ch);
+            }
+        });
+    }
+
     /// Total cell count for the current grid.
     fn cell_count(&self) -> usize {
         usize::from(self.cols) * usize::from(self.rows)
@@ -311,7 +336,8 @@ impl GlRenderer {
     ///
     /// # Errors
     ///
-    /// Returns [`SurfaceError::Init`] if a shader fails to compile or the program fails to link.
+    /// Returns [`error::SurfaceError::Init`] if a shader fails to compile or the program fails to
+    /// link.
     #[allow(clippy::cast_precision_loss)]
     pub(crate) fn build_resources(
         &self,
@@ -393,7 +419,7 @@ impl Output for GlRenderer {
     // through `Presenter::present`'s `SurfaceError` instead.
     type Error = core::convert::Infallible;
 
-    // No `draw` override: this backend always composites (`composites_layers` returns `true`
+    // No `draw` override: this backend always composites (`compositing` returns `PixelLayered`
     // below), so `Terminal::present` never calls single-layer `draw` and the default
     // implementation (forwards to `draw_layers`) is exactly right. See retroglyph#561; this used
     // to have its own `write_tile`-based body that wrote glyph instances only and silently never
@@ -507,6 +533,7 @@ impl Output for GlRenderer {
 
             if layer_id == 0 {
                 let slot = self.glyphs.resolve(tile.glyph());
+                self.warn_if_notdef_glyph(tile.glyph());
                 let inst = base_instance(slot, tile);
                 // Sprite dispatch is gated on `cell_art_glyph`, not the raw `tile.glyph()`: a
                 // blank layer-0 cell (`is_empty()`, e.g. an untouched grid cell) draws no art at
@@ -573,6 +600,7 @@ impl Output for GlRenderer {
             // the tile's background is `Default`) plus its glyph, unless no font in the chain can
             // draw that character at all (see `base_instance`).
             let resolved = self.glyphs.resolve(tile.glyph());
+            self.warn_if_notdef_glyph(tile.glyph());
             let glyph = resolved.unwrap_or(0);
             let has_glyph = if resolved.is_some() {
                 FLAG_HAS_GLYPH
@@ -635,16 +663,14 @@ impl Output for GlRenderer {
         Ok(())
     }
 
-    fn needs_full_frame(&self) -> bool {
-        // Composited layers plus sub-cell glyph spill mean a partial redraw could leave orphaned
-        // pixels; redraw every cell of every layer each frame.
-        true
-    }
-
-    fn composites_layers(&self) -> bool {
+    fn compositing(&self) -> Compositing {
         // Draw the raw layered stream back-to-front on the GPU (issue #368) instead of letting the
         // core flatten it, so per-layer transparency works the same as on `retroglyph-software`.
-        true
+        // Composited layers plus sub-cell glyph spill mean a partial redraw could leave orphaned
+        // pixels; redraw every cell of every layer each frame.
+        Compositing::PixelLayered {
+            needs_full_frame: true,
+        }
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
@@ -805,7 +831,8 @@ impl Drop for GlRenderer {
 #[cfg(all(test, feature = "default-font"))]
 mod compositing_tests {
     use super::{FLAG_HAS_BG, FLAG_HAS_GLYPH};
-    use crate::GlBackendBuilder;
+    use crate::config::GlBackendBuilder;
+    use retroglyph_core::backend::Compositing;
     use retroglyph_core::backend::DrawCell;
     use retroglyph_core::backend::Output;
     use retroglyph_core::color::Color;
@@ -813,7 +840,7 @@ mod compositing_tests {
     use retroglyph_core::grid::Pos;
     use retroglyph_core::tile::Tile;
 
-    const RED: Color = Color::Rgb { r: 255, g: 0, b: 0 };
+    const RED: Color = Color::rgb(255, 0, 0);
 
     #[test]
     fn draw_records_sub_cell_offset_and_flags_in_the_base_layer() {
@@ -846,7 +873,7 @@ mod compositing_tests {
             .build();
         assert!(matches!(
             result,
-            Err(crate::GlBackendError::SurfaceTooLarge)
+            Err(crate::config::GlBackendError::SurfaceTooLarge)
         ));
     }
 
@@ -870,8 +897,12 @@ mod compositing_tests {
             .grid_size(2, 1)
             .build()
             .expect("default-font builds");
-        assert!(r.composites_layers());
-        assert!(r.needs_full_frame());
+        assert_eq!(
+            r.compositing(),
+            Compositing::PixelLayered {
+                needs_full_frame: true
+            }
+        );
     }
 
     #[test]
@@ -983,7 +1014,7 @@ mod compositing_tests {
     fn draw_layers_resolves_a_span_covered_cells_default_background_at_its_own_column() {
         use retroglyph_core::grid::Grid;
 
-        const BLUE: Color = Color::Rgb { r: 0, g: 0, b: 255 };
+        const BLUE: Color = Color::rgb(0, 0, 255);
 
         let mut r = GlBackendBuilder::new()
             .grid_size(2, 1)
@@ -1100,6 +1131,69 @@ mod compositing_tests {
             "a sprite anchor's covered cell paints no background"
         );
     }
+
+    // ── Notdef diagnostic (retroglyph#1292) ─────────────────────────────────
+
+    /// The substituted solid block is a legitimate cell on its own, so nothing about the
+    /// rendered instance distinguishes it from a real one; this is the diagnostic that closes
+    /// that gap on the base layer.
+    #[test]
+    fn layer_0_reports_a_character_no_font_covers() {
+        let mut r = GlBackendBuilder::new()
+            .grid_size(1, 1)
+            .build()
+            .expect("default-font builds");
+        // Outside unscii16's CP437 repertoire.
+        let tile = Tile::new('あ', Style::new());
+        r.draw_layers(core::iter::once(DrawCell::on_layer(
+            0,
+            Pos::new(0, 0),
+            &tile,
+        )))
+        .expect("draw_layers is infallible");
+
+        assert_eq!(r.warned_notdef.contains(&'あ'), retroglyph_core::dev::DEV);
+    }
+
+    /// A character CP437 does cover must never be reported, dev build or not.
+    #[test]
+    fn layer_0_does_not_report_a_covered_character() {
+        let mut r = GlBackendBuilder::new()
+            .grid_size(1, 1)
+            .build()
+            .expect("default-font builds");
+        let tile = Tile::new('A', Style::new());
+        r.draw_layers(core::iter::once(DrawCell::on_layer(
+            0,
+            Pos::new(0, 0),
+            &tile,
+        )))
+        .expect("draw_layers is infallible");
+
+        assert!(!r.warned_notdef.contains(&'A'));
+    }
+
+    /// The `layer_id != 0` branch is a separate code path from layer 0's; it must report the same
+    /// thing.
+    #[test]
+    fn a_higher_layer_reports_a_character_no_font_covers() {
+        let mut r = GlBackendBuilder::new()
+            .grid_size(1, 1)
+            .build()
+            .expect("default-font builds");
+        let base = Tile::new(' ', Style::new());
+        let tile = Tile::new('あ', Style::new());
+        r.draw_layers(
+            [
+                DrawCell::on_layer(0, Pos::new(0, 0), &base),
+                DrawCell::on_layer(1, Pos::new(0, 0), &tile),
+            ]
+            .into_iter(),
+        )
+        .expect("draw_layers is infallible");
+
+        assert_eq!(r.warned_notdef.contains(&'あ'), retroglyph_core::dev::DEV);
+    }
 }
 
 /// Dropped-tint diagnostic (retroglyph#564): a tint set on a cell whose glyph resolved to a
@@ -1108,7 +1202,7 @@ mod compositing_tests {
 /// `warned_dropped_tint` set and instance arrays are inspected).
 #[cfg(all(test, feature = "default-font", feature = "tilesets"))]
 mod dropped_tint_tests {
-    use crate::GlBackendBuilder;
+    use crate::config::GlBackendBuilder;
     use retroglyph_core::backend::DrawCell;
     use retroglyph_core::backend::Output;
     use retroglyph_core::color::Style;
@@ -1262,8 +1356,8 @@ mod dropped_tint_tests {
 /// applies here.
 #[cfg(all(test, feature = "default-font"))]
 mod output_conformance_tests {
-    use crate::GlBackendBuilder;
     use crate::GlRenderer;
+    use crate::config::GlBackendBuilder;
     use retroglyph_core::backend::Output;
     use retroglyph_core::grid::HasSize;
     use retroglyph_core::grid::Size;

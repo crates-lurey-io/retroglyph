@@ -244,10 +244,6 @@ mod world {
 
     use super::noise::{fbm, hash01, ridge, warped_fbm};
 
-    const fn rgb(r: u8, g: u8, b: u8) -> Color {
-        Color::Rgb { r, g, b }
-    }
-
     /// Extracts the `(r, g, b)` triple from a [`Color::Rgb`] -- every color this module hands to
     /// [`quantize_half_block`] is one, but the fallback keeps this total instead of panicking if
     /// that ever changes.
@@ -275,7 +271,7 @@ mod world {
 
     /// The near-black the whole scene fades toward: cell backgrounds are the biome color lerped
     /// most of the way to this, so the map reads as a lit painting rather than glyphs on void.
-    const NIGHT: Color = rgb(6, 8, 13);
+    const NIGHT: Color = Color::rgb(6, 8, 13);
 
     // ── Biomes ───────────────────────────────────────────────────────────────
 
@@ -346,29 +342,29 @@ mod world {
         /// [`World::render_cell`]).
         const fn color(self) -> Color {
             match self {
-                Self::DeepOcean => rgb(14, 32, 74),
-                Self::Shallows => rgb(40, 92, 146),
-                Self::River => rgb(62, 132, 194),
-                Self::Lake => rgb(50, 118, 178),
-                Self::Lava => rgb(228, 86, 26),
-                Self::Beach => rgb(216, 198, 148),
-                Self::Desert => rgb(206, 176, 108),
-                Self::Savanna => rgb(172, 160, 76),
-                Self::Plains => rgb(112, 156, 74),
-                Self::Swamp => rgb(76, 94, 60),
-                Self::Jungle => rgb(28, 124, 62),
-                Self::Forest => rgb(46, 102, 56),
-                Self::DarkForest => rgb(26, 58, 40),
-                Self::EnchantedForest => rgb(124, 90, 198),
-                Self::Taiga => rgb(54, 98, 84),
-                Self::Tundra => rgb(168, 178, 176),
-                Self::Glacier => rgb(198, 224, 238),
-                Self::Hills => rgb(126, 126, 80),
-                Self::Mountains => rgb(120, 114, 108),
-                Self::SnowPeak => rgb(238, 242, 248),
-                Self::VolcanicPeak => rgb(112, 66, 58),
-                Self::Ashland => rgb(78, 70, 70),
-                Self::Blight => rgb(74, 40, 84),
+                Self::DeepOcean => Color::rgb(14, 32, 74),
+                Self::Shallows => Color::rgb(40, 92, 146),
+                Self::River => Color::rgb(62, 132, 194),
+                Self::Lake => Color::rgb(50, 118, 178),
+                Self::Lava => Color::rgb(228, 86, 26),
+                Self::Beach => Color::rgb(216, 198, 148),
+                Self::Desert => Color::rgb(206, 176, 108),
+                Self::Savanna => Color::rgb(172, 160, 76),
+                Self::Plains => Color::rgb(112, 156, 74),
+                Self::Swamp => Color::rgb(76, 94, 60),
+                Self::Jungle => Color::rgb(28, 124, 62),
+                Self::Forest => Color::rgb(46, 102, 56),
+                Self::DarkForest => Color::rgb(26, 58, 40),
+                Self::EnchantedForest => Color::rgb(124, 90, 198),
+                Self::Taiga => Color::rgb(54, 98, 84),
+                Self::Tundra => Color::rgb(168, 178, 176),
+                Self::Glacier => Color::rgb(198, 224, 238),
+                Self::Hills => Color::rgb(126, 126, 80),
+                Self::Mountains => Color::rgb(120, 114, 108),
+                Self::SnowPeak => Color::rgb(238, 242, 248),
+                Self::VolcanicPeak => Color::rgb(112, 66, 58),
+                Self::Ashland => Color::rgb(78, 70, 70),
+                Self::Blight => Color::rgb(74, 40, 84),
             }
         }
 
@@ -383,12 +379,12 @@ mod world {
                 Self::River => ('~', c),
                 Self::Lava => {
                     let glow = ((time * 3.1 + f64::from(texture) * 11.0).sin() * 0.5 + 0.5) as f32;
-                    ('~', Color::lerp(c, rgb(255, 206, 66), glow * 0.55))
+                    ('~', Color::lerp(c, Color::rgb(255, 206, 66), glow * 0.55))
                 }
                 Self::Beach => (if texture < 0.12 { ':' } else { '.' }, c),
                 Self::Desert => {
                     if texture < 0.02 {
-                        ('↑', rgb(108, 140, 70)) // rare cactus
+                        ('↑', Color::rgb(108, 140, 70)) // rare cactus
                     } else if texture < 0.2 {
                         ('~', Color::lerp(c, Color::WHITE, 0.12)) // wind-rippled dune crest
                     } else if texture < 0.4 {
@@ -399,24 +395,24 @@ mod world {
                 }
                 Self::Savanna => {
                     if texture < 0.035 {
-                        ('τ', rgb(96, 118, 52)) // lone acacia
+                        ('τ', Color::rgb(96, 118, 52)) // lone acacia
                     } else if texture < 0.5 {
                         ('"', c)
                     } else {
-                        (',', Color::lerp(c, rgb(140, 120, 60), 0.3))
+                        (',', Color::lerp(c, Color::rgb(140, 120, 60), 0.3))
                     }
                 }
                 Self::Plains => {
                     if texture < 0.02 {
                         // scattered wildflowers, tinted by their own hash bits
                         let bloom = if texture < 0.007 {
-                            rgb(226, 170, 210)
+                            Color::rgb(226, 170, 210)
                         } else {
-                            rgb(232, 214, 120)
+                            Color::rgb(232, 214, 120)
                         };
                         ('*', bloom)
                     } else if texture < 0.07 {
-                        ('.', Color::lerp(c, rgb(96, 76, 40), 0.5))
+                        ('.', Color::lerp(c, Color::rgb(96, 76, 40), 0.5))
                     } else if texture < 0.5 {
                         ('"', c)
                     } else {
@@ -429,16 +425,16 @@ mod world {
                     } else if texture < 0.55 {
                         (':', c)
                     } else {
-                        ('"', Color::lerp(c, rgb(132, 128, 60), 0.3))
+                        ('"', Color::lerp(c, Color::rgb(132, 128, 60), 0.3))
                     }
                 }
                 Self::Jungle => {
                     if texture < 0.08 {
-                        ('§', rgb(60, 160, 70)) // hanging vines
+                        ('§', Color::rgb(60, 160, 70)) // hanging vines
                     } else if texture < 0.6 {
-                        ('♣', Color::lerp(c, rgb(70, 190, 90), texture * 0.4))
+                        ('♣', Color::lerp(c, Color::rgb(70, 190, 90), texture * 0.4))
                     } else {
-                        ('♠', Color::lerp(c, rgb(16, 88, 44), 0.4))
+                        ('♠', Color::lerp(c, Color::rgb(16, 88, 44), 0.4))
                     }
                 }
                 Self::Forest => (
@@ -449,22 +445,22 @@ mod world {
                     } else {
                         '♣'
                     },
-                    Color::lerp(c, rgb(76, 152, 82), texture * 0.3),
+                    Color::lerp(c, Color::rgb(76, 152, 82), texture * 0.3),
                 ),
                 Self::DarkForest => {
                     if texture < 0.05 {
-                        ('.', rgb(70, 66, 58)) // bare ground between old trunks
+                        ('.', Color::rgb(70, 66, 58)) // bare ground between old trunks
                     } else {
-                        ('♠', Color::lerp(c, rgb(12, 30, 22), texture * 0.5))
+                        ('♠', Color::lerp(c, Color::rgb(12, 30, 22), texture * 0.5))
                     }
                 }
                 Self::EnchantedForest => {
                     let twinkle =
                         ((time * 1.7 + f64::from(texture) * 23.0).sin() * 0.5 + 0.5) as f32;
                     if texture < 0.06 && twinkle > 0.82 {
-                        ('☼', rgb(230, 200, 250))
+                        ('☼', Color::rgb(230, 200, 250))
                     } else if texture < 0.5 {
-                        ('♣', Color::lerp(c, rgb(90, 220, 210), twinkle * 0.3))
+                        ('♣', Color::lerp(c, Color::rgb(90, 220, 210), twinkle * 0.3))
                     } else {
                         ('♠', c)
                     }
@@ -475,7 +471,7 @@ mod world {
                     } else {
                         (
                             if texture < 0.55 { '♠' } else { '♣' },
-                            Color::lerp(c, rgb(22, 72, 70), texture * 0.3),
+                            Color::lerp(c, Color::rgb(22, 72, 70), texture * 0.3),
                         )
                     }
                 }
@@ -493,33 +489,43 @@ mod world {
                 }
                 Self::Hills => (
                     if texture < 0.35 { '∩' } else { '"' },
-                    Color::lerp(c, rgb(96, 100, 54), texture * 0.3),
+                    Color::lerp(c, Color::rgb(96, 100, 54), texture * 0.3),
                 ),
-                Self::Mountains => ('▲', Color::lerp(c, rgb(92, 88, 92), texture * 0.35)),
-                Self::SnowPeak => ('▲', Color::lerp(c, rgb(200, 214, 236), texture * 0.3)),
-                Self::VolcanicPeak => ('▲', Color::lerp(c, rgb(210, 90, 30), texture * 0.4)),
+                Self::Mountains => ('▲', Color::lerp(c, Color::rgb(92, 88, 92), texture * 0.35)),
+                Self::SnowPeak => (
+                    '▲',
+                    Color::lerp(c, Color::rgb(200, 214, 236), texture * 0.3),
+                ),
+                Self::VolcanicPeak => ('▲', Color::lerp(c, Color::rgb(210, 90, 30), texture * 0.4)),
                 Self::Ashland => {
                     let ember = ((time * 2.2 + f64::from(texture) * 17.0).sin() * 0.5 + 0.5) as f32;
                     if texture < 0.05 {
                         (
                             '∙',
-                            Color::lerp(rgb(120, 60, 40), rgb(255, 140, 40), ember * 0.8),
+                            Color::lerp(
+                                Color::rgb(120, 60, 40),
+                                Color::rgb(255, 140, 40),
+                                ember * 0.8,
+                            ),
                         )
                     } else {
                         (
                             if texture < 0.5 { '░' } else { '.' },
-                            Color::lerp(c, rgb(40, 36, 38), texture * 0.4),
+                            Color::lerp(c, Color::rgb(40, 36, 38), texture * 0.4),
                         )
                     }
                 }
                 Self::Blight => {
                     let pulse = ((time * 1.1 + f64::from(texture) * 13.0).sin() * 0.5 + 0.5) as f32;
                     if texture < 0.05 {
-                        ('∙', Color::lerp(rgb(150, 40, 90), rgb(230, 80, 150), pulse))
+                        (
+                            '∙',
+                            Color::lerp(Color::rgb(150, 40, 90), Color::rgb(230, 80, 150), pulse),
+                        )
                     } else if texture < 0.2 {
-                        ('~', Color::lerp(c, rgb(120, 30, 70), pulse * 0.5))
+                        ('~', Color::lerp(c, Color::rgb(120, 30, 70), pulse * 0.5))
                     } else if texture < 0.6 {
-                        ('"', Color::lerp(c, rgb(30, 12, 40), texture * 0.5))
+                        ('"', Color::lerp(c, Color::rgb(30, 12, 40), texture * 0.5))
                     } else {
                         (',', Color::lerp(c, Color::BLACK, 0.3))
                     }
@@ -564,17 +570,17 @@ mod world {
 
         pub(crate) const fn glyph_color(self) -> (char, Color) {
             match self {
-                Self::City => ('■', rgb(246, 214, 120)),
-                Self::Village => ('⌂', rgb(224, 176, 96)),
-                Self::Watchtower => ('T', rgb(248, 198, 90)),
-                Self::WizardTower => ('Φ', rgb(140, 160, 255)),
-                Self::Ruins => ('Ω', rgb(200, 196, 180)),
-                Self::StandingStone => ('π', rgb(190, 182, 210)),
-                Self::FaerieRing => ('○', rgb(240, 170, 220)),
-                Self::GemVein => ('♦', rgb(120, 230, 220)),
-                Self::DragonLair => ('δ', rgb(240, 110, 60)),
-                Self::DarkSpire => ('I', rgb(190, 70, 160)),
-                Self::Waystone => ('Θ', rgb(110, 210, 190)),
+                Self::City => ('■', Color::rgb(246, 214, 120)),
+                Self::Village => ('⌂', Color::rgb(224, 176, 96)),
+                Self::Watchtower => ('T', Color::rgb(248, 198, 90)),
+                Self::WizardTower => ('Φ', Color::rgb(140, 160, 255)),
+                Self::Ruins => ('Ω', Color::rgb(200, 196, 180)),
+                Self::StandingStone => ('π', Color::rgb(190, 182, 210)),
+                Self::FaerieRing => ('○', Color::rgb(240, 170, 220)),
+                Self::GemVein => ('♦', Color::rgb(120, 230, 220)),
+                Self::DragonLair => ('δ', Color::rgb(240, 110, 60)),
+                Self::DarkSpire => ('I', Color::rgb(190, 70, 160)),
+                Self::Waystone => ('Θ', Color::rgb(110, 210, 190)),
             }
         }
 
@@ -1065,12 +1071,16 @@ mod world {
             match self.road[i] {
                 RoadCell::Road => {
                     let ground = shade_color(biome.color(), self.shade[i]);
-                    let bg = Color::lerp(Color::lerp(ground, NIGHT, 0.7), rgb(190, 168, 120), 0.16);
-                    return ('·', Style::new().fg(rgb(200, 180, 138)).bg(bg));
+                    let bg = Color::lerp(
+                        Color::lerp(ground, NIGHT, 0.7),
+                        Color::rgb(190, 168, 120),
+                        0.16,
+                    );
+                    return ('·', Style::new().fg(Color::rgb(200, 180, 138)).bg(bg));
                 }
                 RoadCell::Bridge => {
                     let bg = Color::lerp(self.water_color(i, biome), NIGHT, 0.55);
-                    return ('=', Style::new().fg(rgb(158, 118, 74)).bg(bg));
+                    return ('=', Style::new().fg(Color::rgb(158, 118, 74)).bg(bg));
                 }
                 RoadCell::None => {}
             }
@@ -1083,7 +1093,7 @@ mod world {
                     + f64::from(pos.y) * 0.6
                     + f64::from(texture) * 6.0;
                 let swell = (phase.sin() * 0.5 + 0.5) as f32;
-                let mut fg = Color::lerp(base, rgb(178, 214, 244), 0.18 + swell * 0.22);
+                let mut fg = Color::lerp(base, Color::rgb(178, 214, 244), 0.18 + swell * 0.22);
                 let mut ch = if biome == Biome::River {
                     '~'
                 } else if texture < 0.5 {
@@ -1817,7 +1827,7 @@ mod world {
                 .max_by_key(|(_, n)| *n)
                 .map_or(Biome::DeepOcean, |(b, _)| *b);
             let scale = 1.0 / total.max(1) as f32;
-            let base = rgb(
+            let base = Color::rgb(
                 (r_sum * scale) as u8,
                 (g_sum * scale) as u8,
                 (b_sum * scale) as u8,
@@ -2087,7 +2097,15 @@ use retroglyph_core::event::{Event, KeyCode, KeyModifiers, MouseButton, MouseEve
 use retroglyph_core::grid::{HasSize, Pos, Rect, Size};
 use retroglyph_core::terminal::Terminal;
 use retroglyph_examples::Example;
-use retroglyph_ui::{Camera, Constraint, Panel, Surface, Widget, split_h, truncate};
+use retroglyph_ui::camera::Camera;
+
+use retroglyph_ui::layout::{Constraint, split_h};
+
+use retroglyph_ui::text::truncate;
+
+use retroglyph_ui::widget::{Panel, Widget};
+
+use retroglyph_ui::Surface;
 
 use world::{TILE_H, TILE_W, TileMap, World};
 pub use world::{WORLD_H, WORLD_W};
@@ -2188,57 +2206,21 @@ impl View {
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 
-const BG: Color = Color::Rgb { r: 8, g: 9, b: 14 };
-const PANEL_BG: Color = Color::Rgb {
-    r: 16,
-    g: 17,
-    b: 26,
-};
-const BORDER: Color = Color::Rgb {
-    r: 74,
-    g: 68,
-    b: 96,
-};
-const FG: Color = Color::Rgb {
-    r: 214,
-    g: 212,
-    b: 226,
-};
-const DIM_FG: Color = Color::Rgb {
-    r: 122,
-    g: 118,
-    b: 142,
-};
-const ACCENT: Color = Color::Rgb {
-    r: 248,
-    g: 198,
-    b: 90,
-};
-const RETICLE: Color = Color::Rgb {
-    r: 255,
-    g: 236,
-    b: 170,
-};
+const BG: Color = Color::rgb(8, 9, 14);
+const PANEL_BG: Color = Color::rgb(16, 17, 26);
+const BORDER: Color = Color::rgb(74, 68, 96);
+const FG: Color = Color::rgb(214, 212, 226);
+const DIM_FG: Color = Color::rgb(122, 118, 142);
+const ACCENT: Color = Color::rgb(248, 198, 90);
+const RETICLE: Color = Color::rgb(255, 236, 170);
 /// Road connector marks in the tile views, matching cell mode's trade-road dots.
-const TILE_ROAD_FG: Color = Color::Rgb {
-    r: 216,
-    g: 196,
-    b: 150,
-};
+const TILE_ROAD_FG: Color = Color::rgb(216, 196, 150);
 /// River connector marks in the tile views: cell mode's river blue, lightened to read against
 /// a tile's darkened face color.
-const TILE_RIVER_FG: Color = Color::Rgb {
-    r: 120,
-    g: 182,
-    b: 235,
-};
+const TILE_RIVER_FG: Color = Color::rgb(120, 182, 235);
 /// Grid-line tint for the overlay views: the sidebar [`BORDER`] family, lightened enough to
 /// register on dark ocean without shouting over land terrain.
-const GRID_LINE: Color = Color::Rgb {
-    r: 148,
-    g: 142,
-    b: 178,
-};
+const GRID_LINE: Color = Color::rgb(148, 142, 178);
 
 // ── State ────────────────────────────────────────────────────────────────────
 

@@ -1877,11 +1877,8 @@ mod tests {
 
         // Draw a colored cell first so the SGR pen is left non-default, mirroring the last
         // frame drawn before a real resize.
-        let style = retroglyph_core::color::Style::new().bg(retroglyph_core::color::Color::Rgb {
-            r: 200,
-            g: 0,
-            b: 0,
-        });
+        let style =
+            retroglyph_core::color::Style::new().bg(retroglyph_core::color::Color::rgb(200, 0, 0));
         let tile = Tile::new('X', style);
         term.draw(core::iter::once(DrawCell::new(Pos { x: 0, y: 0 }, &tile)))
             .unwrap();

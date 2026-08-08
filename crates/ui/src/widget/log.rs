@@ -26,7 +26,7 @@ use crate::Surface;
 /// expressed as the same shared helper.
 ///
 /// `messages` is a plain slice the caller owns and appends to (the same
-/// division of labor as [`ListState`](crate::ListState) for selection):
+/// division of labor as [`ListState`](crate::state::ListState) for selection):
 /// this widget only reads it. Rows beyond the available messages are left
 /// untouched: compose with [`fill_rect`](crate::draw::fill_rect) first
 /// for a solid background if one is wanted.
@@ -46,7 +46,8 @@ use crate::Surface;
 /// use retroglyph_core::grid::Rect;
 /// use retroglyph_core::text::Line;
 /// use retroglyph_core::grid::Grid;
-/// use retroglyph_ui::{Log, Surface, Widget};
+/// use retroglyph_ui::widget::{Log, Widget};
+/// use retroglyph_ui::Surface;
 ///
 /// let messages = [Line::raw("connected"), Line::raw("joined #general")];
 /// let area = Rect::new(0, 0, 20, 2);

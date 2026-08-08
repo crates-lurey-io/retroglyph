@@ -39,8 +39,8 @@
     clippy::cast_sign_loss
 )]
 
-use crate::GlBackendBuilder;
 use crate::GlRenderer;
+use crate::config::GlBackendBuilder;
 use crate::shaders::GlslFlavor;
 use glow::HasContext as _;
 use retroglyph_core::backend::DrawCell;
@@ -59,14 +59,6 @@ const GREEN: (u8, u8, u8) = (0x00, 0xFF, 0x00);
 const BLUE: (u8, u8, u8) = (0x00, 0x00, 0xFF);
 
 /// `(r, g, b)` -> a [`Color::Rgb`].
-const fn rgb(c: (u8, u8, u8)) -> Color {
-    Color::Rgb {
-        r: c.0,
-        g: c.1,
-        b: c.2,
-    }
-}
-
 /// Creates a detached `<canvas>` and acquires a WebGL2 context from it, wrapped in a `glow`
 /// context.
 ///
@@ -194,7 +186,7 @@ fn paint(out: &mut GlRenderer, cells: &[(Pos, Tile)]) {
 }
 
 /// Feeds a full layered frame `(layer, pos, tile)` into the renderer via `draw_layers`, the way the
-/// core `Terminal` drives this `composites_layers` backend.
+/// core `Terminal` drives this `PixelLayered` backend.
 fn paint_layers(out: &mut GlRenderer, cells: &[(u8, Pos, Tile)]) {
     out.draw_layers(cells.iter().map(|(l, p, t)| DrawCell::on_layer(*l, *p, t)))
         .ok();
@@ -215,11 +207,21 @@ fn full_block_cell_is_all_foreground_blank_cell_is_all_background() {
     let cells = [
         (
             Pos::new(0, 0),
-            Tile::new('\u{2588}', Style::new().fg(rgb(RED)).bg(rgb(BLUE))),
+            Tile::new(
+                '\u{2588}',
+                Style::new()
+                    .fg(Color::rgb(RED.0, RED.1, RED.2))
+                    .bg(Color::rgb(BLUE.0, BLUE.1, BLUE.2)),
+            ),
         ),
         (
             Pos::new(1, 0),
-            Tile::new(' ', Style::new().fg(rgb(RED)).bg(rgb(GREEN))),
+            Tile::new(
+                ' ',
+                Style::new()
+                    .fg(Color::rgb(RED.0, RED.1, RED.2))
+                    .bg(Color::rgb(GREEN.0, GREEN.1, GREEN.2)),
+            ),
         ),
     ];
     paint(&mut r, &cells);
@@ -255,7 +257,12 @@ fn glyph_coverage_leaves_the_surface_opaque() {
         &mut r,
         &[(
             Pos::new(0, 0),
-            Tile::new('A', Style::new().fg(rgb(RED)).bg(rgb(BLUE))),
+            Tile::new(
+                'A',
+                Style::new()
+                    .fg(Color::rgb(RED.0, RED.1, RED.2))
+                    .bg(Color::rgb(BLUE.0, BLUE.1, BLUE.2)),
+            ),
         )],
     );
 
@@ -307,28 +314,36 @@ fn composites_two_layers_back_to_front() {
         (
             0u8,
             Pos::new(0, 0),
-            Tile::new(' ', Style::new().bg(rgb(BLUE))),
+            Tile::new(' ', Style::new().bg(Color::rgb(BLUE.0, BLUE.1, BLUE.2))),
         ),
         (
             0u8,
             Pos::new(1, 0),
-            Tile::new(' ', Style::new().bg(rgb(BLUE))),
+            Tile::new(' ', Style::new().bg(Color::rgb(BLUE.0, BLUE.1, BLUE.2))),
         ),
         (
             0u8,
             Pos::new(2, 0),
-            Tile::new(block, Style::new().fg(rgb(RED)).bg(rgb(BLUE))),
+            Tile::new(
+                block,
+                Style::new()
+                    .fg(Color::rgb(RED.0, RED.1, RED.2))
+                    .bg(Color::rgb(BLUE.0, BLUE.1, BLUE.2)),
+            ),
         ),
         (1u8, Pos::new(0, 0), Tile::default()),
         (
             1u8,
             Pos::new(1, 0),
-            Tile::new(block, Style::new().fg(rgb(GREEN))),
+            Tile::new(
+                block,
+                Style::new().fg(Color::rgb(GREEN.0, GREEN.1, GREEN.2)),
+            ),
         ),
         (
             1u8,
             Pos::new(2, 0),
-            Tile::new(' ', Style::new().fg(rgb(RED))),
+            Tile::new(' ', Style::new().fg(Color::rgb(RED.0, RED.1, RED.2))),
         ),
     ];
     paint_layers(&mut r, &layered);
@@ -409,12 +424,12 @@ fn sprite_cells_render_their_tileset_colors() {
             (
                 0,
                 Pos::new(0, 0),
-                Tile::new('A', Style::new().bg(rgb(BLUE))),
+                Tile::new('A', Style::new().bg(Color::rgb(BLUE.0, BLUE.1, BLUE.2))),
             ),
             (
                 0,
                 Pos::new(1, 0),
-                Tile::new('B', Style::new().bg(rgb(BLUE))),
+                Tile::new('B', Style::new().bg(Color::rgb(BLUE.0, BLUE.1, BLUE.2))),
             ),
         ],
     );

@@ -15,7 +15,11 @@
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use retroglyph_core::grid::{Grid, Rect};
-use retroglyph_ui::{List, ListState, Sparkline, StatefulWidget, Surface, Widget};
+use retroglyph_ui::state::ListState;
+
+use retroglyph_ui::widget::{List, Sparkline, StatefulWidget, Widget};
+
+use retroglyph_ui::Surface;
 use std::hint::black_box;
 
 /// Builds `n` deterministic, variable-length item strings, long enough that some need

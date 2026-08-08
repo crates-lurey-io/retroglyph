@@ -10,11 +10,6 @@
 //! surface owns a persistent RGBA byte buffer that is reused across frames and
 //! only reallocated on resize.
 
-// See surface_native.rs: `pub(crate)` is correct for the crate-internal
-// `WindowSurface`; the nursery `redundant_pub_crate` lint conflicts with
-// `unreachable_pub` for the module-per-platform pattern.
-#![allow(clippy::redundant_pub_crate)]
-
 use retroglyph_window::presenter::WindowHandle;
 use std::sync::Arc;
 use wasm_bindgen::JsCast as _;

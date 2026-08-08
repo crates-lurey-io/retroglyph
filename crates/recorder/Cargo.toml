@@ -30,3 +30,22 @@ retroglyph-core = { path = "../core", version = "0.7.1", default-features = fals
 ] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# `pty`: promotes `examples/tests/support`'s PTY/`vt100`-driven capture technique to a public,
+# reusable capture source feeding the same `write_cast` (see `pty.rs`) -- the mechanism
+# retroglyph#461's "supersede the `vhs` tape plan" bet rests on. Both crates are MIT-licensed and
+# already used elsewhere in this workspace (`examples/Cargo.toml`), so this adds no new licensing
+# question.
+portable-pty = { version = "0.9", optional = true }
+vt100 = { version = "0.16", optional = true }
+
+[dev-dependencies]
+insta = "1.34"
+
+[features]
+# A real-pseudo-terminal capture source (`pty::capture_pty`) feeding the same `write_cast` path
+# `FrameRecorder` does, for `vhs`-like real-terminal fidelity. Adds `portable-pty`/`vt100`.
+pty = ["dep:portable-pty", "dep:vt100"]
+
+[[test]]
+name = "pty_capture"
+required-features = ["pty"]

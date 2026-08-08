@@ -1,9 +1,8 @@
 //! Single-cell and whole-region writes: [`put`](Surface::put) and its rect/grid-scale twins.
 
 use crate::color::{Style, Tint};
-use crate::grid::{Grid, Pos, Rect};
+use crate::grid::{Grid, HasSize, Pos, Rect};
 use crate::tile::Tile;
-use ixy::HasSize;
 use unicode_width::UnicodeWidthChar;
 
 use super::Surface;
@@ -173,7 +172,7 @@ impl Surface<'_> {
         {
             let mut buf = [0u8; 4];
             let s = ch.encode_utf8(&mut buf);
-            self.write_grapheme_at(abs_x, abs_y, s, style);
+            self.put_grapheme_at(abs_x, abs_y, s, style);
         }
         #[cfg(not(feature = "egc"))]
         {
@@ -218,7 +217,7 @@ impl Surface<'_> {
     pub fn fill_rect(&mut self, rect: Rect, ch: char, style: Style) {
         // The batch path below writes a plain `Tile::new(ch, style)` per cell, which matches
         // `put`'s own per-cell write only when there's no tint to apply and `ch` is a
-        // single-column glyph: `fill_region` itself refuses (no-op) any `tile.width() != 1` (see
+        // single-column glyph: `fill_rect` itself refuses (no-op) any `tile.width() != 1` (see
         // its own doc comment), so this check just avoids paying for a delegation that would
         // silently do nothing. Anything else (tinted surface, zero/double-width glyph) falls back
         // to the per-cell loop, unchanged from before this method had a fast path.
@@ -228,7 +227,7 @@ impl Surface<'_> {
             && single_width
             && let Some(abs) = self.local_rect_to_absolute(rect)
         {
-            self.grid.fill_region(self.layer, abs, Tile::new(ch, style));
+            self.grid.fill_rect(self.layer, abs, Tile::new(ch, style));
             return;
         }
 
@@ -336,7 +335,7 @@ impl Surface<'_> {
     /// [`Tile::default`].
     pub fn clear(&mut self) {
         let region = self.area.intersect(self.clip);
-        self.grid.fill_region(self.layer, region, Tile::default());
+        self.grid.fill_rect(self.layer, region, Tile::default());
     }
 
     /// Clears `rect` (clipped to this surface's own clip, on its own layer) back to
@@ -366,7 +365,7 @@ impl Surface<'_> {
     /// ```
     pub fn clear_region(&mut self, rect: Rect) {
         if let Some(abs) = self.local_rect_to_absolute(rect) {
-            self.grid.fill_region(self.layer, abs, Tile::default());
+            self.grid.fill_rect(self.layer, abs, Tile::default());
             return;
         }
 
