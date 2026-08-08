@@ -1,0 +1,120 @@
+---
+source: examples/tests/24_settings_form.rs
+expression: svg
+---
+<svg xmlns="http://www.w3.org/2000/svg" width="436" height="466">
+<rect width="100%" height="100%" fill="#111111"/>
+<text font-family="monospace" font-size="14" y="26.0" xml:space="preserve">
+  <tspan fill="#5aaafa" x="8.0">Tab/Shift-Tab, click focus. Enter=save. Esc=quit.</tspan>
+  <tspan fill="#cccccc" x="419.6"> </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="44.0" xml:space="preserve">
+  <tspan fill="#6e7082" x="8.0">Focused: (none)</tspan>
+  <tspan fill="#cccccc" x="134.0">                                   </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="62.0" xml:space="preserve">
+  <tspan fill="#6e7082" x="8.0">Inventory:</tspan>
+  <tspan fill="#cccccc" x="92.0">              </tspan>
+  <tspan fill="#464a60" x="209.6">┌───────── Name ─────────┐</tspan>
+</text>
+<text font-family="monospace" font-size="14" y="80.0" xml:space="preserve">
+  <tspan fill="#101018" x="8.0" style="background:#5aaafa">Potion</tspan>
+  <tspan fill="#cccccc" x="58.4" style="background:#5aaafa">                 </tspan>
+  <tspan fill="#cccccc" x="201.2" style="background:#464a60"> </tspan>
+  <tspan fill="#464a60" x="209.6">│</tspan>
+  <tspan fill="#101018" x="218.0" style="background:#5aaafa">C</tspan>
+  <tspan fill="#6e7082" x="226.4" style="background:#161620">haracter name...</tspan>
+  <tspan fill="#cccccc" x="360.8" style="background:#161620">       </tspan>
+  <tspan fill="#464a60" x="419.6">│</tspan>
+</text>
+<text font-family="monospace" font-size="14" y="98.0" xml:space="preserve">
+  <tspan fill="#bec0d0" x="8.0">Sword</tspan>
+  <tspan fill="#cccccc" x="50.0">                  </tspan>
+  <tspan fill="#cccccc" x="201.2" style="background:#464a60"> </tspan>
+  <tspan fill="#464a60" x="209.6">└────────────────────────┘</tspan>
+</text>
+<text font-family="monospace" font-size="14" y="116.0" xml:space="preserve">
+  <tspan fill="#bec0d0" x="8.0">Shield</tspan>
+  <tspan fill="#cccccc" x="58.4">                 </tspan>
+  <tspan fill="#cccccc" x="201.2" style="background:#464a60"> </tspan>
+  <tspan fill="#464a60" x="209.6">┌──────── Notes ─────────┐</tspan>
+</text>
+<text font-family="monospace" font-size="14" y="134.0" xml:space="preserve">
+  <tspan fill="#bec0d0" x="8.0">Torch</tspan>
+  <tspan fill="#cccccc" x="50.0">                  </tspan>
+  <tspan fill="#cccccc" x="201.2" style="background:#464a60"> </tspan>
+  <tspan fill="#464a60" x="209.6">│</tspan>
+  <tspan fill="#101018" x="218.0" style="background:#5aaafa">N</tspan>
+  <tspan fill="#6e7082" x="226.4" style="background:#161620">otes...</tspan>
+  <tspan fill="#cccccc" x="285.2" style="background:#161620">                </tspan>
+  <tspan fill="#464a60" x="419.6">│</tspan>
+</text>
+<text font-family="monospace" font-size="14" y="152.0" xml:space="preserve">
+  <tspan fill="#bec0d0" x="8.0">Rope</tspan>
+  <tspan fill="#cccccc" x="41.6">                   </tspan>
+  <tspan fill="#cccccc" x="201.2" style="background:#464a60"> </tspan>
+  <tspan fill="#464a60" x="209.6">└────────────────────────┘</tspan>
+</text>
+<text font-family="monospace" font-size="14" y="170.0" xml:space="preserve">
+  <tspan fill="#bec0d0" x="8.0">Bandage</tspan>
+  <tspan fill="#cccccc" x="66.8">                </tspan>
+  <tspan fill="#cccccc" x="201.2" style="background:#464a60"> </tspan>
+  <tspan fill="#bec0d0" x="209.6" style="background:#161620">   Save   </tspan>
+  <tspan fill="#cccccc" x="293.6">                </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="188.0" xml:space="preserve">
+  <tspan fill="#bec0d0" x="8.0">Map</tspan>
+  <tspan fill="#cccccc" x="33.2">                    </tspan>
+  <tspan fill="#cccccc" x="201.2" style="background:#161620"> </tspan>
+  <tspan fill="#cccccc" x="209.6">                          </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="206.0" xml:space="preserve">
+  <tspan fill="#bec0d0" x="8.0">Iron Key</tspan>
+  <tspan fill="#cccccc" x="75.2">               </tspan>
+  <tspan fill="#cccccc" x="201.2" style="background:#161620"> </tspan>
+  <tspan fill="#cccccc" x="209.6">                          </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="224.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="242.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="260.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="278.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="296.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="314.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="332.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="350.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="368.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="386.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="404.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="422.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="440.0" xml:space="preserve">
+  <tspan fill="#cccccc" x="8.0">                                                  </tspan>
+</text>
+<text font-family="monospace" font-size="14" y="458.0" xml:space="preserve">
+  <tspan fill="#bec0d0" x="8.0">Not saved yet.</tspan>
+  <tspan fill="#cccccc" x="125.6">                                    </tspan>
+</text>
+</svg>
