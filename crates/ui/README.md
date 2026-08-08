@@ -8,10 +8,10 @@
 Immediate-mode drawing helpers for [retroglyph](https://github.com/crates-lurey-io/retroglyph): box
 borders, filled panels, gauges, tables, lists, tab strips, buttons, sparklines, and a small
 constraint-based layout splitter (`split_h`/`split_v` with ratatui-style
-`Fixed`/`Percent`/`Fill`/`Min`/`Max` constraints), plus hover/click/drag/focus interaction
-tracking. Every widget (`Panel`, `Gauge`, `Table`, `Sparkline`, `BoxBorder`, `List`,
-`Tabs`, `Button`, `Scrollbar`, `ProgressBar`, `Modal`, `StatBar`, `Meter`, `Log`, `TextInput`, ...)
-is a builder struct that draws itself into a `Surface` (an area-relative view over a `Grid`) via
+`Fixed`/`Percent`/`Fill`/`Min`/`Max` constraints), plus hover/click/drag/focus interaction tracking.
+Every widget (`Panel`, `Gauge`, `Table`, `Sparkline`, `BoxBorder`, `List`, `Tabs`, `Button`,
+`Scrollbar`, `ProgressBar`, `Modal`, `StatBar`, `Meter`, `Log`, `TextInput`, ...) is a builder
+struct that draws itself into a `Surface` (an area-relative view over a `Grid`) via
 `Widget`/`StatefulWidget` and retains no state of its own; state that outlives one render call (a
 selection index, a scroll offset, a text field's value and cursor) lives in
 `ListState`/`TextInputState` instead. A handful of things that are genuinely just functions
@@ -22,11 +22,11 @@ pull it in.
 
 Alongside the widgets is the constraint-based `Rect` splitter above. `Layout::vertical`/
 `Layout::horizontal` build on `split_v`/`split_h` with two optional builder calls: `.spacing(n)`
-carves a fixed-cell gap (or overlap) between panes, and `.flex(Flex)` controls where leftover
-space goes, with `Flex` alignment (`Start`/`End`/`Center`/`SpaceBetween`/`SpaceAround`) similar to
+carves a fixed-cell gap (or overlap) between panes, and `.flex(Flex)` controls where leftover space
+goes, with `Flex` alignment (`Start`/`End`/`Center`/`SpaceBetween`/`SpaceAround`) similar to
 [ratatui](https://ratatui.rs)'s layout system. `Fill(weight)` claims a share of the leftover space
-proportional to `weight` relative to the other `Fill`/`Min`/`Max` panes in the same split
-(`Fill(1)` reproduces plain equal distribution).
+proportional to `weight` relative to the other `Fill`/`Min`/`Max` panes in the same split (`Fill(1)`
+reproduces plain equal distribution).
 
 Three more independent layers build on top:
 

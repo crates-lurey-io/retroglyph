@@ -56,14 +56,13 @@ Layout::vertical([Constraint::Fixed(1), Constraint::Fill(1)])
     .split(area)
 ```
 
-`.spacing(n)` carves a fixed-cell gap (or, via `Spacing::Overlap(n)`, a shared border) between
-every adjacent pair of panes; `split_with_gaps` returns those gap `Rect`s alongside the panes for
-drawing dividers into. `.flex(Flex)` controls where leftover space goes when constraints don't
-consume a `Rect`'s full extent (every pane is `Fixed`, say, and they don't add up to the whole
-width):
-[`Flex`](https://docs.rs/retroglyph-ui/latest/retroglyph_ui/enum.Flex.html)'s `Start` (the
-default, matching plain `split_h`/`split_v`: leftover space trails after the last pane), `Center`,
-`End`, or `SpaceBetween`/`SpaceAround` to distribute gaps between panes instead.
+`.spacing(n)` carves a fixed-cell gap (or, via `Spacing::Overlap(n)`, a shared border) between every
+adjacent pair of panes; `split_with_gaps` returns those gap `Rect`s alongside the panes for drawing
+dividers into. `.flex(Flex)` controls where leftover space goes when constraints don't consume a
+`Rect`'s full extent (every pane is `Fixed`, say, and they don't add up to the whole width):
+[`Flex`](https://docs.rs/retroglyph-ui/latest/retroglyph_ui/enum.Flex.html)'s `Start` (the default,
+matching plain `split_h`/`split_v`: leftover space trails after the last pane), `Center`, `End`, or
+`SpaceBetween`/`SpaceAround` to distribute gaps between panes instead.
 
 ## See also
 
