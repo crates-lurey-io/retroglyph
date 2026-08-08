@@ -490,7 +490,7 @@ pub fn run_gl<E: Example>() {
 pub fn run_wgpu<E: Example>() {
     run_windowed::<E, _>(
         E::configure(
-            retroglyph_wgpu::WgpuBackendBuilder::new()
+            retroglyph_wgpu::config::WgpuBackendBuilder::new()
                 .grid_size(50, 25)
                 .scale(2),
         ),

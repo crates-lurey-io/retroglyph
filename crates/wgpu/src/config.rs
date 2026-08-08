@@ -16,7 +16,7 @@ use std::fmt;
 /// Errors from configuring the wgpu backend.
 ///
 /// Every variant is a configuration mistake caught before any GPU work happens; failures from the
-/// device itself are [`SurfaceError`](crate::SurfaceError) instead.
+/// device itself are [`SurfaceError`](crate::error::SurfaceError) instead.
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum WgpuBackendError {
@@ -84,7 +84,7 @@ impl std::error::Error for WgpuBackendError {
 ///
 /// ```no_run
 /// use retroglyph_core::color::Style;
-/// use retroglyph_wgpu::WgpuBackendBuilder;
+/// use retroglyph_wgpu::config::WgpuBackendBuilder;
 /// use retroglyph_window::winit::{WindowConfig, run_windowed};
 ///
 /// let renderer = WgpuBackendBuilder::new()
@@ -164,7 +164,7 @@ impl WgpuBackendBuilder {
     /// # Examples
     ///
     /// ```no_run
-    /// use retroglyph_wgpu::WgpuBackendBuilder;
+    /// use retroglyph_wgpu::config::WgpuBackendBuilder;
     /// use retroglyph_window::font::{BitmapFont, FontChain, unscii16};
     ///
     /// // A fallback font declaring the quadrant glyphs CP437 has no mapping for.

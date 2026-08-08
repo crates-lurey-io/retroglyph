@@ -38,8 +38,9 @@
 //! and its blend resolves to exactly the source or exactly the destination. No intermediate value,
 //! and so no rounding, ever reaches the framebuffer.
 
+use crate::WgpuRenderer;
+use crate::config::WgpuBackendBuilder;
 use crate::gpu::GpuContext;
-use crate::{WgpuBackendBuilder, WgpuRenderer};
 use retroglyph_core::backend::{DrawCell, Output};
 use retroglyph_core::color::{Color, Style};
 use retroglyph_core::grid::Pos;
@@ -597,7 +598,8 @@ mod sprites {
         BLUE, Frame, GREEN, RED, assert_frames_match, device_or_skip, paint_layers,
         render_to_frame, rgb,
     };
-    use crate::{WgpuBackendBuilder, WgpuRenderer};
+    use crate::WgpuRenderer;
+    use crate::config::WgpuBackendBuilder;
     use retroglyph_core::color::Style;
     use retroglyph_core::grid::Pos;
     use retroglyph_core::tile::Tile;

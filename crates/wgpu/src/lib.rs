@@ -3,10 +3,10 @@
 //!
 //! # Architecture
 //!
-//! [`WgpuBackendBuilder`] holds configuration (fonts, grid size, integer scale) and
-//! [`build`](WgpuBackendBuilder::build)s a [`WgpuRenderer`]. The glyph source is a static
-//! [`FontChain`] (a single [`BitmapFont`] is a chain of one); every font in the chain is
-//! grid-packed into one `R8` array-texture atlas and addressed by a flat slot id (see
+//! [`WgpuBackendBuilder`](config::WgpuBackendBuilder) holds configuration (fonts, grid size,
+//! integer scale) and [`build`](config::WgpuBackendBuilder::build)s a [`WgpuRenderer`]. The glyph
+//! source is a static [`FontChain`] (a single [`BitmapFont`] is a chain of one); every font in the
+//! chain is grid-packed into one `R8` array-texture atlas and addressed by a flat slot id (see
 //! [`retroglyph_window::atlas`]). The renderer keeps one CPU-side instance array per grid layer and
 //! creates its device lazily, when the windowing loop calls [`Presenter::init_surface`]:
 //!
@@ -158,10 +158,15 @@
     html_favicon_url = "https://raw.githubusercontent.com/crates-lurey-io/retroglyph/main/docs/public/assets/logo.svg"
 )]
 #![cfg_attr(docsrs, feature(doc_cfg))]
+// Every module already has a real, public path (`config`, `error`), so an intra-doc link to one of
+// their items written from this root module has to name that path explicitly to be correct; the
+// lint that flags an explicit link as "redundant" doesn't know the item isn't actually in this
+// module's own namespace. See retroglyph-core's matching crate-wide allow for the same reasoning.
+#![allow(rustdoc::redundant_explicit_links)]
 
 pub mod config;
+pub mod error;
 
-mod error;
 mod gpu;
 mod instance;
 mod renderer;
@@ -175,11 +180,13 @@ mod sprite_set;
 #[cfg(all(test, feature = "default-font"))]
 mod headless;
 
-pub use config::{WgpuBackendBuilder, WgpuBackendError};
-pub use error::SurfaceError;
-// Re-export the font types so a consumer can build a custom atlas without a separate dependency.
+// Kept at the root, unlike `config`/`error` above: these are `retroglyph-window` types, not this
+// crate's own, so re-exporting them spares a consumer building a custom atlas from adding
+// `retroglyph-window` as an explicit direct dependency just for these two types (the same
+// reasoning as `retroglyph-core`'s kept `HasSize` exception, retroglyph#1035).
 pub use retroglyph_window::font::{self as font, BitmapFont, FontChain};
 
+use error::SurfaceError;
 use gpu::{GpuContext, PendingGpu, WindowSurface, WindowedResult};
 use instance::{Cell, FLAG_HAS_BG, FLAG_HAS_GLYPH};
 use renderer::{GpuResources, LayerRange};
@@ -214,10 +221,10 @@ struct ReadmeDoctests;
 /// no-op cursor, so a duplicate queue here would only ever be dead. See the sub-cell offset note on
 /// [`Presenter`] for the shared rendering contract.
 ///
-/// Build one with [`WgpuBackendBuilder`]. Before the windowing loop calls
-/// [`init_surface`](Presenter::init_surface) there is no device; drawing updates only the CPU-side
-/// instance arrays, and [`present`](Presenter::present) is a no-op. Once the device exists,
-/// `present` uploads the frame and encodes one render pass.
+/// Build one with [`WgpuBackendBuilder`](config::WgpuBackendBuilder). Before the windowing loop
+/// calls [`init_surface`](Presenter::init_surface) there is no device; drawing updates only the
+/// CPU-side instance arrays, and [`present`](Presenter::present) is a no-op. Once the device
+/// exists, `present` uploads the frame and encodes one render pass.
 pub struct WgpuRenderer {
     /// Character-to-atlas-slot map for the bitmap font chain.
     glyphs: GlyphAtlas,
@@ -299,7 +306,7 @@ impl std::fmt::Debug for WgpuRenderer {
 
 impl WgpuRenderer {
     /// Builds a renderer for the given glyph atlas, grid size, and scale. Called by
-    /// [`WgpuBackendBuilder::build`].
+    /// [`WgpuBackendBuilder::build`](config::WgpuBackendBuilder::build).
     ///
     /// Glyph cells wider or taller than 255 unscaled pixels are clamped to 255 (the
     /// [`CellGeometry`] limit).
@@ -336,7 +343,8 @@ impl WgpuRenderer {
         }
     }
 
-    /// Attaches a decoded sprite atlas. Called by [`WgpuBackendBuilder::build`] when a tileset was
+    /// Attaches a decoded sprite atlas. Called by
+    /// [`WgpuBackendBuilder::build`](config::WgpuBackendBuilder::build) when a tileset was
     /// registered; the GPU atlas is built later, in [`build_resources`](Self::build_resources).
     #[cfg(feature = "tilesets")]
     pub(crate) fn set_sprites(&mut self, set: SpriteSet) {
@@ -395,7 +403,8 @@ impl WgpuRenderer {
     ///
     /// # Errors
     ///
-    /// Returns [`SurfaceError::Init`] if either atlas exceeds the device's texture limits.
+    /// Returns [`SurfaceError::Init`](error::SurfaceError::Init) if either atlas exceeds the
+    /// device's texture limits.
     pub(crate) fn build_resources(
         &self,
         context: &GpuContext,
@@ -475,7 +484,8 @@ impl WgpuRenderer {
     ///
     /// # Errors
     ///
-    /// Returns [`SurfaceError::Init`] if either atlas exceeds the device's texture limits.
+    /// Returns [`SurfaceError::Init`](error::SurfaceError::Init) if either atlas exceeds the
+    /// device's texture limits.
     fn install_device(
         &mut self,
         context: GpuContext,
@@ -972,7 +982,8 @@ impl Presenter for WgpuRenderer {
 
 #[cfg(all(test, feature = "default-font"))]
 mod compositing_tests {
-    use super::{FLAG_HAS_BG, FLAG_HAS_GLYPH, WgpuBackendBuilder};
+    use super::config::WgpuBackendBuilder;
+    use super::{FLAG_HAS_BG, FLAG_HAS_GLYPH};
     use retroglyph_core::backend::{DrawCell, Output};
     use retroglyph_core::color::{Color, Style};
     use retroglyph_core::grid::Pos;
@@ -1238,7 +1249,8 @@ mod compositing_tests {
 /// diagnostic for a tint that had no sprite to land on (retroglyph#564).
 #[cfg(all(test, feature = "default-font", feature = "tilesets"))]
 mod sprite_layer_tests {
-    use crate::{WgpuBackendBuilder, WgpuRenderer};
+    use crate::WgpuRenderer;
+    use crate::config::WgpuBackendBuilder;
     use retroglyph_core::backend::{DrawCell, Output};
     use retroglyph_core::color::{Style, Tint};
     use retroglyph_core::grid::{Pos, Size};
@@ -1370,7 +1382,8 @@ mod sprite_layer_tests {
 /// applies; the other two harnesses have no facet here to check.
 #[cfg(all(test, feature = "default-font"))]
 mod conformance {
-    use crate::{Cell, WgpuBackendBuilder, WgpuRenderer};
+    use crate::config::WgpuBackendBuilder;
+    use crate::{Cell, WgpuRenderer};
     use retroglyph_core::backend::{DrawCell, Output};
     use retroglyph_core::grid::HasSize as _;
     use retroglyph_core::grid::Size;
