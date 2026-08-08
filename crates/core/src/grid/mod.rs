@@ -183,13 +183,18 @@ impl BlendMode {
 
 /// Size of the grid.
 ///
+/// `width`/`height` are public fields, readable directly (`size.width`). For method-call style
+/// (`size.width()`), bring [`HasSize`] into scope: it's re-exported from this module rather than
+/// `ixy` so callers never need a direct `ixy` dependency just to call it.
+///
 /// # Examples
 ///
 /// ```
-/// use retroglyph_core::grid::Size;
+/// use retroglyph_core::grid::{HasSize, Size};
 ///
 /// let size = Size::new(80, 24);
 /// assert_eq!(size.width, 80);
+/// assert_eq!(size.width(), 80);
 /// ```
 ///
 /// This crate's `serde` feature forwards to [`ixy`]'s own `serde` feature, so `Size` gains
@@ -217,6 +222,9 @@ pub type Size = ixy::Size<u16>;
 pub type Pos = ixy::Pos<u16>;
 
 /// Rectangle in the grid.
+///
+/// `.width()`/`.height()` are inherent methods here (unlike on [`Size`]), so no [`HasSize`]
+/// import is needed to call them.
 ///
 /// # Examples
 ///

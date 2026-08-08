@@ -494,7 +494,7 @@ mod tests {
     use crate::app::Flow;
     use crate::backend::Backend;
     use crate::color::Style;
-    use ixy::HasSize;
+    use crate::grid::HasSize;
 
     struct Clicker {
         clicks: u32,

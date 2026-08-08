@@ -7,9 +7,8 @@
 
 use super::Terminal;
 use crate::backend::{Backend, Output};
-use crate::grid::Grid;
+use crate::grid::{Grid, HasSize};
 use crate::surface::Surface;
-use ixy::HasSize;
 
 impl<B: Backend> Terminal<B> {
     /// Draws one frame: `f` gets a [`Surface`] scoped to the whole terminal on layer 0, then the
