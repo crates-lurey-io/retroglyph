@@ -1,6 +1,6 @@
 [package]
 name = "retroglyph-crossterm"
-version = "0.4.1"
+version = "0.4.2"
 description = "Crossterm terminal backend for retroglyph"
 readme = "README.md"
 edition.workspace = true
@@ -36,8 +36,8 @@ egc = ["retroglyph-terminal/egc", "retroglyph-core/egc"]
 tracing = ["dep:tracing"]
 
 [dependencies]
-retroglyph-core = { path = "../core", version = "0.7.1", default-features = false, features = ["std"] }
-retroglyph-terminal = { path = "../terminal", version = "0.1.9" }
+retroglyph-core = { path = "../core", version = "0.7.2", default-features = false, features = ["std"] }
+retroglyph-terminal = { path = "../terminal", version = "0.1.10" }
 crossterm = "0.29"
 # Only pulled in behind the `tracing` feature (see below); the `draw`/`flush`/`poll_event`
 # spans this enables are the only code in this crate that references it.

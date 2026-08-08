@@ -1,6 +1,6 @@
 [package]
 name = "retroglyph-terminal-wasm"
-version = "0.3.2"
+version = "0.3.3"
 description = "WASM/browser terminal backend for retroglyph, driven by pushed events and pulled ANSI output"
 readme = "README.md"
 edition.workspace = true
@@ -27,8 +27,8 @@ dev = ["retroglyph-core/dev"]
 egc = ["retroglyph-terminal/egc", "retroglyph-core/egc"]
 
 [dependencies]
-retroglyph-core = { path = "../core", version = "0.7.1", default-features = false, features = ["std"] }
-retroglyph-terminal = { path = "../terminal", version = "0.1.9" }
+retroglyph-core = { path = "../core", version = "0.7.2", default-features = false, features = ["std"] }
+retroglyph-terminal = { path = "../terminal", version = "0.1.10" }
 
 [dev-dependencies]
 # Cross-backend Output/Cursor/Input conformance harness (retroglyph#763): dev-only, so the
