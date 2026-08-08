@@ -179,6 +179,10 @@ impl Tint {
     ///     .apply_rgb888(Rgb888::from_rgb(200, 180, 60));
     /// assert_eq!(PX, Rgb888::from_rgb(100, 90, 30));
     /// ```
+    ///
+    /// Takes and returns `gem`'s own [`Rgb888`] rather than a wrapper type: this crate's stability
+    /// guarantee covers the pinned `gem` major version along with retroglyph's own API (see the
+    /// crate-level docs' "Stability" section).
     #[must_use]
     pub const fn apply_rgb888(self, px: Rgb888) -> Rgb888 {
         let (r, g, b) = self.apply(px.to_rgb());
