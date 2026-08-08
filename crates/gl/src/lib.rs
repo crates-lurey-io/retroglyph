@@ -28,14 +28,13 @@
 //! ```
 //!
 //! This backend composites grid layers itself on the GPU
-//! ([`composites_layers`](retroglyph_core::backend::Output::composites_layers) returns `true`): it
+//! ([`compositing`](retroglyph_core::backend::Output::compositing) returns
+//! [`retroglyph_core::backend::Compositing::PixelLayered`]): it
 //! receives the raw layered stream from the core `Terminal` and draws each layer back-to-front, so
 //! an empty cell in a higher layer lets the layer beneath show through while an occupied cell is
 //! opaque (issue #368), matching `retroglyph-software`'s per-pixel occlusion. It requests full
-//! frames
-//! ([`needs_full_frame`](retroglyph_core::backend::Output::needs_full_frame) returns `true`) and
-//! redraws every cell of every layer each frame, so there is no orphaned-pixel problem from
-//! sub-cell glyph spill.
+//! frames (`needs_full_frame: true`) and redraws every cell of every layer each frame, so there
+//! is no orphaned-pixel problem from sub-cell glyph spill.
 //!
 //! # Platform split
 //!
@@ -131,6 +130,7 @@ pub use retroglyph_window::font::{self as font, BitmapFont, FontChain};
 use context::GlContext;
 use error::SurfaceError;
 use renderer::{FLAG_HAS_BG, FLAG_HAS_GLYPH, GlResources, Instance};
+use retroglyph_core::backend::Compositing;
 use retroglyph_core::backend::DrawCell;
 use retroglyph_core::backend::Output;
 use retroglyph_core::color::Color;
@@ -419,7 +419,7 @@ impl Output for GlRenderer {
     // through `Presenter::present`'s `SurfaceError` instead.
     type Error = core::convert::Infallible;
 
-    // No `draw` override: this backend always composites (`composites_layers` returns `true`
+    // No `draw` override: this backend always composites (`compositing` returns `PixelLayered`
     // below), so `Terminal::present` never calls single-layer `draw` and the default
     // implementation (forwards to `draw_layers`) is exactly right. See retroglyph#561; this used
     // to have its own `write_tile`-based body that wrote glyph instances only and silently never
@@ -663,16 +663,14 @@ impl Output for GlRenderer {
         Ok(())
     }
 
-    fn needs_full_frame(&self) -> bool {
-        // Composited layers plus sub-cell glyph spill mean a partial redraw could leave orphaned
-        // pixels; redraw every cell of every layer each frame.
-        true
-    }
-
-    fn composites_layers(&self) -> bool {
+    fn compositing(&self) -> Compositing {
         // Draw the raw layered stream back-to-front on the GPU (issue #368) instead of letting the
         // core flatten it, so per-layer transparency works the same as on `retroglyph-software`.
-        true
+        // Composited layers plus sub-cell glyph spill mean a partial redraw could leave orphaned
+        // pixels; redraw every cell of every layer each frame.
+        Compositing::PixelLayered {
+            needs_full_frame: true,
+        }
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
@@ -834,6 +832,7 @@ impl Drop for GlRenderer {
 mod compositing_tests {
     use super::{FLAG_HAS_BG, FLAG_HAS_GLYPH};
     use crate::config::GlBackendBuilder;
+    use retroglyph_core::backend::Compositing;
     use retroglyph_core::backend::DrawCell;
     use retroglyph_core::backend::Output;
     use retroglyph_core::color::Color;
@@ -898,8 +897,12 @@ mod compositing_tests {
             .grid_size(2, 1)
             .build()
             .expect("default-font builds");
-        assert!(r.composites_layers());
-        assert!(r.needs_full_frame());
+        assert_eq!(
+            r.compositing(),
+            Compositing::PixelLayered {
+                needs_full_frame: true
+            }
+        );
     }
 
     #[test]

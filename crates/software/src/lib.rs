@@ -113,7 +113,7 @@ use surface::WindowSurface;
 struct ReadmeDoctests;
 
 use retroglyph_core::backend::DrawCell;
-use retroglyph_core::backend::{Cursor, Input, Output};
+use retroglyph_core::backend::{Compositing, Cursor, Input, Output};
 use retroglyph_core::color::Color;
 
 // The bitmap font lives in `retroglyph-window`'s winit-free `font` module (both graphical
@@ -200,7 +200,8 @@ struct RenderContext {
     /// `GridBuf` per layer indexed `[layer_id]`, each internally flat-indexed `[y * cols + x]`.
     /// Used to find dirty cells without touching core's diff model: `draw_layers` already
     /// receives every cell on every allocated layer every frame (see
-    /// [`Output::needs_full_frame`]), so comparing against this shadow copy in place is enough to
+    /// [`Compositing::PixelLayered`](crate::backend::Compositing::PixelLayered)), so comparing
+    /// against this shadow copy in place is enough to
     /// tell which cells actually changed, with no new core API needed. Each layer's `GridBuf` is
     /// always replaced wholesale (via `GridBuf::new_filled`), never resized in place, whenever the
     /// grid dimensions change, so a layer's buffer and its declared width/height can never drift
@@ -399,8 +400,8 @@ impl SoftwareRenderer {
     /// `pixel_buf` into `prev_pixels` afterwards, since every other row is
     /// already known to match; when nothing changed, the copy is skipped
     /// entirely. `draw_layers` always repaints every cell (see
-    /// [`Output::needs_full_frame`]), so `prev_pixels` still has to hold a
-    /// full previous-frame pixel buffer to diff against: this only removes
+    /// [`Compositing::PixelLayered`](crate::backend::Compositing::PixelLayered)), so `prev_pixels`
+    /// still has to hold a full previous-frame pixel buffer to diff against: this only removes
     /// the copy's cost from being proportional to the whole buffer instead of
     /// the changed region, which is what actually dominates this function's
     /// cost on an unchanged or near-unchanged frame.
@@ -730,7 +731,7 @@ impl SoftwareBackend {
 impl Output for SoftwareRenderer {
     type Error = core::convert::Infallible;
 
-    // No `draw` override: this backend always composites (`composites_layers` returns `true`
+    // No `draw` override: this backend always composites (`compositing` returns `PixelLayered`
     // below), so `Terminal::present` never calls single-layer `draw` and the default
     // implementation (forwards to `draw_layers`) is exactly right. See retroglyph#561.
 
@@ -743,7 +744,7 @@ impl Output for SoftwareRenderer {
     /// cases paints (it is not always the tile's own background, to mirror
     /// `Grid::flatten_into`'s background-inheritance rule exactly). The `is_empty`
     /// guard matters because this receives the full frame (see
-    /// [`needs_full_frame`](Output::needs_full_frame)), including empty
+    /// [`Compositing::PixelLayered`]), including empty
     /// higher-layer cells that must not overwrite layer 0.
     ///
     /// This matches cell backends (retroglyph#304): an occupied space with a
@@ -770,9 +771,10 @@ impl Output for SoftwareRenderer {
         let buf_w = cols * cell_w;
         let cell_count = cols * rows;
 
-        // `needs_full_frame` always returns `true` for this backend, so this receives every cell
-        // on every allocated layer on every call: `Terminal::present`'s diff-only path (used when
-        // a backend's `needs_full_frame` is `false`) never applies here, and changing that would
+        // `compositing()` always returns `needs_full_frame: true` for this backend, so this
+        // receives every cell on every allocated layer on every call: `Terminal::present`'s
+        // diff-only path (used when `needs_full_frame` is `false`) never applies here, and
+        // changing that would
         // be a `retroglyph-core` API change (retroglyph#302). Instead, this method keeps its own
         // per-cell shadow copy of the last frame's tiles (`RenderContext::prev_tiles`) and diffs
         // incoming cells against it below, entirely internally: cells whose tile is unchanged
@@ -964,12 +966,10 @@ impl Output for SoftwareRenderer {
         Ok(())
     }
 
-    fn needs_full_frame(&self) -> bool {
-        true
-    }
-
-    fn composites_layers(&self) -> bool {
-        true
+    fn compositing(&self) -> Compositing {
+        Compositing::PixelLayered {
+            needs_full_frame: true,
+        }
     }
 }
 
@@ -1470,6 +1470,20 @@ mod tests {
         let renderer = test_renderer();
         assert_eq!(renderer.cell_size(), (8, 16));
         assert_eq!(renderer.geometry(), CellGeometry::new(8, 16, 1));
+    }
+
+    #[test]
+    fn compositing_requests_pixel_layered_full_frames() {
+        // Pins `Output::compositing`'s return value directly: sub-cell offsets can spill glyph
+        // pixels into neighboring cells, so this backend always needs the full frame redrawn (see
+        // `compositing`'s doc).
+        let renderer = test_renderer();
+        assert_eq!(
+            renderer.compositing(),
+            Compositing::PixelLayered {
+                needs_full_frame: true
+            }
+        );
     }
 
     #[test]
@@ -2047,7 +2061,7 @@ mod tests {
 
     // ── Dirty-cell repaint (retroglyph#302) ──────────────────────────────
     //
-    // `draw_layers` always receives every cell (see `Output::needs_full_frame`), but internally
+    // `draw_layers` always receives every cell (see `Compositing::PixelLayered`), but internally
     // it should only actually repaint pixels for cells that changed since the last call, falling
     // back to a full clear + repaint when a sub-cell offset or a layer-count change is in play.
     // These assert on the rendered pixels (not on any private dirty-tracking state), so they
@@ -2307,7 +2321,7 @@ mod tests {
 
         fn resize(&mut self, size: Size) {
             Output::resize(&mut self.renderer, size);
-            // This backend always reports `needs_full_frame() == true` (see its `Output` impl):
+            // This backend always reports `needs_full_frame: true` (see its `Output` impl):
             // its pixel buffer is only actually repainted (and so only meaningfully
             // observable) on the next `draw_layers` call, which `Terminal::present` always
             // supplies in real use. `snapshot()` reads pixels directly instead, so settle it

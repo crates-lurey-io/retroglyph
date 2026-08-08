@@ -17,7 +17,8 @@ impl Grid {
     /// `Some` only when [`TileFlags::HAS_EXTRA`] is set.
     ///
     /// Unallocated layers are skipped. This is used by backends that need
-    /// the full frame on every draw (see [`crate::backend::Output::needs_full_frame`]).
+    /// the full frame on every draw (see [`crate::backend::Compositing::PixelLayered`]'s
+    /// `needs_full_frame` field).
     ///
     /// This iterator is zero-allocation: it walks the layer buffers inline.
     pub fn layers(&self) -> impl Iterator<Item = DrawCell<'_>> + '_ {
@@ -49,7 +50,7 @@ impl Grid {
     /// Composites every allocated layer into `dst`'s layer 0, one tile per cell.
     ///
     /// Used by [`crate::terminal::Terminal::present`] for backends that do not composite
-    /// layers themselves (see [`crate::backend::Output::composites_layers`]). The rule
+    /// layers themselves (see [`crate::backend::Compositing::CellFlattened`]). The rule
     /// matches the software renderer's pixel semantics and the [`blit`](Self::blit)
     /// transparency convention:
     ///

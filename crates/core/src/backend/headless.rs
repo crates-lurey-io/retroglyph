@@ -59,7 +59,7 @@ impl Headless {
     /// documented on [`crate::grid`].
     ///
     /// For the usual case, a backend left at the default
-    /// [`composites_layers`](Output::composites_layers) of `false`,
+    /// [`compositing`](Output::compositing) of [`Compositing::CellFlattened`](crate::backend::Compositing::CellFlattened),
     /// [`crate::terminal::Terminal::present`] has already flattened the frame and only layer 0 is
     /// ever written, so this is simply the received content. Use
     /// [`layer_grid`](Self::layer_grid) to inspect the raw per-layer state instead.
@@ -70,8 +70,9 @@ impl Headless {
 
     /// Returns the raw, un-composited per-layer state, as received.
     ///
-    /// Only interesting for a backend wrapping this one that returns `true` from
-    /// [`composites_layers`](Output::composites_layers) and so receives the multi-layer stream:
+    /// Only interesting for a backend wrapping this one that returns
+    /// [`Compositing::PixelLayered`](crate::backend::Compositing::PixelLayered) from
+    /// [`compositing`](Output::compositing) and so receives the multi-layer stream:
     /// this is what lets a test assert which layer a cell arrived on, rather than only what the
     /// composited frame looks like. Otherwise identical to [`grid`](Self::grid).
     #[must_use]

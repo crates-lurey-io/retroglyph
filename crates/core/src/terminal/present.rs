@@ -6,7 +6,7 @@
 //! documented on it; its own doc comment and the tests below cover that matrix directly.
 
 use super::Terminal;
-use crate::backend::{Backend, Output};
+use crate::backend::{Backend, Compositing, Output};
 use crate::grid::{Grid, HasSize};
 use crate::surface::Surface;
 
@@ -48,9 +48,9 @@ impl<B: Backend> Terminal<B> {
     /// of calling this directly.
     ///
     /// When the backend requires a full frame (see
-    /// [`crate::backend::Output::needs_full_frame`]), all cells from every allocated layer are
-    /// sent rather than just the diff, so pixel-based backends can clear and
-    /// redraw to avoid orphaned pixels from sub-cell offsets.
+    /// [`crate::backend::Compositing::PixelLayered`]'s `needs_full_frame` field), all cells from
+    /// every allocated layer are sent rather than just the diff, so pixel-based backends can
+    /// clear and redraw to avoid orphaned pixels from sub-cell offsets.
     ///
     /// After a present, the new current buffer is cleared so the next frame starts empty.
     /// Callers should not draw into a frame and skip presenting it: the next [`draw`](Self::draw)
@@ -126,9 +126,9 @@ impl<B: Backend> Terminal<B> {
         // it is safe unconditionally and keeps immediate mode's "next `draw` starts empty"
         // contract true even after a failed present.
         let result = (|| -> Result<(), <B as Output>::Error> {
-            if self.backend.composites_layers() {
+            if let Compositing::PixelLayered { needs_full_frame } = self.backend.compositing() {
                 // Pixel/GPU backends composite the raw layered stream themselves.
-                if self.backend.needs_full_frame() {
+                if needs_full_frame {
                     let all = self.current.layers();
                     self.backend.draw_layers(all)?;
                 } else {
@@ -137,7 +137,7 @@ impl<B: Backend> Terminal<B> {
                 }
                 // Same reasoning as the fast path below: this branch bypasses the flatten buffers
                 // too, so the next present that lands in the flatten branch (e.g. a backend whose
-                // `composites_layers()` flips to `false`) must not diff against a
+                // `compositing()` flips to `Compositing::CellFlattened`) must not diff against a
                 // `flattened_previous` that was never actually the last frame presented.
                 self.flattened_stale = true;
             } else if self.current.max_layer() == 0 && self.previous.max_layer() == 0 {
@@ -235,8 +235,8 @@ mod tests {
     /// Used to exercise `present`'s documented error-recovery contract: either failure must
     /// leave the frame's cells marked dirty so they are resent on the next successful `present`.
     ///
-    /// `composites_layers` is also configurable, so the same helper covers the compositing,
-    /// flatten, and single-layer fast-path branches of `present`.
+    /// Its `composites_layers` field is also configurable, so the same helper covers the
+    /// compositing, flatten, and single-layer fast-path branches of `present`.
     ///
     /// `std`-only: its `Output::Error` is `std::io::Error`, purely as a convenient stand-in
     /// error type for this test.
@@ -302,8 +302,14 @@ mod tests {
             self.inner.clear().map_err(|e| match e {})
         }
 
-        fn composites_layers(&self) -> bool {
-            self.composites_layers
+        fn compositing(&self) -> Compositing {
+            if self.composites_layers {
+                Compositing::PixelLayered {
+                    needs_full_frame: false,
+                }
+            } else {
+                Compositing::CellFlattened
+            }
         }
     }
 
@@ -333,92 +339,7 @@ mod tests {
         assert_eq!(term.backend().grid()[Pos::new(1, 0)].glyph(), '@');
     }
 
-    /// A cell backend with `needs_full_frame() == true` and the default `composites_layers()`.
-    ///
-    /// No real backend in this workspace uses that combination; this pins the interaction
-    /// `Output::draw_layers`'s docs describe (retroglyph#763): a `true` `needs_full_frame` only
-    /// takes effect inside `composites_layers`'s branch of `present`, so this combination gets
-    /// the same diff-only stream as `needs_full_frame() == false` would, not the "all cells,
-    /// every call" this method's own doc otherwise promises unconditionally.
-    struct NeedsFullFrameWithoutCompositing {
-        inner: Headless,
-        last_draw_len: usize,
-    }
-
-    impl Output for NeedsFullFrameWithoutCompositing {
-        type Error = core::convert::Infallible;
-
-        fn draw_layers<'a, I>(&mut self, content: I) -> Result<(), Self::Error>
-        where
-            I: Iterator<Item = DrawCell<'a>>,
-        {
-            let content: Vec<_> = content.collect();
-            self.last_draw_len = content.len();
-            self.inner.draw_layers(content.into_iter())
-        }
-
-        fn flush(&mut self) -> Result<(), Self::Error> {
-            self.inner.flush()
-        }
-
-        fn size(&self) -> Size {
-            self.inner.size()
-        }
-
-        fn clear(&mut self) -> Result<(), Self::Error> {
-            self.inner.clear()
-        }
-
-        fn needs_full_frame(&self) -> bool {
-            true
-        }
-
-        // `composites_layers` left at its default `false`: exactly the combination the docs on
-        // `Output::draw_layers`/`Output::needs_full_frame` now call out.
-    }
-
-    impl Input for NeedsFullFrameWithoutCompositing {
-        fn poll_event(&mut self, timeout: Duration) -> Option<Event> {
-            self.inner.poll_event(timeout)
-        }
-    }
-
-    impl Cursor for NeedsFullFrameWithoutCompositing {}
-
-    #[test]
-    fn needs_full_frame_without_composites_layers_still_gets_only_the_diff() {
-        let mut term = Terminal::new(NeedsFullFrameWithoutCompositing {
-            inner: Headless::new(3, 1),
-            last_draw_len: 0,
-        });
-        term.draw(|s| {
-            s.put((0, 0), 'a', Style::default());
-            s.put((1, 0), 'b', Style::default());
-        })
-        .expect("draw failed");
-        assert_eq!(
-            term.backend().last_draw_len,
-            2,
-            "first frame: diff and full-frame agree (everything is new)"
-        );
-
-        // Second, identical frame: a backend for which `needs_full_frame` actually took effect
-        // would still receive both cells here. This one, per the documented caveat, gets the
-        // diff instead, which is empty, since nothing changed.
-        term.draw(|s| {
-            s.put((0, 0), 'a', Style::default());
-            s.put((1, 0), 'b', Style::default());
-        })
-        .expect("draw failed");
-        assert_eq!(
-            term.backend().last_draw_len,
-            0,
-            "needs_full_frame() alone (without composites_layers()) does not widen present's \
-             diff-only dispatch; see Output::draw_layers's docs (retroglyph#763)"
-        );
-    }
-
-    /// A `composites_layers() == true` backend, the branch of `present` no real backend in this
+    /// A `Compositing::PixelLayered` backend, the branch of `present` no real backend in this
     /// workspace's core tests exercises (`retroglyph-gl`/`retroglyph-software` test their own
     /// side of the [`Output`] contract, not `present`'s choice between it and a diff).
     /// `needs_full_frame` is fixed at construction, so one struct covers both dispatch modes.
@@ -470,12 +391,10 @@ mod tests {
             Ok(())
         }
 
-        fn composites_layers(&self) -> bool {
-            true
-        }
-
-        fn needs_full_frame(&self) -> bool {
-            self.full_frame
+        fn compositing(&self) -> Compositing {
+            Compositing::PixelLayered {
+                needs_full_frame: self.full_frame,
+            }
         }
     }
 
@@ -510,8 +429,7 @@ mod tests {
         .expect("draw failed");
         assert!(
             term.backend().last_draw_cells.is_empty(),
-            "composites_layers() == true with needs_full_frame() == false still dispatches only \
-             the diff"
+            "PixelLayered {{ needs_full_frame: false }} still dispatches only the diff"
         );
     }
 
@@ -530,7 +448,7 @@ mod tests {
              written ones"
         );
 
-        // Second, identical frame: unlike the diff branch above, needs_full_frame() actually
+        // Second, identical frame: unlike the diff branch above, needs_full_frame: true actually
         // takes effect here, so the whole layer is resent rather than an empty diff.
         term.draw(|s| {
             s.put((0, 0), 'a', Style::default());
@@ -540,12 +458,11 @@ mod tests {
         assert_eq!(
             term.backend().last_draw_cells.len(),
             3,
-            "composites_layers() == true with needs_full_frame() == true resends every allocated \
-             cell on every present"
+            "PixelLayered {{ needs_full_frame: true }} resends every allocated cell on every present"
         );
     }
 
-    /// A cell backend whose `composites_layers()` can be toggled between presents, standing in
+    /// A cell backend whose `compositing()` can be toggled between presents, standing in
     /// for a backend that degrades from pixel compositing to a cell path at runtime (retroglyph#960).
     struct TogglingCompositor {
         inner: Headless,
@@ -574,8 +491,14 @@ mod tests {
             self.inner.clear()
         }
 
-        fn composites_layers(&self) -> bool {
-            self.composites
+        fn compositing(&self) -> Compositing {
+            if self.composites {
+                Compositing::PixelLayered {
+                    needs_full_frame: false,
+                }
+            } else {
+                Compositing::CellFlattened
+            }
         }
     }
 
@@ -589,18 +512,19 @@ mod tests {
 
     #[test]
     fn present_marks_flatten_buffers_stale_after_a_composites_layers_present() {
-        // A backend that ever answers `true` from `composites_layers()` and later `false` must
-        // not leave `flattened_previous` holding a frame that was never actually the last one
-        // presented. Sequence: flatten branch (establishes stale-looking data) -> composites
-        // branch (bypasses the flatten buffers entirely) -> flatten branch again, where the bug
-        // would incorrectly diff against the first frame's flattened data instead of the second.
+        // A backend that ever answers `PixelLayered` from `compositing()` and later
+        // `CellFlattened` must not leave `flattened_previous` holding a frame that was never
+        // actually the last one presented. Sequence: flatten branch (establishes stale-looking
+        // data) -> composites branch (bypasses the flatten buffers entirely) -> flatten branch
+        // again, where the bug would incorrectly diff against the first frame's flattened data
+        // instead of the second.
         let mut term = Terminal::new(TogglingCompositor {
             inner: Headless::new(3, 1),
             composites: false,
         });
 
         // Frame 1: flatten branch. Layer 1 is touched so `max_layer() != 0`, and
-        // `composites_layers()` is `false`, so this flattens and diffs normally.
+        // `compositing()` is `CellFlattened`, so this flattens and diffs normally.
         term.draw(|s| {
             s.put((0, 0), 'a', Style::default());
             s.on_layer(1).put((1, 0), '#', Style::default());
@@ -637,7 +561,7 @@ mod tests {
         assert_eq!(
             term.backend().inner.grid()[Pos::new(0, 0)].glyph(),
             'a',
-            "flattened_previous must be cleared after a composites_layers() present, not diffed \
+            "flattened_previous must be cleared after a PixelLayered present, not diffed \
              against as if it were the last frame actually shown"
         );
 
@@ -868,7 +792,7 @@ mod tests {
     #[cfg(feature = "std")]
     #[test]
     fn present_resends_cells_after_a_failed_flush_on_the_compositing_path() {
-        // `composites_layers() == true` takes `present`'s first branch entirely, bypassing both
+        // `Compositing::PixelLayered` takes `present`'s first branch entirely, bypassing both
         // the fast path and the flatten buffers; a failed flush there must still leave `previous`
         // untouched so the raw per-layer diff is resent.
         let mut term = Terminal::new(FlushOnceFailing::new(2, 1));

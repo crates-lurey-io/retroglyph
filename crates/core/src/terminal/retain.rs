@@ -118,14 +118,14 @@ impl<B: Backend> Terminal<B> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::{Cursor, DrawCell, Headless, Input, Output};
+    use crate::backend::{Compositing, Cursor, DrawCell, Headless, Input, Output};
     use crate::color::Style;
     use crate::event::Event;
     use crate::grid::{Pos, Size};
     use alloc::vec::Vec;
     use core::time::Duration;
 
-    /// A `composites_layers() == true` cell-recording backend, used to prove `retain_layer`'s
+    /// A `Compositing::PixelLayered` cell-recording backend, used to prove `retain_layer`'s
     /// pre-diff copy from `previous` still applies on the branch of `present` that bypasses the
     /// fast path and flatten buffers entirely. See `present`'s own test module for the fuller
     /// version of this fixture (dispatch-mode coverage); this one only needs the diff branch.
@@ -168,8 +168,10 @@ mod tests {
             Ok(())
         }
 
-        fn composites_layers(&self) -> bool {
-            true
+        fn compositing(&self) -> Compositing {
+            Compositing::PixelLayered {
+                needs_full_frame: false,
+            }
         }
     }
 
@@ -329,7 +331,7 @@ mod tests {
     fn test_retain_layer_skips_redraw_on_a_compositing_backend() {
         use crate::surface::Layer;
 
-        // `composites_layers() == true` takes `present`'s first branch entirely; `retain_layer`'s
+        // `Compositing::PixelLayered` takes `present`'s first branch entirely; `retain_layer`'s
         // pre-diff copy from `previous` (`Grid::copy_layer_from`) runs before that branch, so it
         // must still apply here: the retained layer's cell should be re-synced (and so absent
         // from the diff, since it now matches `previous`) rather than diffed as a real change.

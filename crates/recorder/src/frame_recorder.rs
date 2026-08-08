@@ -2,7 +2,7 @@
 //! `Headless`-driven capture source.
 
 use crate::OwnedCell;
-use retroglyph_core::backend::{Cursor, CursorStyle, DrawCell, Input, Output};
+use retroglyph_core::backend::{Compositing, Cursor, CursorStyle, DrawCell, Input, Output};
 use retroglyph_core::event::Event;
 use retroglyph_core::grid::{Pos, Size};
 use std::sync::{Arc, Mutex};
@@ -191,12 +191,8 @@ impl<B: Output> Output for FrameRecorder<B> {
         Ok(())
     }
 
-    fn needs_full_frame(&self) -> bool {
-        self.inner.needs_full_frame()
-    }
-
-    fn composites_layers(&self) -> bool {
-        self.inner.composites_layers()
+    fn compositing(&self) -> Compositing {
+        self.inner.compositing()
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {

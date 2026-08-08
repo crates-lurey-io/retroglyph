@@ -31,11 +31,12 @@
 //! data is the glyph slot, two colors, the sub-cell offset, and the compositing flags.
 //!
 //! This backend composites grid layers itself on the GPU
-//! ([`composites_layers`](Output::composites_layers) returns `true`): it receives the raw layered
+//! ([`compositing`](Output::compositing) returns
+//! [`retroglyph_core::backend::Compositing::PixelLayered`]): it receives the raw layered
 //! stream from the core `Terminal` and draws each layer back to front, so an empty cell in a higher
 //! layer lets the layer beneath show through while an occupied cell is opaque, matching
 //! `retroglyph-software`'s per-pixel occlusion. It requests full frames
-//! ([`needs_full_frame`](Output::needs_full_frame) returns `true`) and redraws every cell of every
+//! (`needs_full_frame: true`) and redraws every cell of every
 //! layer each frame, so there is no orphaned-pixel problem from sub-cell glyph spill.
 //!
 //! # Choosing between this and `retroglyph-gl`
@@ -190,7 +191,7 @@ use error::SurfaceError;
 use gpu::{GpuContext, PendingGpu, WindowSurface, WindowedResult};
 use instance::{Cell, FLAG_HAS_BG, FLAG_HAS_GLYPH};
 use renderer::{GpuResources, LayerRange};
-use retroglyph_core::backend::{DrawCell, Output};
+use retroglyph_core::backend::{Compositing, DrawCell, Output};
 use retroglyph_core::color::Color;
 use retroglyph_core::grid::HasSize;
 use retroglyph_core::grid::Size;
@@ -606,7 +607,7 @@ impl Output for WgpuRenderer {
     // surface through `Presenter::present`'s `SurfaceError` instead.
     type Error = core::convert::Infallible;
 
-    // No `draw` override: this backend always composites (`composites_layers` returns `true`
+    // No `draw` override: this backend always composites (`compositing` returns `PixelLayered`
     // below), so `Terminal::present` never calls single-layer `draw` and the default implementation
     // (which forwards to `draw_layers`) is exactly right. See retroglyph#561 for why a second,
     // hand-maintained body is worse than none.
@@ -840,16 +841,14 @@ impl Output for WgpuRenderer {
         Ok(())
     }
 
-    fn needs_full_frame(&self) -> bool {
-        // Composited layers plus sub-cell glyph spill mean a partial redraw could leave orphaned
-        // pixels; redraw every cell of every layer each frame.
-        true
-    }
-
-    fn composites_layers(&self) -> bool {
+    fn compositing(&self) -> Compositing {
         // Draw the raw layered stream back to front on the GPU instead of letting the core flatten
-        // it, so per-layer transparency works the same as on `retroglyph-software`.
-        true
+        // it, so per-layer transparency works the same as on `retroglyph-software`. Composited
+        // layers plus sub-cell glyph spill mean a partial redraw could leave orphaned pixels;
+        // redraw every cell of every layer each frame.
+        Compositing::PixelLayered {
+            needs_full_frame: true,
+        }
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
@@ -984,7 +983,7 @@ impl Presenter for WgpuRenderer {
 mod compositing_tests {
     use super::config::WgpuBackendBuilder;
     use super::{FLAG_HAS_BG, FLAG_HAS_GLYPH};
-    use retroglyph_core::backend::{DrawCell, Output};
+    use retroglyph_core::backend::{Compositing, DrawCell, Output};
     use retroglyph_core::color::{Color, Style};
     use retroglyph_core::grid::Pos;
     use retroglyph_core::tile::Tile;
@@ -1030,8 +1029,12 @@ mod compositing_tests {
             .grid_size(2, 1)
             .build()
             .expect("default-font builds");
-        assert!(r.composites_layers());
-        assert!(r.needs_full_frame());
+        assert_eq!(
+            r.compositing(),
+            Compositing::PixelLayered {
+                needs_full_frame: true
+            }
+        );
     }
 
     #[test]
@@ -1384,7 +1387,7 @@ mod sprite_layer_tests {
 mod conformance {
     use crate::config::WgpuBackendBuilder;
     use crate::{Cell, WgpuRenderer};
-    use retroglyph_core::backend::{DrawCell, Output};
+    use retroglyph_core::backend::{Compositing, DrawCell, Output};
     use retroglyph_core::grid::HasSize as _;
     use retroglyph_core::grid::Size;
     use retroglyph_core::testing::conformance::{Observable, fnv1a};
@@ -1423,12 +1426,8 @@ mod conformance {
             self.renderer.draw_layers(content)
         }
 
-        fn needs_full_frame(&self) -> bool {
-            self.renderer.needs_full_frame()
-        }
-
-        fn composites_layers(&self) -> bool {
-            self.renderer.composites_layers()
+        fn compositing(&self) -> Compositing {
+            self.renderer.compositing()
         }
 
         fn flush(&mut self) -> Result<(), Self::Error> {
@@ -1476,5 +1475,19 @@ mod conformance {
     #[test]
     fn output_contract() {
         retroglyph_core::testing::conformance::assert_output_contract(WgpuObserver::new);
+    }
+
+    #[test]
+    fn compositing_forwards_to_the_inner_renderer() {
+        // `assert_output_contract` above never calls `compositing()` (see its own docs on what
+        // it does not cover), so this pins the forwarding directly: `WgpuObserver` must report
+        // the same value the real `WgpuRenderer` does, not the trait's `CellFlattened` default.
+        let observer = WgpuObserver::new(Size::new(2, 1));
+        assert_eq!(
+            observer.compositing(),
+            Compositing::PixelLayered {
+                needs_full_frame: true
+            }
+        );
     }
 }

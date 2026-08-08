@@ -186,7 +186,7 @@ fn paint(out: &mut GlRenderer, cells: &[(Pos, Tile)]) {
 }
 
 /// Feeds a full layered frame `(layer, pos, tile)` into the renderer via `draw_layers`, the way the
-/// core `Terminal` drives this `composites_layers` backend.
+/// core `Terminal` drives this `PixelLayered` backend.
 fn paint_layers(out: &mut GlRenderer, cells: &[(u8, Pos, Tile)]) {
     out.draw_layers(cells.iter().map(|(l, p, t)| DrawCell::on_layer(*l, *p, t)))
         .ok();
