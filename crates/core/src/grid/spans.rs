@@ -2,13 +2,12 @@
 //! [`Grid::span_owner`](crate::grid::Grid::span_owner), and [`Grid::clear_span`](crate::grid::Grid::clear_span), plus the anchor/covered-cell bookkeeping they
 //! share.
 
-use super::{Grid, Pos, Size, to_grixy_pos};
+use super::{Grid, HasSize, Pos, Size, to_grixy_pos};
 use crate::color::Style;
 use crate::tile::{Tile, TileFlags};
 use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
 use grixy::ops::GridRead;
-use ixy::HasSize;
 
 /// A span's largest representable extent on either axis (see `Tile::span_w`/`Tile::span_h`),
 /// and so the widest band [`Grid::repair_spans_after_resize`] ever needs to scan near a shrunk

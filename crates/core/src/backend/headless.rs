@@ -12,12 +12,11 @@
 use crate::backend::{Cursor, CursorStyle, DrawCell, Input, Output};
 use crate::color::Style;
 use crate::event::{Event, coalesces_with};
-use crate::grid::{Grid, Pos, Size};
+use crate::grid::{Grid, HasSize, Pos, Size};
 use crate::tile::Tile;
 use alloc::collections::VecDeque;
 use alloc::string::String;
 use core::time::Duration;
-use ixy::HasSize;
 
 /// In-memory backend for testing.
 ///
