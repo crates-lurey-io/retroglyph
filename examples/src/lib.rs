@@ -34,6 +34,7 @@
     rustdoc::private_intra_doc_links
 )]
 
+mod args;
 // Only the live backends have a frame rate worth reporting: the headless paths are frame-stepped
 // at a fixed synthetic delta, and nothing there constructs the `ExampleApp` driver that draws it.
 #[cfg(any(

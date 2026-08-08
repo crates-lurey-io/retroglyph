@@ -14,9 +14,38 @@
 //! [`install_panic_recorder`] wires a [`RecorderHandle`] into `std::panic`'s hook, so an
 //! in-progress recording is saved automatically if the process panics instead of being lost.
 //!
-//! Not here: rendering a recording to an asciicast/GIF, or capturing raw terminal frames (ANSI
-//! output) rather than input events -- that's the frame recorder, a separate, not-yet-built
-//! crate (see retroglyph#1267's follow-up issue).
+//! A different pair records "what was shown" instead of "what happened":
+//!
+//! - [`FrameRecorder`]: wraps any [`Output`](retroglyph_core::backend::Output) backend and taps
+//!   its [`DrawCell`](retroglyph_core::backend::DrawCell) diff stream, buffering owned
+//!   [`CapturedFrame`]s.
+//! - [`write_cast`]: exports those frames as
+//!   [asciicast v3](https://docs.asciinema.org/manual/asciicast/v3/) newline-delimited JSON, so
+//!   the existing external ecosystem (`agg`, `asciinema-player`, `svg-term`) renders it --
+//!   retroglyph never builds a GIF encoder or an interactive player of its own.
+//!
+//! With the `pty` feature, [`pty::capture_pty`] is a second capture source for the same
+//! [`write_cast`] path: it drives a real backend under a real pseudo-terminal (rather than a
+//! `TestHarness`-style synthetic `Headless`), aiming for the fidelity a real-terminal tool like
+//! `vhs` gets from a real terminal emulator, without one in this crate's own dependency tree.
+//!
+//! Not here: a first-class cross-backend replay helper for frame recordings (standard asciicast
+//! output already covers the common case), or embedding `asciinema-player` in the docs site
+//! (straightforward once there's a concrete need) -- both deliberately deferred, see
+//! retroglyph#1268.
+//!
+//! # Features
+//!
+//! <!-- gen-features:start -->
+//! This crate has no default features; every feature below is optional and off unless enabled.
+//!
+//! ### `pty`
+//!
+//! ⚪ Optional.
+//!
+//! A real-pseudo-terminal capture source (`pty::capture_pty`) feeding the same `write_cast` path
+//! `FrameRecorder` does, for `vhs`-like real-terminal fidelity. Adds `portable-pty`/`vt100`.
+//! <!-- gen-features:end -->
 
 // Compile the code blocks in this crate's own README as doctests so its quick start is
 // type-checked on every test run and cannot silently rot. The `cfg(doctest)` gate keeps this out
@@ -26,12 +55,20 @@
 #[doc = include_str!("../README.md")]
 struct ReadmeDoctests;
 
+mod cast;
+mod frame_recorder;
 mod input_recorder;
+mod owned_cell;
 mod panic_hook;
+#[cfg(feature = "pty")]
+pub mod pty;
 mod replay;
 mod rgrec;
 
+pub use cast::write_cast;
+pub use frame_recorder::{CapturedFrame, FrameRecorder, FrameRecorderHandle};
 pub use input_recorder::{InputRecorder, RecorderHandle};
+pub use owned_cell::OwnedCell;
 pub use panic_hook::install_panic_recorder;
 pub use replay::replay_live;
 pub use rgrec::{read, write};

@@ -25,7 +25,8 @@ use std::rc::Rc;
 #[cfg(feature = "crossterm")]
 use std::time::Duration;
 
-/// Whether the overlay starts visible, from the `RG_FPS` environment variable.
+/// Whether the overlay starts visible, from `--fps` (see [`crate::args`]) or, if that flag
+/// isn't passed, the `RG_FPS` environment variable.
 ///
 /// This is the *starting* state only -- `PerfOverlayApp`'s own toggle key flips it at runtime
 /// either way. It exists for runs that need to come up clean and never touch a keyboard:
@@ -35,7 +36,9 @@ use std::time::Duration;
 ///
 /// Always `true` on `wasm32` (nothing sets environment variables there).
 pub(crate) fn starts_visible() -> bool {
-    visible_from_env(std::env::var("RG_FPS").ok().as_deref())
+    crate::args::parsed()
+        .fps
+        .unwrap_or_else(|| visible_from_env(std::env::var("RG_FPS").ok().as_deref()))
 }
 
 /// [`starts_visible`]'s parsing, split out so it's testable without mutating the process
