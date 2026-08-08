@@ -32,6 +32,7 @@ where
     B: Backend,
     A: App<B>,
 {
+    app.init(&mut term);
     let mut frame_count = 0u64;
     for (delay, event) in recording.events() {
         if !delay.is_zero() {
@@ -135,5 +136,33 @@ mod tests {
         replay_live(term, &mut app, &recording).expect("replay_live");
 
         assert_eq!(app.updates, 1, "must stop after the first Flow::Exit");
+    }
+
+    #[test]
+    fn replay_live_calls_init_once_before_the_first_update() {
+        struct RecordsInit {
+            init_calls: u32,
+            updates: u32,
+        }
+        impl<B: Backend> App<B> for RecordsInit {
+            fn init(&mut self, _term: &mut Terminal<B>) {
+                self.init_calls += 1;
+            }
+            fn update(&mut self, _term: &mut Terminal<B>, _frame: &Frame) -> Flow {
+                self.updates += 1;
+                Flow::Continue
+            }
+        }
+
+        let recording = recording();
+        let term = Terminal::new(Headless::new(recording.width(), recording.height()));
+        let mut app = RecordsInit {
+            init_calls: 0,
+            updates: 0,
+        };
+        replay_live(term, &mut app, &recording).expect("replay_live");
+
+        assert_eq!(app.init_calls, 1, "init must run exactly once");
+        assert_eq!(app.updates, 2);
     }
 }
