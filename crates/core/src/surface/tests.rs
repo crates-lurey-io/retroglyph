@@ -1226,6 +1226,23 @@ fn put_signed_does_wide_char_bookkeeping_like_put() {
     );
 }
 
+// `put_grapheme` is public API (retroglyph#1299): a caller with a multi-codepoint grapheme
+// cluster (combining mark, flag, emoji + variation selector) needs a single-cell placement
+// call the same way `put`/`put_signed`/`put_offset`/`put_span` already provide for `char`.
+#[test]
+#[cfg(feature = "egc")]
+fn put_grapheme_writes_a_combining_sequence_and_respects_this_surfaces_clip() {
+    let mut grid = Grid::new(4, 1);
+    let mut surface = Surface::new(&mut grid, Rect::new(0, 0, 4, 1), 0);
+
+    // 'e' followed by U+0301 COMBINING ACUTE ACCENT: a single extended grapheme cluster.
+    surface.put_grapheme(1, 0, "e\u{0301}", Style::default());
+    // Outside this surface's clip: silently dropped, not a panic.
+    surface.put_grapheme(10, 0, "e\u{0301}", Style::default());
+
+    assert_eq!(grid[Pos::new(1, 0)].glyph(), 'e');
+}
+
 #[test]
 #[cfg(not(feature = "egc"))]
 fn put_signed_does_not_tint_a_foreign_tile_when_put_tile_refuses_the_write() {
