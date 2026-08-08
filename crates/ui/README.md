@@ -170,6 +170,17 @@ above for the `no_std` alternative).
 Disabling this feature (`--no-default-features`) builds this crate `no_std` (requires an allocator
 and one of `std`/`libm`; see the crate-level `compile_error!` in `src/lib.rs`).
 
+### `testing`
+
+⚪ Optional.
+
+Enables `testing`'s `WidgetHarness`, the sibling of `retroglyph-core`'s `testing::TestHarness` for
+driving a bare `Interaction<Id>`/`Ui` (no `App` required) against `Headless` for tests, with
+synthetic input queuing and a `step` that drains it.
+
+Test-only surface, off by default so it never ships in a release build by accident. `Headless` is
+unconditionally available in `retroglyph-core`, so this needs no feature forwarding there.
+
 </details>
 <!-- gen-features:end -->
 
