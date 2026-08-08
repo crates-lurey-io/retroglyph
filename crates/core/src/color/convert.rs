@@ -46,6 +46,27 @@ impl Color {
     /// Bright White (ANSI).
     pub const BRIGHT_WHITE: Self = Self::Ansi(AnsiColor::BrightWhite);
 
+    /// Constructs an `Rgb` variant from its three channels.
+    #[must_use]
+    pub const fn rgb(r: u8, g: u8, b: u8) -> Self {
+        Self::Rgb { r, g, b }
+    }
+
+    /// Constructs an `Rgb` variant from a packed `0xRRGGBB` value. The high byte is ignored.
+    ///
+    /// Round-trips the `#rrggbb` form [`Display`](core::fmt::Display) writes, so a color logged
+    /// out of a running app can be pasted straight back into source. Unlike
+    /// [`from_hex`](Self::from_hex), there is no CSS short-form expansion: `Color::hex(0xF80)` is
+    /// `#000f80`, not `#ff8800`.
+    #[must_use]
+    pub const fn hex(rgb: u32) -> Self {
+        Self::Rgb {
+            r: ((rgb >> 16) & 0xFF) as u8,
+            g: ((rgb >> 8) & 0xFF) as u8,
+            b: (rgb & 0xFF) as u8,
+        }
+    }
+
     /// Resolves this color to a concrete 24-bit `(r, g, b)` triple, substituting `default` for
     /// [`Color::Default`](crate::color::Color::Default).
     ///
@@ -191,7 +212,7 @@ impl Color {
     /// ```
     /// use retroglyph_core::color::Color;
     ///
-    /// let black = Color::Rgb { r: 0, g: 0, b: 0 };
+    /// let black = Color::rgb(0, 0, 0);
     /// assert_eq!(black.to_indexed(), Color::Indexed(0));
     ///
     /// // Non-RGB colors pass through unchanged.
@@ -222,7 +243,7 @@ impl Color {
     /// ```
     /// use retroglyph_core::color::{Color, Quantize};
     ///
-    /// let salmon = Color::Rgb { r: 250, g: 128, b: 114 };
+    /// let salmon = Color::rgb(250, 128, 114);
     /// assert_eq!(salmon.to_indexed_with(Quantize::Perceptual), Color::Indexed(210));
     /// assert_eq!(salmon.to_indexed_with(Quantize::Euclidean), Color::Indexed(209));
     /// ```
@@ -245,7 +266,7 @@ impl Color {
     /// ```
     /// use retroglyph_core::color::{AnsiColor, Color};
     ///
-    /// let pure_red = Color::Rgb { r: 255, g: 0, b: 0 };
+    /// let pure_red = Color::rgb(255, 0, 0);
     /// assert_eq!(pure_red.to_ansi(), Color::Ansi(AnsiColor::BrightRed));
     ///
     /// // Non-RGB colors pass through unchanged.
@@ -275,7 +296,7 @@ impl Color {
     /// use retroglyph_core::color::{AnsiColor, Color, Quantize};
     ///
     /// // Euclidean RGB distance over-weights green, so this reddish brown lands on yellow.
-    /// let chocolate = Color::Rgb { r: 210, g: 105, b: 30 };
+    /// let chocolate = Color::rgb(210, 105, 30);
     /// assert_eq!(chocolate.to_ansi_with(Quantize::Perceptual), Color::Ansi(AnsiColor::BrightRed));
     /// assert_eq!(chocolate.to_ansi_with(Quantize::Euclidean), Color::Ansi(AnsiColor::Yellow));
     /// ```
@@ -299,17 +320,27 @@ mod tests {
     }
 
     #[test]
+    fn test_rgb_and_hex_agree() {
+        // The two constructors are for different inputs (tuned channels vs. a packed literal),
+        // but must always agree on the same color.
+        assert_eq!(Color::hex(0x00DC_5A5A), Color::rgb(220, 90, 90));
+        assert_eq!(Color::hex(0x0000_0000), Color::rgb(0, 0, 0));
+        assert_eq!(Color::hex(0x00FF_FFFF), Color::rgb(255, 255, 255));
+    }
+
+    #[test]
+    fn test_hex_ignores_the_high_byte_and_does_not_expand_short_form() {
+        // The high byte (bits 24..32) is ignored, not validated.
+        assert_eq!(Color::hex(0xFF00_0000), Color::rgb(0, 0, 0));
+        // Unlike `Color::from_hex("#f80")`, which expands `#f80` to `#ff8800`, `hex(0xF80)` is
+        // just the literal 24-bit value `0x000F80`: no CSS short-form expansion.
+        assert_eq!(Color::hex(0x0F80), Color::rgb(0x00, 0x0F, 0x80));
+    }
+
+    #[test]
     fn test_resolve_rgb() {
         // Rgb passes through; Default uses the supplied fallback (per channel).
-        assert_eq!(
-            Color::Rgb {
-                r: 10,
-                g: 20,
-                b: 30
-            }
-            .resolve_rgb((1, 2, 3)),
-            (10, 20, 30)
-        );
+        assert_eq!(Color::rgb(10, 20, 30).resolve_rgb((1, 2, 3)), (10, 20, 30));
         assert_eq!(Color::Default.resolve_rgb((1, 2, 3)), (1, 2, 3));
         // Ansi resolves through the canonical palette.
         assert_eq!(
@@ -350,51 +381,39 @@ mod tests {
 
     #[test]
     fn test_to_indexed_returns_indexed_variant() {
-        let c = Color::Rgb {
-            r: 10,
-            g: 20,
-            b: 30,
-        };
+        let c = Color::rgb(10, 20, 30);
         assert!(matches!(c.to_indexed(), Color::Indexed(_)));
     }
 
     #[test]
     fn test_to_ansi_returns_ansi_variant() {
-        let c = Color::Rgb {
-            r: 10,
-            g: 20,
-            b: 30,
-        };
+        let c = Color::rgb(10, 20, 30);
         assert!(matches!(c.to_ansi(), Color::Ansi(_)));
     }
 
     #[test]
     fn test_to_indexed_black_and_white() {
-        let black = Color::Rgb { r: 0, g: 0, b: 0 };
+        let black = Color::rgb(0, 0, 0);
         assert_eq!(black.to_indexed(), Color::Indexed(0));
 
-        let white = Color::Rgb {
-            r: 255,
-            g: 255,
-            b: 255,
-        };
+        let white = Color::rgb(255, 255, 255);
         assert_eq!(white.to_indexed(), Color::Indexed(15));
     }
 
     #[test]
     fn test_to_ansi_pure_primaries() {
-        let red = Color::Rgb { r: 255, g: 0, b: 0 };
+        let red = Color::rgb(255, 0, 0);
         assert_eq!(red.to_ansi(), Color::Ansi(AnsiColor::BrightRed));
 
-        let green = Color::Rgb { r: 0, g: 255, b: 0 };
+        let green = Color::rgb(0, 255, 0);
         assert_eq!(green.to_ansi(), Color::Ansi(AnsiColor::BrightGreen));
 
         // Pure (0, 0, 255) is closer to the standard Blue reference (0, 0, 238) than to
         // BrightBlue (92, 92, 255), whose red/green components pull it further away.
-        let blue = Color::Rgb { r: 0, g: 0, b: 255 };
+        let blue = Color::rgb(0, 0, 255);
         assert_eq!(blue.to_ansi(), Color::Ansi(AnsiColor::Blue));
 
-        let black = Color::Rgb { r: 0, g: 0, b: 0 };
+        let black = Color::rgb(0, 0, 0);
         assert_eq!(black.to_ansi(), Color::Ansi(AnsiColor::Black));
     }
 
@@ -404,18 +423,14 @@ mod tests {
         // itself (it is by definition its own nearest neighbor in the ANSI palette).
         for ansi in ANSI_COLORS {
             let (r, g, b) = ansi.to_rgb();
-            let c = Color::Rgb { r, g, b };
+            let c = Color::rgb(r, g, b);
             assert_eq!(c.to_ansi(), Color::Ansi(ansi), "ansi color {ansi:?}");
         }
     }
 
     #[test]
     fn test_to_indexed_mid_gray() {
-        let gray = Color::Rgb {
-            r: 128,
-            g: 128,
-            b: 128,
-        };
+        let gray = Color::rgb(128, 128, 128);
         // Should land in the grayscale ramp or cube, never panics or overflows.
         assert!(matches!(gray.to_indexed(), Color::Indexed(_)));
     }
@@ -430,7 +445,7 @@ mod tests {
             (135, 206, 235),
             (0, 128, 128),
         ] {
-            let c = Color::Rgb { r, g, b };
+            let c = Color::rgb(r, g, b);
             assert_eq!(c.to_indexed(), c.to_indexed_with(Quantize::Perceptual));
             assert_eq!(c.to_ansi(), c.to_ansi_with(Quantize::Perceptual));
         }
@@ -440,11 +455,7 @@ mod tests {
     fn test_quantize_metrics_disagree() {
         // Guards the point of the knob: if these ever agreed everywhere, one metric would be
         // dead weight.
-        let chocolate = Color::Rgb {
-            r: 210,
-            g: 105,
-            b: 30,
-        };
+        let chocolate = Color::rgb(210, 105, 30);
         assert_eq!(
             chocolate.to_ansi_with(Quantize::Perceptual),
             Color::Ansi(AnsiColor::BrightRed)
@@ -454,11 +465,7 @@ mod tests {
             Color::Ansi(AnsiColor::Yellow)
         );
 
-        let salmon = Color::Rgb {
-            r: 250,
-            g: 128,
-            b: 114,
-        };
+        let salmon = Color::rgb(250, 128, 114);
         assert_eq!(
             salmon.to_indexed_with(Quantize::Perceptual),
             Color::Indexed(210)
@@ -493,7 +500,7 @@ mod tests {
         for metric in [Quantize::Perceptual, Quantize::Euclidean] {
             for ansi in ANSI_COLORS {
                 let (r, g, b) = ansi.to_rgb();
-                let c = Color::Rgb { r, g, b };
+                let c = Color::rgb(r, g, b);
                 assert_eq!(
                     c.to_ansi_with(metric),
                     Color::Ansi(ansi),
@@ -505,58 +512,37 @@ mod tests {
 
     #[test]
     fn test_lerp() {
-        let red = Color::Rgb { r: 255, g: 0, b: 0 };
-        let blue = Color::Rgb { r: 0, g: 0, b: 255 };
+        let red = Color::rgb(255, 0, 0);
+        let blue = Color::rgb(0, 0, 255);
         let purple = Color::lerp(red, blue, 0.5);
         // 127.5 rounds to 128 (round-to-nearest, ties away from zero).
-        assert_eq!(
-            purple,
-            Color::Rgb {
-                r: 128,
-                g: 0,
-                b: 128
-            }
-        );
+        assert_eq!(purple, Color::rgb(128, 0, 128));
     }
 
     #[test]
     fn test_lerp_resolves_non_rgb() {
-        let red = Color::Rgb { r: 255, g: 0, b: 0 };
+        let red = Color::rgb(255, 0, 0);
 
         // `Color::BLACK` (an `Ansi` variant) resolves to real black and blends normally, rather
         // than short-circuiting to itself.
         assert_eq!(Color::lerp(Color::BLACK, red, 1.0), red);
-        assert_eq!(
-            Color::lerp(Color::BLACK, red, 0.0),
-            Color::Rgb { r: 0, g: 0, b: 0 }
-        );
+        assert_eq!(Color::lerp(Color::BLACK, red, 0.0), Color::rgb(0, 0, 0));
 
         // `Color::Ansi(AnsiColor::Black)` behaves identically to `Color::BLACK` (they're the same
         // variant).
         assert_eq!(Color::lerp(Color::Ansi(AnsiColor::Black), red, 1.0), red);
 
         // `Color::Default` resolves to `(0, 0, 0)` as `a` and `(255, 255, 255)` as `b`.
-        assert_eq!(
-            Color::lerp(Color::Default, red, 0.0),
-            Color::Rgb { r: 0, g: 0, b: 0 }
-        );
+        assert_eq!(Color::lerp(Color::Default, red, 0.0), Color::rgb(0, 0, 0));
         assert_eq!(
             Color::lerp(red, Color::Default, 1.0),
-            Color::Rgb {
-                r: 255,
-                g: 255,
-                b: 255
-            }
+            Color::rgb(255, 255, 255)
         );
     }
 
     #[test]
     fn test_lighten_rgb() {
-        let c = Color::Rgb {
-            r: 128,
-            g: 64,
-            b: 32,
-        };
+        let c = Color::rgb(128, 64, 32);
         let lighter = c.lighten(0.2);
         assert_ne!(lighter, c);
     }
@@ -573,11 +559,7 @@ mod tests {
 
     #[test]
     fn test_darken_rgb() {
-        let c = Color::Rgb {
-            r: 128,
-            g: 64,
-            b: 32,
-        };
+        let c = Color::rgb(128, 64, 32);
         let darker = c.darken(0.2);
         assert_ne!(darker, c);
     }
@@ -585,18 +567,18 @@ mod tests {
     #[test]
     fn test_darken_resolves_non_rgb() {
         // `Color::Default` resolves to `(0, 0, 0)`, which darkening leaves at black.
-        assert_eq!(Color::Default.darken(0.5), Color::Rgb { r: 0, g: 0, b: 0 });
+        assert_eq!(Color::Default.darken(0.5), Color::rgb(0, 0, 0));
         // `Color::Ansi(AnsiColor::Black)` (and `Color::BLACK`) resolve to real black too.
         assert_eq!(
             Color::Ansi(AnsiColor::Black).darken(0.5),
-            Color::Rgb { r: 0, g: 0, b: 0 }
+            Color::rgb(0, 0, 0)
         );
-        assert_eq!(Color::BLACK.darken(0.5), Color::Rgb { r: 0, g: 0, b: 0 });
+        assert_eq!(Color::BLACK.darken(0.5), Color::rgb(0, 0, 0));
     }
 
     #[test]
     fn test_complement_red() {
-        let red = Color::Rgb { r: 255, g: 0, b: 0 };
+        let red = Color::rgb(255, 0, 0);
         let cyan = red.complement();
         assert!(cyan.to_srgb().is_some_and(|c| c.g > 0.9));
         assert!(cyan.to_srgb().is_some_and(|c| c.b > 0.9));
@@ -604,11 +586,7 @@ mod tests {
 
     #[test]
     fn test_to_srgb_conversion() {
-        let c = Color::Rgb {
-            r: 200,
-            g: 100,
-            b: 50,
-        };
+        let c = Color::rgb(200, 100, 50);
         let srgb = c.to_srgb().expect("Rgb variant should convert");
         assert!((srgb.r - 200.0 / 255.0).abs() < 1e-6);
         assert!((srgb.g - 100.0 / 255.0).abs() < 1e-6);
@@ -634,11 +612,7 @@ mod tests {
 
     #[test]
     fn test_saturate_desaturate() {
-        let c = Color::Rgb {
-            r: 128,
-            g: 128,
-            b: 128,
-        };
+        let c = Color::rgb(128, 128, 128);
         let saturated = c.saturate(0.5);
         assert_ne!(saturated, c);
 
@@ -660,15 +634,12 @@ mod tests {
         // Gray-ish ANSI colors have a saturation to increase/decrease; black (`Color::Default`'s
         // resolved fallback and `Color::BLACK`) has none, but both must go through the same
         // resolve-then-transform path rather than passing through unchanged.
-        assert_eq!(
-            Color::Default.saturate(0.5),
-            Color::Rgb { r: 0, g: 0, b: 0 }
-        );
+        assert_eq!(Color::Default.saturate(0.5), Color::rgb(0, 0, 0));
         assert_eq!(
             Color::Ansi(AnsiColor::Black).desaturate(0.5),
-            Color::Rgb { r: 0, g: 0, b: 0 }
+            Color::rgb(0, 0, 0)
         );
-        assert_eq!(Color::BLACK.saturate(0.5), Color::Rgb { r: 0, g: 0, b: 0 });
+        assert_eq!(Color::BLACK.saturate(0.5), Color::rgb(0, 0, 0));
 
         let red = Color::Ansi(AnsiColor::Red);
         assert_ne!(red.desaturate(0.5), red);
@@ -678,12 +649,12 @@ mod tests {
     fn test_complement_resolves_non_rgb() {
         // Black's complement (in this HSL model) is still black, but it's computed through a
         // real RGB resolution rather than being returned unchanged.
-        assert_eq!(Color::Default.complement(), Color::Rgb { r: 0, g: 0, b: 0 });
+        assert_eq!(Color::Default.complement(), Color::rgb(0, 0, 0));
         assert_eq!(
             Color::Ansi(AnsiColor::Black).complement(),
-            Color::Rgb { r: 0, g: 0, b: 0 }
+            Color::rgb(0, 0, 0)
         );
-        assert_eq!(Color::BLACK.complement(), Color::Rgb { r: 0, g: 0, b: 0 });
+        assert_eq!(Color::BLACK.complement(), Color::rgb(0, 0, 0));
 
         let red_via_ansi = Color::Ansi(AnsiColor::Red).complement();
         assert!(red_via_ansi.to_srgb().is_some_and(|c| c.g > 0.5));
@@ -692,15 +663,15 @@ mod tests {
 
     #[test]
     fn test_lerp_endpoints() {
-        let red = Color::Rgb { r: 255, g: 0, b: 0 };
-        let blue = Color::Rgb { r: 0, g: 0, b: 255 };
+        let red = Color::rgb(255, 0, 0);
+        let blue = Color::rgb(0, 0, 255);
         assert_eq!(Color::lerp(red, blue, 0.0), red);
         assert_eq!(Color::lerp(red, blue, 1.0), blue);
     }
 
     #[test]
     fn test_darken_black_is_black() {
-        let black = Color::Rgb { r: 0, g: 0, b: 0 };
+        let black = Color::rgb(0, 0, 0);
         assert_eq!(black.darken(0.5), black);
     }
 }

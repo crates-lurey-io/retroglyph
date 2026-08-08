@@ -54,7 +54,7 @@ use retroglyph::terminal::Terminal;
 use retroglyph::ui::align::Align;
 use retroglyph::ui::animate::{Easing, Tween};
 use retroglyph::ui::camera::Camera;
-use retroglyph::ui::layout::{Constraint, split_h, split_h_spaced, split_v};
+use retroglyph::ui::layout::{Constraint, Layout, split_h, split_v};
 use retroglyph::ui::text::{draw_clipped, truncate};
 use retroglyph_examples::Example;
 
@@ -76,56 +76,16 @@ pub const MIN_TARGET_H: u16 = 3;
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 
-const BG: Color = Color::Rgb {
-    r: 16,
-    g: 17,
-    b: 24,
-};
-const PANEL_BG: Color = Color::Rgb {
-    r: 22,
-    g: 24,
-    b: 34,
-};
-const CHROME_BG: Color = Color::Rgb {
-    r: 27,
-    g: 24,
-    b: 40,
-};
-const BUTTON_BG: Color = Color::Rgb {
-    r: 42,
-    g: 40,
-    b: 62,
-};
-const BORDER: Color = Color::Rgb {
-    r: 88,
-    g: 78,
-    b: 118,
-};
-const FG: Color = Color::Rgb {
-    r: 218,
-    g: 216,
-    b: 230,
-};
-const DIM_FG: Color = Color::Rgb {
-    r: 128,
-    g: 126,
-    b: 146,
-};
-const ACCENT: Color = Color::Rgb {
-    r: 248,
-    g: 198,
-    b: 90,
-};
-const GOOD: Color = Color::Rgb {
-    r: 108,
-    g: 208,
-    b: 138,
-};
-const BAD: Color = Color::Rgb {
-    r: 228,
-    g: 92,
-    b: 100,
-};
+const BG: Color = Color::rgb(16, 17, 24);
+const PANEL_BG: Color = Color::rgb(22, 24, 34);
+const CHROME_BG: Color = Color::rgb(27, 24, 40);
+const BUTTON_BG: Color = Color::rgb(42, 40, 62);
+const BORDER: Color = Color::rgb(88, 78, 118);
+const FG: Color = Color::rgb(218, 216, 230);
+const DIM_FG: Color = Color::rgb(128, 126, 146);
+const ACCENT: Color = Color::rgb(248, 198, 90);
+const GOOD: Color = Color::rgb(108, 208, 138);
+const BAD: Color = Color::rgb(228, 92, 100);
 
 // ── Outpost structures ───────────────────────────────────────────────────────
 
@@ -150,16 +110,8 @@ impl Structure {
     const fn color(self) -> Color {
         match self {
             Self::Watchtower => ACCENT,
-            Self::Barracks => Color::Rgb {
-                r: 150,
-                g: 170,
-                b: 210,
-            },
-            Self::Well => Color::Rgb {
-                r: 110,
-                g: 190,
-                b: 210,
-            },
+            Self::Barracks => Color::rgb(150, 170, 210),
+            Self::Well => Color::rgb(110, 190, 210),
             Self::Wall => BORDER,
         }
     }
@@ -461,11 +413,7 @@ impl Default for OutpostDashboard {
                     "",
                     812.0,
                     [1450.0, 640.0, 990.0, 730.0],
-                    Color::Rgb {
-                        r: 130,
-                        g: 190,
-                        b: 230,
-                    },
+                    Color::rgb(130, 190, 230),
                 ),
             ],
             notifications: 2,
@@ -751,16 +699,14 @@ impl OutpostDashboard {
         }
 
         // Four animated stat tiles, side by side.
-        let (cols, _) = split_h_spaced(
-            Rect::new(
+        let cols = Layout::horizontal([Constraint::Fill(1); 4])
+            .spacing(1)
+            .split(Rect::new(
                 area.left(),
                 area.top() + 1,
                 area.width().saturating_sub(2 * MIN_TARGET_W + 2),
                 3,
-            ),
-            &[Constraint::Fill(1); 4],
-            1,
-        );
+            ));
         for (col, stat) in cols.iter().zip(&self.stats) {
             if col.width() < 4 {
                 continue;
@@ -825,23 +771,9 @@ impl OutpostDashboard {
             let (glyph, color) = building.map_or_else(
                 || {
                     if is_scrub(world_pos) {
-                        (
-                            ',',
-                            Color::Rgb {
-                                r: 90,
-                                g: 100,
-                                b: 70,
-                            },
-                        )
+                        (',', Color::rgb(90, 100, 70))
                     } else {
-                        (
-                            '.',
-                            Color::Rgb {
-                                r: 60,
-                                g: 66,
-                                b: 54,
-                            },
-                        )
+                        ('.', Color::rgb(60, 66, 54))
                     }
                 },
                 |b| (b.kind.glyph(), b.kind.color()),
@@ -853,11 +785,7 @@ impl OutpostDashboard {
                     .fg(Color::lerp(color, Color::BRIGHT_WHITE, 0.3))
                     .bg(Color::lerp(PANEL_BG, ACCENT, 0.2))
             } else if is_cursor {
-                Style::new().fg(color).bg(Color::Rgb {
-                    r: 38,
-                    g: 42,
-                    b: 58,
-                })
+                Style::new().fg(color).bg(Color::rgb(38, 42, 58))
             } else {
                 Style::new().fg(color).bg(BG)
             };

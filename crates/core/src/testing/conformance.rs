@@ -66,20 +66,18 @@
 //!
 //! # What this does not cover
 //!
-//! [`Output::needs_full_frame`](crate::backend::Output::needs_full_frame) only takes effect through
-//! [`Terminal::present`](crate::terminal::Terminal::present) when a backend also returns `true` from
-//! [`Output::composites_layers`](crate::backend::Output::composites_layers) (see that method's docs); a bare `Output` impl has no diffing of
-//! its own to exercise, so that combination is instead pinned by a `Terminal`-level test rather
-//! than by this module.
+//! [`Output::compositing`](crate::backend::Output::compositing)'s `PixelLayered { needs_full_frame }` dispatch only takes effect through
+//! [`Terminal::present`](crate::terminal::Terminal::present); a bare `Output` impl has no diffing of
+//! its own to exercise, so that is instead pinned by a `Terminal`-level test rather than by this
+//! module.
 
 use crate::backend::{Cursor, CursorStyle, DrawCell, Input, Output};
 use crate::color::Style;
 use crate::event::{Event, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
-use crate::grid::{Pos, Size};
+use crate::grid::{HasSize, Pos, Size};
 use crate::tile::Tile;
 use alloc::vec::Vec;
 use core::time::Duration;
-use ixy::HasSize;
 
 /// Hashes `bytes` with FNV-1a (64-bit).
 ///

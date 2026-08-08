@@ -29,11 +29,7 @@ const SAMPLES: usize = 4096;
 fn random_colors(seed: u64) -> Vec<Color> {
     let mut rng = fastrand::Rng::with_seed(seed);
     (0..SAMPLES)
-        .map(|_| Color::Rgb {
-            r: rng.u8(..),
-            g: rng.u8(..),
-            b: rng.u8(..),
-        })
+        .map(|_| Color::rgb(rng.u8(..), rng.u8(..), rng.u8(..)))
         .collect()
 }
 

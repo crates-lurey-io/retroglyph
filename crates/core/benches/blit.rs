@@ -27,11 +27,7 @@ fn filled(cols: u16, rows: u16, seed: u64) -> Grid {
     let mut grid = Grid::new(cols, rows);
     for y in 0..rows {
         for x in 0..cols {
-            let style = Style::new().fg(Color::Rgb {
-                r: rng.u8(..),
-                g: rng.u8(..),
-                b: rng.u8(..),
-            });
+            let style = Style::new().fg(Color::rgb(rng.u8(..), rng.u8(..), rng.u8(..)));
             grid.put_tile(0, (x, y), Tile::new('#', style));
         }
     }

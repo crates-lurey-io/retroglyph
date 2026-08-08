@@ -43,15 +43,26 @@ is a `split_v` (a one-row title bar over the rest of the screen) feeding one of 
 `split_h` (the play field next to the status [`Panel`](./draw-a-panel.md)), and there's no limit to
 how many levels deep that composes.
 
-## `Flex` alignment
+## `Layout`: spacing and `Flex` alignment
 
-When constraints don't consume a `Rect`'s full extent (every pane is `Fixed`, say, and they don't
-add up to the whole width),
-[`Flex`](https://docs.rs/retroglyph-ui/latest/retroglyph_ui/enum.Flex.html) controls where the
-leftover space goes: `Flex::Start` (default, leftover space trails after the last pane),
-`Flex::Center`, `Flex::End`, or `Flex::SpaceBetween`/`Flex::SpaceAround` to distribute gaps between
-panes instead. Pass it via `split_h`/`split_v`'s `_flex` sibling functions
-([`split_h_flex`](https://docs.rs/retroglyph-ui/latest/retroglyph_ui/fn.split_h_flex.html)).
+[`Layout`](https://docs.rs/retroglyph-ui/latest/retroglyph_ui/struct.Layout.html) wraps
+`split_h`/`split_v` with two optional builder calls, for the cases plain `split_h`/`split_v` don't
+cover:
+
+```rust,ignore
+Layout::vertical([Constraint::Fixed(1), Constraint::Fill(1)])
+    .spacing(1)
+    .flex(Flex::Center)
+    .split(area)
+```
+
+`.spacing(n)` carves a fixed-cell gap (or, via `Spacing::Overlap(n)`, a shared border) between every
+adjacent pair of panes; `split_with_gaps` returns those gap `Rect`s alongside the panes for drawing
+dividers into. `.flex(Flex)` controls where leftover space goes when constraints don't consume a
+`Rect`'s full extent (every pane is `Fixed`, say, and they don't add up to the whole width):
+[`Flex`](https://docs.rs/retroglyph-ui/latest/retroglyph_ui/enum.Flex.html)'s `Start` (the default,
+matching plain `split_h`/`split_v`: leftover space trails after the last pane), `Center`, `End`, or
+`SpaceBetween`/`SpaceAround` to distribute gaps between panes instead.
 
 ## See also
 

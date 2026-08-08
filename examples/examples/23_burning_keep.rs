@@ -95,11 +95,7 @@ const DRAGONS: [(u16, u16, bool); 2] = [(7, 2, true), (4, 6, false)];
 /// The near-black every color fades toward at range, so the scene reads as lit silhouettes
 /// against night rather than flat color swatches -- the same fade `20_overworld`'s `NIGHT`
 /// constant gives its biome fills.
-const NIGHT: Color = Color::Rgb { r: 8, g: 6, b: 10 };
-
-const fn rgb(r: u8, g: u8, b: u8) -> Color {
-    Color::Rgb { r, g, b }
-}
+const NIGHT: Color = Color::rgb(8, 6, 10);
 
 /// A cheap deterministic hash of one cell to `[0, 1)`, for flicker/texture that should look
 /// random but stay the same cell to cell and frame to frame (the animation comes from `elapsed`
@@ -175,7 +171,10 @@ fn flame_glyph(x: u16, y: u16, elapsed: f64) -> (char, Color) {
     } else {
         '.'
     };
-    (ch, Color::lerp(rgb(200, 40, 10), rgb(255, 214, 90), v))
+    (
+        ch,
+        Color::lerp(Color::rgb(200, 40, 10), Color::rgb(255, 214, 90), v),
+    )
 }
 
 /// Picks a smoke glyph/color for one cell above a fire, thinning (lower density, darker) with
@@ -190,7 +189,11 @@ fn smoke_glyph(density: f32) -> (char, Color) {
     };
     (
         ch,
-        Color::lerp(rgb(58, 52, 56), rgb(20, 18, 22), 1.0 - density),
+        Color::lerp(
+            Color::rgb(58, 52, 56),
+            Color::rgb(20, 18, 22),
+            1.0 - density,
+        ),
     )
 }
 
@@ -198,7 +201,7 @@ fn smoke_glyph(density: f32) -> (char, Color) {
 /// burning stretches of wall the way a real fire lights the smoke and haze above it.
 fn sky_color(x: u16, y: u16) -> Color {
     let t = f32::from(y) / f32::from(HEIGHT);
-    let base = Color::lerp(rgb(58, 48, 66), rgb(96, 78, 84), t);
+    let base = Color::lerp(Color::rgb(58, 48, 66), Color::rgb(96, 78, 84), t);
 
     let near_fire = FIRE_ZONES
         .iter()
@@ -206,7 +209,7 @@ fn sky_color(x: u16, y: u16) -> Color {
         .min()
         .unwrap_or(u16::MAX);
     let glow = (1.0 - f32::from(near_fire) / 16.0).clamp(0.0, 1.0) * (1.0 - t * 0.6);
-    Color::lerp(base, rgb(150, 84, 46), glow * 0.35)
+    Color::lerp(base, Color::rgb(150, 84, 46), glow * 0.35)
 }
 
 /// The foreground hill silhouette at scene-local `(x, y)`: bare hill, a grave marker at its very
@@ -214,20 +217,20 @@ fn sky_color(x: u16, y: u16) -> Color {
 fn hill_cell(x: u16, y: u16) -> (char, Style) {
     let top = hill_top(x);
     let depth = (f32::from(y - top) / 6.0).min(1.0);
-    let ground = Color::lerp(rgb(20, 16, 18), Color::BLACK, depth);
+    let ground = Color::lerp(Color::rgb(20, 16, 18), Color::BLACK, depth);
 
     if x == FLAGPOLE_X {
         let pole_top = top.saturating_sub(FLAGPOLE_HEIGHT);
         if y == pole_top {
-            return ('▶', Style::new().fg(rgb(40, 32, 34)).bg(ground));
+            return ('▶', Style::new().fg(Color::rgb(40, 32, 34)).bg(ground));
         }
         if y > pole_top && y < top {
-            return ('|', Style::new().fg(rgb(46, 36, 38)).bg(ground));
+            return ('|', Style::new().fg(Color::rgb(46, 36, 38)).bg(ground));
         }
     }
 
     if y == top && GRAVES.contains(&x) {
-        return ('†', Style::new().fg(rgb(42, 34, 36)).bg(ground));
+        return ('†', Style::new().fg(Color::rgb(42, 34, 36)).bg(ground));
     }
 
     // A solid block rather than a bare space + background: the headless text backend has no
@@ -259,7 +262,7 @@ fn dragon_cell(x: u16, y: u16, t: f64) -> Option<(char, Color)> {
             let cx = i32::from(dx) + i32::from(ox);
             let cy = i32::from(dy) + i32::from(oy);
             if cx == i32::from(x) && cy == i32::from(y) {
-                return Some((ch, rgb(18, 15, 20)));
+                return Some((ch, Color::rgb(18, 15, 20)));
             }
         }
         if breathes {
@@ -269,7 +272,8 @@ fn dragon_cell(x: u16, y: u16, t: f64) -> Option<(char, Color)> {
                 if bx == i32::from(x) && by == i32::from(y) {
                     let fade = 1.0 - step as f32 / 6.0;
                     let flick = flicker(x, y, t);
-                    let color = Color::lerp(rgb(120, 30, 10), rgb(255, 160, 60), flick);
+                    let color =
+                        Color::lerp(Color::rgb(120, 30, 10), Color::rgb(255, 160, 60), flick);
                     return Some(('-', Color::lerp(NIGHT, color, fade)));
                 }
             }
@@ -311,7 +315,7 @@ fn render_cell(x: u16, y: u16, t: f64) -> (char, Style) {
         }
         if y >= top {
             let shade = 0.55 + 0.1 * hash01(x, y);
-            let wall = Color::lerp(rgb(46, 34, 30), NIGHT, shade);
+            let wall = Color::lerp(Color::rgb(46, 34, 30), NIGHT, shade);
             return ('█', Style::new().fg(wall).bg(wall));
         }
     }

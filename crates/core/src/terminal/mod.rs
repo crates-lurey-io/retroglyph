@@ -6,11 +6,10 @@
 
 use crate::backend::{Backend, CursorStyle};
 use crate::event::Event;
-use crate::grid::{Grid, Pos, Rect, Size};
+use crate::grid::{Grid, HasSize, Pos, Rect, Size};
 use crate::surface::Surface;
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
-use ixy::HasSize;
 
 mod input;
 mod present;

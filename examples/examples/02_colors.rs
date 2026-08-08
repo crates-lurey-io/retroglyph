@@ -65,18 +65,10 @@ impl Colors {
     }
 
     /// A cool backdrop color (the destination `blend_row` blits onto).
-    const BLEND_DST: Color = Color::Rgb {
-        r: 20,
-        g: 40,
-        b: 140,
-    };
+    const BLEND_DST: Color = Color::rgb(20, 40, 140);
 
     /// A warm overlay color (the source `blend_row` blits, at increasing alpha).
-    const BLEND_SRC: Color = Color::Rgb {
-        r: 255,
-        g: 180,
-        b: 40,
-    };
+    const BLEND_SRC: Color = Color::rgb(255, 180, 40);
 
     /// Draws one row of `count` swatches at `(x, y)`: [`Self::BLEND_SRC`] blended over
     /// [`Self::BLEND_DST`] via [`Grid::blit_alpha`] under `mode`, at `count` alpha steps evenly
@@ -125,12 +117,14 @@ impl Colors {
             "Rgb (24-bit gradient, red channel 0..255):",
             Style::default(),
         );
-        Self::swatch_row(&mut surface, 1, 8, 32, |i| Color::Rgb {
+        Self::swatch_row(&mut surface, 1, 8, 32, |i| {
             // `u32` intermediate (`i * 255` up to 31 * 255 = 7905 doesn't fit `u8`), then
             // `try_from` back down: the `/ 31` bounds the result to 0..=255, so this never fails.
-            r: u8::try_from(u32::from(i) * 255 / 31).expect("0..=31 * 255 / 31 fits in u8"),
-            g: 64,
-            b: 192,
+            Color::rgb(
+                u8::try_from(u32::from(i) * 255 / 31).expect("0..=31 * 255 / 31 fits in u8"),
+                64,
+                192,
+            )
         });
 
         surface.print(

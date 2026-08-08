@@ -1,9 +1,8 @@
 //! Single-cell and whole-region writes: [`put`](Surface::put) and its rect/grid-scale twins.
 
 use crate::color::{Style, Tint};
-use crate::grid::{Grid, Pos, Rect};
+use crate::grid::{Grid, HasSize, Pos, Rect};
 use crate::tile::Tile;
-use ixy::HasSize;
 use unicode_width::UnicodeWidthChar;
 
 use super::Surface;
