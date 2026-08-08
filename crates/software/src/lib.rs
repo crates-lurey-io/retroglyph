@@ -1473,6 +1473,20 @@ mod tests {
     }
 
     #[test]
+    fn compositing_requests_pixel_layered_full_frames() {
+        // Pins `Output::compositing`'s return value directly: sub-cell offsets can spill glyph
+        // pixels into neighboring cells, so this backend always needs the full frame redrawn (see
+        // `compositing`'s doc).
+        let renderer = test_renderer();
+        assert_eq!(
+            renderer.compositing(),
+            Compositing::PixelLayered {
+                needs_full_frame: true
+            }
+        );
+    }
+
+    #[test]
     fn layer0_paints_background() {
         let mut renderer = test_renderer();
         let tile = Tile::new(' ', Style::new().bg(Color::Rgb { r: 255, g: 0, b: 0 }));

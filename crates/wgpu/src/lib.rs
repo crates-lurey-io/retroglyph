@@ -1476,4 +1476,18 @@ mod conformance {
     fn output_contract() {
         retroglyph_core::testing::conformance::assert_output_contract(WgpuObserver::new);
     }
+
+    #[test]
+    fn compositing_forwards_to_the_inner_renderer() {
+        // `assert_output_contract` above never calls `compositing()` (see its own docs on what
+        // it does not cover), so this pins the forwarding directly: `WgpuObserver` must report
+        // the same value the real `WgpuRenderer` does, not the trait's `CellFlattened` default.
+        let observer = WgpuObserver::new(Size::new(2, 1));
+        assert_eq!(
+            observer.compositing(),
+            Compositing::PixelLayered {
+                needs_full_frame: true
+            }
+        );
+    }
 }
