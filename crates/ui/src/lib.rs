@@ -35,6 +35,10 @@
 //! - [`Theme`](theme::Theme) ([`theme`]) for named color roles (an app picks
 //!   [`Theme::DARK`](theme::Theme::DARK)/[`Theme::LIGHT`](theme::Theme::LIGHT), or builds its own), independent of
 //!   how the app decides which one is active.
+//! - [`HalfBlockCanvas`](canvas::HalfBlockCanvas)/[`QuadrantCanvas`](canvas::QuadrantCanvas)/
+//!   [`SextantCanvas`](canvas::SextantCanvas)/[`BrailleCanvas`](canvas::BrailleCanvas) ([`canvas`]) for sub-cell
+//!   drawing: plot points at higher-than-one-per-cell resolution, then read a frame's worth of
+//!   glyphs back out, one per cell.
 //!
 //! This crate is itself optional: games that draw manually depend only on
 //! `retroglyph-core`.
@@ -139,6 +143,11 @@ pub mod animate;
 pub mod block;
 /// A scrolling viewport into a world larger than the screen.
 pub mod camera;
+// See the `too_long_first_doc_paragraph` comment above `animate`: same noisy-lint mis-attribution.
+#[allow(clippy::too_long_first_doc_paragraph)]
+/// Sub-cell drawing: plot points/pixels at higher-than-one-per-cell resolution and read them
+/// back as glyphs, via `retroglyph_core::symbols`'s quantizers.
+pub mod canvas;
 pub mod draw;
 pub mod interact;
 pub mod layout;
