@@ -1,4 +1,4 @@
-//! Harness-only glue around `retroglyph_ui::perf::PerfOverlayApp`, which now owns the perf overlay
+//! Harness-only glue around `crate::perf_overlay::PerfOverlayApp`, which now owns the perf overlay
 //! itself (toggle key, frame-time bookkeeping, drawing) generically for every backend -- see
 //! `launch.rs`'s `ExampleApp`/`WasmToggleApp`.
 //!
@@ -54,7 +54,7 @@ fn visible_from_env(value: Option<&str>) -> bool {
 }
 
 /// Toggle-key presses seen by a [`ToggleFilter`] and not yet applied to the wrapping
-/// [`PerfOverlayApp`](retroglyph_ui::perf::PerfOverlayApp) via [`CrosstermToggleApp`](crate::launch).
+/// [`PerfOverlayApp`](crate::perf_overlay::PerfOverlayApp) via [`CrosstermToggleApp`](crate::launch).
 ///
 /// Shared by clone: the filter wraps the raw backend, the driver owns the `PerfOverlayApp`, and
 /// `run_on` takes both by value into separate owners, so the count has to live outside
@@ -64,11 +64,11 @@ fn visible_from_env(value: Option<&str>) -> bool {
 pub(crate) type TogglePresses = Rc<Cell<usize>>;
 
 /// Wraps a [`Backend`](retroglyph_core::backend::Backend) and swallows [`PerfOverlayApp`]'s toggle key
-/// ([`retroglyph_ui::perf::default_is_toggle_key`]) on its way out of
+/// ([`crate::perf_overlay::is_toggle_key`]) on its way out of
 /// [`Input::poll_event`](retroglyph_core::backend::Input::poll_event), counting each press into a shared
 /// [`TogglePresses`] for the driver.
 ///
-/// [`PerfOverlayApp`](retroglyph_ui::perf::PerfOverlayApp) already does this itself generically, by
+/// [`PerfOverlayApp`](crate::perf_overlay::PerfOverlayApp) already does this itself generically, by
 /// draining [`Terminal`](retroglyph_core::terminal::Terminal)'s own event queue and re-pushing whatever
 /// isn't the toggle key (see that type's "Toggling" docs) -- which is race-free for the windowed
 /// backends, where winit fills the queue from its own event loop before `App::update` ever runs,
@@ -150,7 +150,7 @@ impl<B: Input> Input for ToggleFilter<B> {
         let mut remaining = timeout;
         loop {
             let event = self.inner.poll_event(remaining)?;
-            if !retroglyph_ui::perf::default_is_toggle_key(&event) {
+            if !crate::perf_overlay::is_toggle_key(&event) {
                 return Some(event);
             }
             self.presses.set(self.presses.get().saturating_add(1));
