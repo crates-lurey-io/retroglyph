@@ -5,7 +5,7 @@
 //! into a texture this module owns and reads back. Everything else is the production path, built by
 //! the same [`WgpuRenderer::build_resources`] and encoded by the same
 //! [`GpuResources::render`](crate::renderer::GpuResources::render) that
-//! [`Presenter::present`](retroglyph_window::Presenter::present) drives, so a break in pipeline
+//! [`Presenter::present`](retroglyph_window::presenter::Presenter::present) drives, so a break in pipeline
 //! creation, atlas upload, the instance layout, or either shader shows up here.
 //!
 //! # No platform gate
@@ -316,7 +316,7 @@ fn sample_layered(cols: u16, rows: u16) -> Vec<(u8, Pos, Tile)> {
 /// device required, so unlike the render tests below this always runs.
 #[test]
 fn presenter_geometry_and_cell_size_match_the_internal_geometry() {
-    use retroglyph_window::Presenter as _;
+    use retroglyph_window::presenter::Presenter as _;
 
     let r = renderer(2, 1, 3);
     assert_eq!(r.geometry(), r.geometry);

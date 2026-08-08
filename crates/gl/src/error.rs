@@ -8,7 +8,7 @@ use std::fmt;
 /// rather than a structured enum because the two platforms surface very different underlying error
 /// types (glutin's `glutin::error::Error` vs. a `web_sys` `JsValue`), and the caller
 /// ([`retroglyph_window`]'s event loop) only needs a message plus the recoverable/fatal signal
-/// from [`RecoverableError`](retroglyph_window::RecoverableError).
+/// from [`RecoverableError`](retroglyph_window::presenter::RecoverableError).
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum SurfaceError {
@@ -33,7 +33,7 @@ impl fmt::Display for SurfaceError {
 
 impl std::error::Error for SurfaceError {}
 
-impl retroglyph_window::RecoverableError for SurfaceError {
+impl retroglyph_window::presenter::RecoverableError for SurfaceError {
     fn is_recoverable(&self) -> bool {
         // Init failures are fatal (nothing to retry into); present failures may be transient
         // (e.g. a wasm context-loss that the browser later restores).

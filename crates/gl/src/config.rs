@@ -4,7 +4,7 @@
 //! `tilesets` feature) any PNG sprite tilesets, then [`build`](GlBackendBuilder::build) produces a
 //! [`GlRenderer`]. The renderer is created without a GL context; the context and GPU resources are
 //! created lazily when the windowing loop calls
-//! [`Presenter::init_surface`](retroglyph_window::Presenter::init_surface).
+//! [`Presenter::init_surface`](retroglyph_window::presenter::Presenter::init_surface).
 
 use crate::GlRenderer;
 use retroglyph_window::atlas::GlyphAtlas;
@@ -204,7 +204,7 @@ impl GlBackendBuilder {
     /// Builds the [`GlRenderer`].
     ///
     /// The renderer holds no GL context yet; the context is created when the windowing loop calls
-    /// [`Presenter::init_surface`](retroglyph_window::Presenter::init_surface).
+    /// [`Presenter::init_surface`](retroglyph_window::presenter::Presenter::init_surface).
     ///
     /// # Errors
     ///
@@ -274,7 +274,7 @@ impl GlBackendBuilder {
     }
 }
 
-impl retroglyph_window::PresenterBuilder for GlBackendBuilder {
+impl retroglyph_window::presenter_builder::PresenterBuilder for GlBackendBuilder {
     type Presenter = GlRenderer;
     type Error = GlBackendError;
 
@@ -317,7 +317,7 @@ mod tests {
     /// forwarding impl itself (not just the methods it forwards to) is under test.
     #[test]
     fn presenter_builder_impl_forwards_to_the_inherent_methods() {
-        fn build<B: retroglyph_window::PresenterBuilder>(
+        fn build<B: retroglyph_window::presenter_builder::PresenterBuilder>(
             font: retroglyph_window::font::BitmapFont,
         ) -> Result<B::Presenter, B::Error> {
             B::new()

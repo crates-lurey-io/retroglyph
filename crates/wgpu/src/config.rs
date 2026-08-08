@@ -4,7 +4,7 @@
 //! `tilesets` feature) any PNG sprite tilesets, then [`build`](WgpuBackendBuilder::build) produces
 //! a [`WgpuRenderer`]. The renderer is created without a GPU device; the device, surface, and every
 //! GPU resource are created lazily when the windowing loop calls
-//! [`Presenter::init_surface`](retroglyph_window::Presenter::init_surface).
+//! [`Presenter::init_surface`](retroglyph_window::presenter::Presenter::init_surface).
 
 use crate::WgpuRenderer;
 use retroglyph_window::atlas::{GlyphAtlas, MAX_SLOTS};
@@ -199,7 +199,7 @@ impl WgpuBackendBuilder {
     /// Builds the [`WgpuRenderer`].
     ///
     /// The renderer holds no GPU device yet; the device and surface are created when the windowing
-    /// loop calls [`Presenter::init_surface`](retroglyph_window::Presenter::init_surface).
+    /// loop calls [`Presenter::init_surface`](retroglyph_window::presenter::Presenter::init_surface).
     ///
     /// # Errors
     ///
@@ -269,7 +269,7 @@ impl WgpuBackendBuilder {
     }
 }
 
-impl retroglyph_window::PresenterBuilder for WgpuBackendBuilder {
+impl retroglyph_window::presenter_builder::PresenterBuilder for WgpuBackendBuilder {
     type Presenter = WgpuRenderer;
     type Error = WgpuBackendError;
 
@@ -313,7 +313,7 @@ mod tests {
     /// forwards to) is under test.
     #[test]
     fn presenter_builder_impl_forwards_to_the_inherent_methods() {
-        fn build<B: retroglyph_window::PresenterBuilder>(
+        fn build<B: retroglyph_window::presenter_builder::PresenterBuilder>(
             font: retroglyph_window::font::BitmapFont,
         ) -> Result<B::Presenter, B::Error> {
             B::new()

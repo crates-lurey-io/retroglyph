@@ -5,7 +5,7 @@ use std::fmt;
 /// A failure creating or driving the wgpu device and surface.
 ///
 /// The variants split along the one distinction the event loop acts on: whether retrying is worth
-/// anything. [`RecoverableError`](retroglyph_window::RecoverableError) reads that split, and
+/// anything. [`RecoverableError`](retroglyph_window::presenter::RecoverableError) reads that split, and
 /// `retroglyph_window::winit::run` uses it to decide between logging-and-continuing and exiting.
 #[derive(Debug)]
 #[non_exhaustive]
@@ -28,7 +28,7 @@ pub enum SurfaceError {
     ///
     /// Treated as recoverable, because the recovery that helps is the one the event loop performs:
     /// after enough consecutive present failures it calls
-    /// [`Presenter::init_surface`](retroglyph_window::Presenter::init_surface) again, which
+    /// [`Presenter::init_surface`](retroglyph_window::presenter::Presenter::init_surface) again, which
     /// rebuilds the adapter, device, surface, and every GPU resource from scratch. Reporting this
     /// as unrecoverable would skip that path, leaving the loop logging the same failure every
     /// frame with nothing rebuilding.
@@ -47,7 +47,7 @@ impl fmt::Display for SurfaceError {
 
 impl std::error::Error for SurfaceError {}
 
-impl retroglyph_window::RecoverableError for SurfaceError {
+impl retroglyph_window::presenter::RecoverableError for SurfaceError {
     fn is_recoverable(&self) -> bool {
         // Only a failed init is unrecoverable: it is the very call a retry would make again, so
         // there is nothing left to escalate to.
@@ -58,7 +58,7 @@ impl retroglyph_window::RecoverableError for SurfaceError {
 #[cfg(test)]
 mod tests {
     use super::SurfaceError;
-    use retroglyph_window::RecoverableError as _;
+    use retroglyph_window::presenter::RecoverableError as _;
 
     #[test]
     fn only_init_failures_are_unrecoverable() {

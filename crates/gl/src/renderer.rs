@@ -2,7 +2,7 @@
 //!
 //! [`GlResources`] owns the shader program, the shared quad geometry, the per-cell instance
 //! buffer, the projection uniforms, and the glyph atlas texture. It is created once the GL context
-//! exists (from [`Presenter::init_surface`](retroglyph_window::Presenter::init_surface)) and driven
+//! exists (from [`Presenter::init_surface`](retroglyph_window::presenter::Presenter::init_surface)) and driven
 //! once per frame: [`upload`](GlResources::upload) pushes changed cells, [`draw`](GlResources::draw)
 //! issues a single `draw_elements_instanced`.
 
@@ -336,7 +336,7 @@ impl GlResources {
     /// alpha-blended over the backgrounds. Splitting the passes is what lets an offset glyph spill
     /// past its cell edge into neighbors: a single interleaved pass would let a later cell's
     /// background overwrite an earlier neighbor's spill. This is the two-pass mechanism of the
-    /// "Sub-cell offsets and spill" contract documented on [`Presenter`](retroglyph_window::Presenter),
+    /// "Sub-cell offsets and spill" contract documented on [`Presenter`](retroglyph_window::presenter::Presenter),
     /// shared with `retroglyph-software`.
     ///
     /// A cell whose [`Instance::flags`] clears [`FLAG_HAS_BG`] / [`FLAG_HAS_GLYPH`] is `discard`ed

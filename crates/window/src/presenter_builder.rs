@@ -1,7 +1,8 @@
-//! [`PresenterBuilder`], the shape shared by the software/GL/wgpu backend builders.
+//! [`PresenterBuilder`](crate::presenter_builder::PresenterBuilder), the shape shared by the
+//! software/GL/wgpu backend builders.
 
-use crate::Presenter;
 use crate::font::FontChain;
+use crate::presenter::Presenter;
 #[cfg(feature = "tilesets")]
 use crate::tileset::TilesetOptions;
 

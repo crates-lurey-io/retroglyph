@@ -1,9 +1,9 @@
-//! The [`Presenter`] trait: what a renderer crate implements to rasterize a grid and present it
+//! The [`Presenter`](crate::presenter::Presenter) trait: what a renderer crate implements to rasterize a grid and present it
 //! to a window surface.
 //!
 //! `Presenter` is an [`Output`](retroglyph_core::backend::Output) supertrait plus window-surface
 //! operations, with no input methods: the event loop owns input, and
-//! [`WindowBackend`](crate::WindowBackend) forwards translated events into its own queue instead.
+//! [`WindowBackend`](crate::backend::WindowBackend) forwards translated events into its own queue instead.
 //!
 //! | Presenter | `present()` | `init_surface()` |
 //! |---|---|---|
@@ -13,8 +13,8 @@
 //!
 //! See the crate-level docs (`crate` root, "DPI, scale, and the resize contract" and
 //! "Threading model" sections) for the physical-pixel/no-auto-scaling contract on
-//! [`cell_size`](Presenter::cell_size), the sub-cell-remainder behavior on
-//! [`resize_surface`](Presenter::resize_surface), and the single-threaded execution model
+//! [`cell_size`](crate::presenter::Presenter::cell_size), the sub-cell-remainder behavior on
+//! [`resize_surface`](crate::presenter::Presenter::resize_surface), and the single-threaded execution model
 //! every `Presenter` implementation runs under.
 
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
@@ -54,7 +54,7 @@ use crate::geometry::CellGeometry;
 ///     DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle,
 ///     WindowHandle as RawWindowHandle,
 /// };
-/// use retroglyph_window::WindowHandle;
+/// use retroglyph_window::presenter::WindowHandle;
 ///
 /// struct NoWindow;
 ///
@@ -99,7 +99,7 @@ impl<T: HasWindowHandle + HasDisplayHandle + Send + Sync + ?Sized> WindowHandle 
 ///
 /// ```
 /// use core::fmt;
-/// use retroglyph_window::RecoverableError;
+/// use retroglyph_window::presenter::RecoverableError;
 ///
 /// #[derive(Debug)]
 /// enum MySurfaceError {
@@ -191,7 +191,7 @@ impl RecoverableError for GenericSurfaceError {
 ///
 /// A supertrait of [`Output`], adding the surface lifecycle (`init_surface`, `resize_surface`,
 /// `present`, `cell_size`) that the event loop drives. Every `Presenter` implementation is an
-/// `Output` implementation for free: [`WindowBackend`](crate::WindowBackend) delegates its own
+/// `Output` implementation for free: [`WindowBackend`](crate::backend::WindowBackend) delegates its own
 /// `Output` impl straight through to `P: Presenter`, with no duplicated method bodies.
 ///
 /// # Sub-cell offsets and spill
@@ -222,7 +222,7 @@ impl RecoverableError for GenericSurfaceError {
 /// ```
 /// use retroglyph_core::backend::{DrawCell, Output};
 /// use retroglyph_core::grid::Size;
-/// use retroglyph_window::{Presenter, WindowHandle};
+/// use retroglyph_window::presenter::{Presenter, WindowHandle};
 /// use std::sync::Arc;
 ///
 /// struct NullPresenter;

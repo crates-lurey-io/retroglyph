@@ -75,7 +75,7 @@ impl std::error::Error for SoftwareBackendError {
 /// [`into_renderer`](SoftwareBackend::into_renderer) to obtain a
 /// [`SoftwareRenderer`](crate::SoftwareRenderer) (which implements
 /// [`Backend`](retroglyph_core::backend::Backend) for in-memory use, and
-/// `retroglyph_window::Presenter` for windowed use).
+/// `retroglyph_window::presenter::Presenter` for windowed use).
 ///
 /// # Examples
 ///
@@ -339,7 +339,7 @@ impl SoftwareBackendBuilder {
     }
 }
 
-impl retroglyph_window::PresenterBuilder for SoftwareBackendBuilder {
+impl retroglyph_window::presenter_builder::PresenterBuilder for SoftwareBackendBuilder {
     type Presenter = crate::SoftwareRenderer;
     type Error = SoftwareBackendError;
 
@@ -428,7 +428,7 @@ mod tests {
     /// methods it forwards to) is under test.
     #[test]
     fn presenter_builder_impl_forwards_to_the_inherent_methods() {
-        fn build<B: retroglyph_window::PresenterBuilder>(
+        fn build<B: retroglyph_window::presenter_builder::PresenterBuilder>(
             font: BitmapFont,
         ) -> Result<B::Presenter, B::Error> {
             B::new()

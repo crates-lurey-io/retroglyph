@@ -1,4 +1,4 @@
-//! [`WindowBackend`]: the generic [`Backend`](retroglyph_core::backend::Backend) implementation for
+//! [`WindowBackend`](crate::backend::WindowBackend): the generic [`Backend`](retroglyph_core::backend::Backend) implementation for
 //! windowed presenters.
 
 use crate::presenter::Presenter;
@@ -32,7 +32,8 @@ use std::time::Duration;
 /// use retroglyph_core::grid::{Pos, Size};
 /// use retroglyph_core::terminal::Terminal;
 /// use retroglyph_core::tile::Tile;
-/// use retroglyph_window::{Presenter, WindowBackend, WindowHandle};
+/// use retroglyph_window::backend::WindowBackend;
+/// use retroglyph_window::presenter::{Presenter, WindowHandle};
 /// use std::sync::Arc;
 /// use std::time::Duration;
 ///

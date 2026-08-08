@@ -185,7 +185,7 @@ pub use retroglyph_wgpu as wgpu;
 // reachable only through `retroglyph_window::winit` directly: they're cross-thread event
 // injection power tools, not quick-start material.
 #[cfg(any(feature = "software", feature = "gl", feature = "wgpu"))]
-pub use retroglyph_window::PresenterBuilder;
+pub use retroglyph_window::presenter_builder::PresenterBuilder;
 #[cfg(any(feature = "software", feature = "gl", feature = "wgpu"))]
 pub use retroglyph_window::winit::{
     WindowConfig, Windowed, WindowedLaunchError, run_app, run_app_on,

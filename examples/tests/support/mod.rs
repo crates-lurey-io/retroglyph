@@ -83,7 +83,7 @@ pub fn headless_snapshot<E: Example>(frames: u32) -> String {
 pub fn png_snapshot<E: Example>(cols: u16, rows: u16, scale: u16) -> Vec<u8> {
     use retroglyph_core::terminal::Terminal;
     use retroglyph_software::SoftwareBackendBuilder;
-    use retroglyph_window::Presenter;
+    use retroglyph_window::presenter::Presenter;
 
     let builder = E::configure(
         SoftwareBackendBuilder::new()

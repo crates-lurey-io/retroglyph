@@ -8,7 +8,7 @@
 //! The GL context is created from the already-created window's raw window/display handles (glutin
 //! supports EGL/GLX/WGL/CGL from a `raw-window-handle`), so this needs no changes to
 //! `retroglyph-window`: it slots straight into
-//! [`Presenter::init_surface`](retroglyph_window::Presenter::init_surface)'s
+//! [`Presenter::init_surface`](retroglyph_window::presenter::Presenter::init_surface)'s
 //! `Arc<dyn WindowHandle>` contract.
 
 #![allow(clippy::redundant_pub_crate)]
@@ -25,7 +25,7 @@ use glutin::display::Display;
 use glutin::prelude::*;
 use glutin::surface::{Surface, SurfaceAttributesBuilder, SwapInterval, WindowSurface};
 use raw_window_handle::RawWindowHandle;
-use retroglyph_window::WindowHandle;
+use retroglyph_window::presenter::WindowHandle;
 use std::ffi::CString;
 use std::num::NonZeroU32;
 use std::sync::Arc;

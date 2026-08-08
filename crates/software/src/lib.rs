@@ -14,10 +14,10 @@
 //!   v
 //! SoftwareRenderer
 //!   implements retroglyph_core::{Output, Input, Cursor} (= Backend)
-//!   implements retroglyph_window::Presenter (an Output supertrait)
+//!   implements retroglyph_window::presenter::Presenter (an Output supertrait)
 //!   |                                |
 //!   |                                v
-//!   |                     wrapped in retroglyph_window::WindowBackend,
+//!   |                     wrapped in retroglyph_window::backend::WindowBackend,
 //!   |                     driven by a windowing loop (retroglyph-window's
 //!   |                     winit integration, or any other source of
 //!   |                     raw window handles)
@@ -28,13 +28,13 @@
 //! ```
 //!
 //! This crate does not depend on winit. [`SoftwareRenderer`] implements
-//! [`Presenter`](retroglyph_window::Presenter) against raw window handles
+//! [`Presenter`](retroglyph_window::presenter::Presenter) against raw window handles
 //! ([`WindowHandle`]), so anything that produces those (winit via
 //! `retroglyph-window`, or another windowing library) can drive it. Because
 //! `Presenter` is an [`Output`] supertrait, `SoftwareRenderer`'s single
 //! `Output` implementation satisfies both `Backend`'s output half and `Presenter` directly, with
 //! no duplicated method bodies. `retroglyph-window`'s
-//! [`WindowBackend`](retroglyph_window::WindowBackend) wraps a `Presenter` to provide the full
+//! [`WindowBackend`](retroglyph_window::backend::WindowBackend) wraps a `Presenter` to provide the full
 //! [`Backend`](retroglyph_core::backend::Backend) for windowed use, owning the input event queue that this
 //! crate does not.
 //!
@@ -133,10 +133,10 @@ use retroglyph_core::event::{Event, coalesces_with};
 use retroglyph_core::grid::HasSize;
 use retroglyph_core::grid::{Pos, Size};
 use retroglyph_core::tile::Tile;
-use retroglyph_window::WindowHandle;
-use retroglyph_window::cell_art_glyph;
 use retroglyph_window::geometry::CellGeometry;
 use retroglyph_window::palette::{DEFAULT_BG, DEFAULT_FG};
+use retroglyph_window::presenter::WindowHandle;
+use retroglyph_window::presenter::cell_art_glyph;
 #[cfg(feature = "tilesets")]
 use retroglyph_window::sprite_cache::{
     Sprite, SpriteCache, SpriteTint, warn_sprite_needs_span, warn_tint_needs_sprite,
@@ -858,7 +858,7 @@ impl Output for SoftwareRenderer {
                 // right/bottom edge now spills onto the neighbor's already-painted background
                 // instead of being clobbered by that neighbor's later background fill, so spill is
                 // uniform in all four directions: the two-pass mechanism of the sub-cell
-                // offset/spill contract on `retroglyph_window::Presenter` (see its rustdoc).
+                // offset/spill contract on `retroglyph_window::presenter::Presenter` (see its rustdoc).
                 for idx in 0..cell_count {
                     let tile = self.ctx.prev_tiles[layer_id as usize].as_ref()[idx];
                     let tint = self.ctx.prev_tints[layer_id as usize].as_ref()[idx];
@@ -996,7 +996,7 @@ impl Cursor for SoftwareRenderer {
 
 // `SoftwareRenderer`'s own `Output` impl above already satisfies `Presenter: Output`, so this
 // only needs the surface lifecycle: no forwarding/duplication of draw/flush/size/clear/resize.
-impl retroglyph_window::Presenter for SoftwareRenderer {
+impl retroglyph_window::presenter::Presenter for SoftwareRenderer {
     type SurfaceError = SurfaceError;
 
     fn init_surface(&mut self, window: Arc<dyn WindowHandle>) -> Result<(), SurfaceError> {
@@ -1448,7 +1448,7 @@ mod tests {
 
     #[test]
     fn presenter_geometry_and_cell_size_match_the_internal_geometry() {
-        use retroglyph_window::Presenter as _;
+        use retroglyph_window::presenter::Presenter as _;
 
         // `test_renderer` builds an 8x16 unscii16 font at scale 1.
         let renderer = test_renderer();

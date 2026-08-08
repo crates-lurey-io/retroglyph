@@ -15,7 +15,7 @@
 
 use crate::error::SurfaceError;
 use crate::shaders::GlslFlavor;
-use retroglyph_window::WindowHandle;
+use retroglyph_window::presenter::WindowHandle;
 use std::cell::Cell;
 use std::rc::Rc;
 use std::sync::Arc;
