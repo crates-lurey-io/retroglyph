@@ -7,6 +7,38 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
+
+## [0.7.0+retroglyph-software](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-software-v0.6.2...retroglyph-software-v0.7.0) - 2026-08-09
+
+### Features
+
+- [08f22c0](
+https://github.com/crates-lurey-io/retroglyph/commit/08f22c0b2dbbe2712c8a93783c92d2821e79cf11) *(core)* Add Color::rgb and Color::hex const constructors by `@crates-lurey-io-agent[bot]` in [#1345](
+https://github.com/crates-lurey-io/retroglyph/pull/1345)
+
+### Bug Fixes
+
+- [ca0e5be](
+https://github.com/crates-lurey-io/retroglyph/commit/ca0e5be321da85a44d433576f83955900b8f6b7d) *(software, gl, window)* Warn once on notdef glyph fallback; add glyph-coverage testing helper by `@crates-lurey-io-agent[bot]` in [#1334](
+https://github.com/crates-lurey-io/retroglyph/pull/1334)
+
+### Refactor
+
+- [af7d30a](
+https://github.com/crates-lurey-io/retroglyph/commit/af7d30a955859afa2902b9b00a694f531a9a8e64) *(core)* Replace `Output::needs_full_frame`/`composites_layers` with `Compositing` by `@crates-lurey-io-agent[bot]` in [#1344](
+https://github.com/crates-lurey-io/retroglyph/pull/1344) [**breaking**]
+
+- [a325de8](
+https://github.com/crates-lurey-io/retroglyph/commit/a325de8890ff8d5506ec5b85a94b8703d3172656) *(software)* Remove all root re-exports from retroglyph-software by `@crates-lurey-io-agent[bot]` in [#1311](
+https://github.com/crates-lurey-io/retroglyph/pull/1311)
+
+- [deba5f1](
+https://github.com/crates-lurey-io/retroglyph/commit/deba5f179241b7d3e1c8941c833cd05342e1cc94) *(window)* Remove all root re-exports from retroglyph-window by `@crates-lurey-io-agent[bot]` in [#1275](
+https://github.com/crates-lurey-io/retroglyph/pull/1275)
+
+**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-software-v0.6.2...retroglyph-software-v0.7.0
+
+
 ## [0.6.2+retroglyph-software](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-software-v0.6.1...retroglyph-software-v0.6.2) - 2026-08-07
 
 ### Documentation

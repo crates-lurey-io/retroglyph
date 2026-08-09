@@ -7,6 +7,18 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
+
+## [0.4.2+retroglyph-crossterm](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.4.1...retroglyph-crossterm-v0.4.2) - 2026-08-09
+
+### Features
+
+- [08f22c0](
+https://github.com/crates-lurey-io/retroglyph/commit/08f22c0b2dbbe2712c8a93783c92d2821e79cf11) *(core)* Add Color::rgb and Color::hex const constructors by `@crates-lurey-io-agent[bot]` in [#1345](
+https://github.com/crates-lurey-io/retroglyph/pull/1345)
+
+**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.4.1...retroglyph-crossterm-v0.4.2
+
+
 ## [0.4.1+retroglyph-crossterm](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.4.0...retroglyph-crossterm-v0.4.1) - 2026-08-07
 
 ### Documentation

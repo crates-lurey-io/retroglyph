@@ -7,6 +7,108 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
+
+## [0.8.0+retroglyph-core](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.7.1...retroglyph-core-v0.8.0) - 2026-08-09
+
+### Features
+
+- [a1e3da0](
+https://github.com/crates-lurey-io/retroglyph/commit/a1e3da0923cc5396b5ac8dbde76068cedc1e9793) *(core)* Add `App::init` first-frame hook by `@crates-lurey-io-agent[bot]` in [#1328](
+https://github.com/crates-lurey-io/retroglyph/pull/1328)
+
+- [08f22c0](
+https://github.com/crates-lurey-io/retroglyph/commit/08f22c0b2dbbe2712c8a93783c92d2821e79cf11) *(core)* Add Color::rgb and Color::hex const constructors by `@crates-lurey-io-agent[bot]` in [#1345](
+https://github.com/crates-lurey-io/retroglyph/pull/1345)
+
+- [07ee997](
+https://github.com/crates-lurey-io/retroglyph/commit/07ee997a0b95e45e757b3e1ccb79087689b5603f) *(core)* Make Surface::put_grapheme public by `@crates-lurey-io-agent[bot]` in [#1323](
+https://github.com/crates-lurey-io/retroglyph/pull/1323)
+
+- [11c9e33](
+https://github.com/crates-lurey-io/retroglyph/commit/11c9e3351c7e76e42ee75a6d0c1a89e04eb0c324) *(core)* Add wrap_str for plain-&str word wrap by `@crates-lurey-io-agent[bot]` in [#1327](
+https://github.com/crates-lurey-io/retroglyph/pull/1327)
+
+- [8a890b3](
+https://github.com/crates-lurey-io/retroglyph/commit/8a890b38da0da0b885a005c678b1ddcc9cd20113) *(core)* Add Headless::SPACE_GLYPH and TestHarness::readable_view by `@crates-lurey-io-agent[bot]` in [#1266](
+https://github.com/crates-lurey-io/retroglyph/pull/1266)
+
+- [6611dd9](
+https://github.com/crates-lurey-io/retroglyph/commit/6611dd9e641a3db769ecd7ad4d665beccf5a1882) *(core)* TestHarness::find_text and click_text by `@crates-lurey-io-agent[bot]` in [#1263](
+https://github.com/crates-lurey-io/retroglyph/pull/1263)
+
+- [183d427](
+https://github.com/crates-lurey-io/retroglyph/commit/183d427eaee81d4bfec2c403601651278dcee4a3) *(ui)* Add Sparkline fill_color and glyph ramp overrides by `@crates-lurey-io-agent[bot]` in [#1318](
+https://github.com/crates-lurey-io/retroglyph/pull/1318)
+
+- [c820fb0](
+https://github.com/crates-lurey-io/retroglyph/commit/c820fb0111704ba5b00da9f2e751eb2dc0c039f5) *(workspace)* Frame recording & replay (FrameRecorder, asciicast export, examples CLI flags, just assets) by `@crates-lurey-io-agent[bot]` in [#1321](
+https://github.com/crates-lurey-io/retroglyph/pull/1321)
+
+- [f9ce5af](
+https://github.com/crates-lurey-io/retroglyph/commit/f9ce5afc68a6fe21560f352b015e0bcf3ecf042d) *(workspace)* Input recording & replay (Event serde, InputRecording, retroglyph-recorder crate) by `@crates-lurey-io-agent[bot]` in [#1269](
+https://github.com/crates-lurey-io/retroglyph/pull/1269)
+
+### Bug Fixes
+
+- [909860e](
+https://github.com/crates-lurey-io/retroglyph/commit/909860e52bf16369e731884996ea18723578bff6) *(core)* TestHarness::settle/run resolve the trailing frame a batched click needs by `@crates-lurey-io-agent[bot]` in [#1264](
+https://github.com/crates-lurey-io/retroglyph/pull/1264)
+
+- [f262308](
+https://github.com/crates-lurey-io/retroglyph/commit/f262308b9c8193135b1fe3f60e594872e2420e08) *(window, core)* Apply windowed resize to the Terminal eagerly, not just on Event::Resize by `@crates-lurey-io-agent[bot]` in [#1329](
+https://github.com/crates-lurey-io/retroglyph/pull/1329)
+
+### Refactor
+
+- [6ee0d30](
+https://github.com/crates-lurey-io/retroglyph/commit/6ee0d30ea1e710c78686ba89eda58ccb2de125dc) *(core)* Add Frame::new, mark Frame #[non_exhaustive] by `@crates-lurey-io-agent[bot]` in [#1360](
+https://github.com/crates-lurey-io/retroglyph/pull/1360)
+
+- [1b7643c](
+https://github.com/crates-lurey-io/retroglyph/commit/1b7643ccd83337f053b896727ea6365b9d690512) *(core)* Rename Surface::write_grapheme_at to put_grapheme_at by `@crates-lurey-io-agent[bot]` in [#1350](
+https://github.com/crates-lurey-io/retroglyph/pull/1350)
+
+- [af7d30a](
+https://github.com/crates-lurey-io/retroglyph/commit/af7d30a955859afa2902b9b00a694f531a9a8e64) *(core)* Replace `Output::needs_full_frame`/`composites_layers` with `Compositing` by `@crates-lurey-io-agent[bot]` in [#1344](
+https://github.com/crates-lurey-io/retroglyph/pull/1344) [**breaking**]
+
+- [40569a7](
+https://github.com/crates-lurey-io/retroglyph/commit/40569a7ba8e130121709ad8390b11e2e131ce3d4) *(core)* `Grid::write_grapheme` returns `Option<()>` by `@crates-lurey-io-agent[bot]` in [#1322](
+https://github.com/crates-lurey-io/retroglyph/pull/1322) [**breaking**]
+
+- [ddb4f50](
+https://github.com/crates-lurey-io/retroglyph/commit/ddb4f507be5687e43ad3d2589103c59c7094d4eb) *(core)* Rename `Grid::fill_region` to `Grid::fill_rect` by `@crates-lurey-io-agent[bot]` in [#1325](
+https://github.com/crates-lurey-io/retroglyph/pull/1325) [**breaking**]
+
+- [cd506c7](
+https://github.com/crates-lurey-io/retroglyph/commit/cd506c70247556b8576d0e732454859cae668000) *(core, ui)* Add #[non_exhaustive] to nine growable enums by `@crates-lurey-io-agent[bot]` in [#1341](
+https://github.com/crates-lurey-io/retroglyph/pull/1341)
+
+- [0f500dc](
+https://github.com/crates-lurey-io/retroglyph/commit/0f500dc9ebbb844ad91f43f8be0fb84440bf8244) *(ui)* Remove all root re-exports from retroglyph-ui by `@crates-lurey-io-agent[bot]` in [#1314](
+https://github.com/crates-lurey-io/retroglyph/pull/1314)
+
+### Documentation
+
+- [f5f2f74](
+https://github.com/crates-lurey-io/retroglyph/commit/f5f2f741dc2ef7799624fd4cd4f9594beaf125b9) *(core)* Make the ixy/gem version coupling an explicit stability guarantee by `@crates-lurey-io-agent[bot]` in [#1335](
+https://github.com/crates-lurey-io/retroglyph/pull/1335)
+
+- [90fcfff](
+https://github.com/crates-lurey-io/retroglyph/commit/90fcfff1ab77e42af10819bb2776ec833880932c) *(core)* Document the put_*/write_*/print_* naming policy for Grid and Surface by `@crates-lurey-io-agent[bot]` in [#1347](
+https://github.com/crates-lurey-io/retroglyph/pull/1347)
+
+- [44da7fc](
+https://github.com/crates-lurey-io/retroglyph/commit/44da7fc03398683b4f49a200bd8feaf72573bc48) *(core)* Dogfood retroglyph_core::grid::HasSize instead of ixy::HasSize by `@crates-lurey-io-agent[bot]` in [#1342](
+https://github.com/crates-lurey-io/retroglyph/pull/1342)
+
+- [48c9282](
+https://github.com/crates-lurey-io/retroglyph/commit/48c9282d0398b0b25da1f1a9e977623162058af3) *(core)* Remove dangling Style modifier-rationale pointer in grid/mod.rs by `@crates-lurey-io-agent[bot]` in [#1315](
+https://github.com/crates-lurey-io/retroglyph/pull/1315)
+
+**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.7.1...retroglyph-core-v0.8.0
+
+
 ## [0.7.1+retroglyph-core](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.7.0...retroglyph-core-v0.7.1) - 2026-08-07
 
 ### Documentation
