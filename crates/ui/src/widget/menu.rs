@@ -435,7 +435,6 @@ impl Menu<'_> {
 
 #[cfg(test)]
 mod tests {
-    use retroglyph_core::event::{Event, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
     use retroglyph_core::grid::{Grid, Pos};
 
     use super::*;
@@ -554,34 +553,33 @@ mod tests {
         assert_eq!(grid[Pos::new(2, 2)].glyph(), ' ');
     }
 
+    // The three multi-frame tests below drive `Menu::show` through `WidgetHarness` instead of
+    // hand-rolling `Interaction`'s register/feed/resolve frame pair: gated behind `testing` (see
+    // `crate::testing::WidgetHarness`), since `menu.rs` itself isn't feature-gated but the
+    // harness is.
     #[test]
+    #[cfg(feature = "testing")]
     fn clicking_a_selectable_row_activates_and_closes() {
+        use crate::testing::WidgetHarness;
+
         let screen = Rect::new(0, 0, 20, 10);
         let popup = Rect::new(0, 0, 20, 5); // "Copy" (index 2) draws at row y=2
         let mut state = MenuState::new();
         state.open(ROWS.len(), selectable);
-        let mut interaction = Interaction::<Id>::new();
+        let mut harness = WidgetHarness::<Id>::new(20, 10);
 
         // Frame 1: register this frame's hit rects (nothing fed in yet).
-        let mut grid = Grid::new(20, 10);
-        interaction.frame(&mut Surface::new(&mut grid, screen, 0), |ui| {
+        harness.step(|ui| {
             Menu::new(&ROWS).show(ui, screen, popup, Id::Content, Id::Backdrop, &mut state)
         });
 
-        // Feed a click on "Copy"'s row, then resolve it against last frame's registrations.
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
-            MouseEventKind::Down(MouseButton::Left),
-            Pos::new(1, 2),
-            KeyModifiers::NONE,
-        )));
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
-            MouseEventKind::Up(MouseButton::Left),
-            Pos::new(1, 2),
-            KeyModifiers::NONE,
-        )));
-
-        let mut grid = Grid::new(20, 10);
-        let activated = interaction.frame(&mut Surface::new(&mut grid, screen, 0), |ui| {
+        harness.click(1, 2); // "Copy"'s row
+        // Frame 2: feeds the click; the flags it sets aren't read until the next `step`.
+        let _ = harness.step(|ui| {
+            Menu::new(&ROWS).show(ui, screen, popup, Id::Content, Id::Backdrop, &mut state)
+        });
+        // Frame 3: resolves it.
+        let activated = harness.step(|ui| {
             Menu::new(&ROWS).show(ui, screen, popup, Id::Content, Id::Backdrop, &mut state)
         });
 
@@ -590,32 +588,26 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "testing")]
     fn clicking_outside_the_popup_closes_without_activating() {
+        use crate::testing::WidgetHarness;
+
         let screen = Rect::new(0, 0, 20, 10);
         let popup = Rect::new(0, 0, 10, 5);
         let mut state = MenuState::new();
         state.open(ROWS.len(), selectable);
-        let mut interaction = Interaction::<Id>::new();
+        let mut harness = WidgetHarness::<Id>::new(20, 10);
 
-        let mut grid = Grid::new(20, 10);
-        interaction.frame(&mut Surface::new(&mut grid, screen, 0), |ui| {
+        harness.step(|ui| {
             Menu::new(&ROWS).show(ui, screen, popup, Id::Content, Id::Backdrop, &mut state)
         });
 
         // Well outside `popup` (which only spans columns 0..10, rows 0..5).
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
-            MouseEventKind::Down(MouseButton::Left),
-            Pos::new(15, 8),
-            KeyModifiers::NONE,
-        )));
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
-            MouseEventKind::Up(MouseButton::Left),
-            Pos::new(15, 8),
-            KeyModifiers::NONE,
-        )));
-
-        let mut grid = Grid::new(20, 10);
-        let activated = interaction.frame(&mut Surface::new(&mut grid, screen, 0), |ui| {
+        harness.click(15, 8);
+        let _ = harness.step(|ui| {
+            Menu::new(&ROWS).show(ui, screen, popup, Id::Content, Id::Backdrop, &mut state)
+        });
+        let activated = harness.step(|ui| {
             Menu::new(&ROWS).show(ui, screen, popup, Id::Content, Id::Backdrop, &mut state)
         });
 
@@ -624,34 +616,28 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "testing")]
     fn clicking_inside_the_popup_but_off_every_row_stays_open() {
         // retroglyph#1290: a click that lands inside `popup_area` but past the drawn rows (e.g.
         // in the empty space below a short menu) must not fall through to the backdrop: the
         // barrier blocks it from ever reaching `screen`'s registration.
+        use crate::testing::WidgetHarness;
+
         let screen = Rect::new(0, 0, 20, 10);
         let popup = Rect::new(0, 0, 20, 8); // taller than the 5 rows it actually draws
         let mut state = MenuState::new();
         state.open(ROWS.len(), selectable);
-        let mut interaction = Interaction::<Id>::new();
+        let mut harness = WidgetHarness::<Id>::new(20, 10);
 
-        let mut grid = Grid::new(20, 10);
-        interaction.frame(&mut Surface::new(&mut grid, screen, 0), |ui| {
+        harness.step(|ui| {
             Menu::new(&ROWS).show(ui, screen, popup, Id::Content, Id::Backdrop, &mut state)
         });
 
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
-            MouseEventKind::Down(MouseButton::Left),
-            Pos::new(1, 7), // inside `popup`, past the last drawn row
-            KeyModifiers::NONE,
-        )));
-        let _ = interaction.handle_event(&Event::Mouse(MouseEvent::new(
-            MouseEventKind::Up(MouseButton::Left),
-            Pos::new(1, 7),
-            KeyModifiers::NONE,
-        )));
-
-        let mut grid = Grid::new(20, 10);
-        let activated = interaction.frame(&mut Surface::new(&mut grid, screen, 0), |ui| {
+        harness.click(1, 7); // inside `popup`, past the last drawn row
+        let _ = harness.step(|ui| {
+            Menu::new(&ROWS).show(ui, screen, popup, Id::Content, Id::Backdrop, &mut state)
+        });
+        let activated = harness.step(|ui| {
             Menu::new(&ROWS).show(ui, screen, popup, Id::Content, Id::Backdrop, &mut state)
         });
 
