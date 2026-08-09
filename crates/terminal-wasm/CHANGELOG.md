@@ -7,29 +7,21 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
-
 ## [0.3.3+retroglyph-terminal-wasm](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v0.3.2...retroglyph-terminal-wasm-v0.3.3) - 2026-08-09
 
 ### Features
 
-- [08f22c0](
-https://github.com/crates-lurey-io/retroglyph/commit/08f22c0b2dbbe2712c8a93783c92d2821e79cf11) *(core)* Add Color::rgb and Color::hex const constructors by `@crates-lurey-io-agent[bot]` in [#1345](
-https://github.com/crates-lurey-io/retroglyph/pull/1345)
+- [08f22c0](https://github.com/crates-lurey-io/retroglyph/commit/08f22c0b2dbbe2712c8a93783c92d2821e79cf11) _(core)_ Add Color::rgb and Color::hex const constructors by `@crates-lurey-io-agent[bot]` in [#1345](https://github.com/crates-lurey-io/retroglyph/pull/1345)
 
 ### Refactor
 
-- [6ee0d30](
-https://github.com/crates-lurey-io/retroglyph/commit/6ee0d30ea1e710c78686ba89eda58ccb2de125dc) *(core)* Add Frame::new, mark Frame #[non_exhaustive] by `@crates-lurey-io-agent[bot]` in [#1360](
-https://github.com/crates-lurey-io/retroglyph/pull/1360)
+- [6ee0d30](https://github.com/crates-lurey-io/retroglyph/commit/6ee0d30ea1e710c78686ba89eda58ccb2de125dc) _(core)_ Add Frame::new, mark Frame #[non_exhaustive] by `@crates-lurey-io-agent[bot]` in [#1360](https://github.com/crates-lurey-io/retroglyph/pull/1360)
 
 ### Documentation
 
-- [48c9282](
-https://github.com/crates-lurey-io/retroglyph/commit/48c9282d0398b0b25da1f1a9e977623162058af3) *(core)* Remove dangling Style modifier-rationale pointer in grid/mod.rs by `@crates-lurey-io-agent[bot]` in [#1315](
-https://github.com/crates-lurey-io/retroglyph/pull/1315)
+- [48c9282](https://github.com/crates-lurey-io/retroglyph/commit/48c9282d0398b0b25da1f1a9e977623162058af3) _(core)_ Remove dangling Style modifier-rationale pointer in grid/mod.rs by `@crates-lurey-io-agent[bot]` in [#1315](https://github.com/crates-lurey-io/retroglyph/pull/1315)
 
 **Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v0.3.2...retroglyph-terminal-wasm-v0.3.3
-
 
 ## [0.3.2+retroglyph-terminal-wasm](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v0.3.1...retroglyph-terminal-wasm-v0.3.2) - 2026-08-07
 

@@ -7,35 +7,23 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
-
 ## [0.2.0+retroglyph-wgpu](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-wgpu-v0.1.2...retroglyph-wgpu-v0.2.0) - 2026-08-09
 
 ### Features
 
-- [08f22c0](
-https://github.com/crates-lurey-io/retroglyph/commit/08f22c0b2dbbe2712c8a93783c92d2821e79cf11) *(core)* Add Color::rgb and Color::hex const constructors by `@crates-lurey-io-agent[bot]` in [#1345](
-https://github.com/crates-lurey-io/retroglyph/pull/1345)
+- [08f22c0](https://github.com/crates-lurey-io/retroglyph/commit/08f22c0b2dbbe2712c8a93783c92d2821e79cf11) _(core)_ Add Color::rgb and Color::hex const constructors by `@crates-lurey-io-agent[bot]` in [#1345](https://github.com/crates-lurey-io/retroglyph/pull/1345)
 
 ### Refactor
 
-- [af7d30a](
-https://github.com/crates-lurey-io/retroglyph/commit/af7d30a955859afa2902b9b00a694f531a9a8e64) *(core)* Replace `Output::needs_full_frame`/`composites_layers` with `Compositing` by `@crates-lurey-io-agent[bot]` in [#1344](
-https://github.com/crates-lurey-io/retroglyph/pull/1344) [**breaking**]
+- [af7d30a](https://github.com/crates-lurey-io/retroglyph/commit/af7d30a955859afa2902b9b00a694f531a9a8e64) _(core)_ Replace `Output::needs_full_frame`/`composites_layers` with `Compositing` by `@crates-lurey-io-agent[bot]` in [#1344](https://github.com/crates-lurey-io/retroglyph/pull/1344) [**breaking**]
 
-- [a325de8](
-https://github.com/crates-lurey-io/retroglyph/commit/a325de8890ff8d5506ec5b85a94b8703d3172656) *(software)* Remove all root re-exports from retroglyph-software by `@crates-lurey-io-agent[bot]` in [#1311](
-https://github.com/crates-lurey-io/retroglyph/pull/1311)
+- [a325de8](https://github.com/crates-lurey-io/retroglyph/commit/a325de8890ff8d5506ec5b85a94b8703d3172656) _(software)_ Remove all root re-exports from retroglyph-software by `@crates-lurey-io-agent[bot]` in [#1311](https://github.com/crates-lurey-io/retroglyph/pull/1311)
 
-- [9eeef57](
-https://github.com/crates-lurey-io/retroglyph/commit/9eeef57c113f442e6b6402dd7f50ce0a05be456d) *(wgpu)* Remove root re-exports from retroglyph-wgpu by `@crates-lurey-io-agent[bot]` in [#1312](
-https://github.com/crates-lurey-io/retroglyph/pull/1312)
+- [9eeef57](https://github.com/crates-lurey-io/retroglyph/commit/9eeef57c113f442e6b6402dd7f50ce0a05be456d) _(wgpu)_ Remove root re-exports from retroglyph-wgpu by `@crates-lurey-io-agent[bot]` in [#1312](https://github.com/crates-lurey-io/retroglyph/pull/1312)
 
-- [deba5f1](
-https://github.com/crates-lurey-io/retroglyph/commit/deba5f179241b7d3e1c8941c833cd05342e1cc94) *(window)* Remove all root re-exports from retroglyph-window by `@crates-lurey-io-agent[bot]` in [#1275](
-https://github.com/crates-lurey-io/retroglyph/pull/1275)
+- [deba5f1](https://github.com/crates-lurey-io/retroglyph/commit/deba5f179241b7d3e1c8941c833cd05342e1cc94) _(window)_ Remove all root re-exports from retroglyph-window by `@crates-lurey-io-agent[bot]` in [#1275](https://github.com/crates-lurey-io/retroglyph/pull/1275)
 
 **Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-wgpu-v0.1.2...retroglyph-wgpu-v0.2.0
-
 
 ## [0.1.2+retroglyph-wgpu](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-wgpu-v0.1.1...retroglyph-wgpu-v0.1.2) - 2026-08-07
 
