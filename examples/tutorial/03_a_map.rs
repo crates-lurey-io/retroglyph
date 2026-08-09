@@ -12,12 +12,12 @@
 //!
 //! Keys: arrow keys move. `q` or `Escape` quits.
 
-use retroglyph_core::backend::Backend;
-use retroglyph_core::color::Style;
-use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::grid::Grid;
-use retroglyph_core::terminal::Terminal;
-use retroglyph_core::tile::Tile;
+use retroglyph::backend::Backend;
+use retroglyph::color::Style;
+use retroglyph::event::{Event, KeyCode};
+use retroglyph::grid::Grid;
+use retroglyph::terminal::Terminal;
+use retroglyph::tile::Tile;
 use retroglyph_examples::Example;
 
 // ANCHOR: map
@@ -121,7 +121,7 @@ impl Example for AMap {
     fn tick<B: Backend>(
         &mut self,
         term: &mut Terminal<B>,
-        _frame: &retroglyph_core::app::Frame,
+        _frame: &retroglyph::app::Frame,
     ) -> bool {
         if !self.handle_events(term) {
             return false;

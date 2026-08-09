@@ -44,19 +44,19 @@
     clippy::cast_sign_loss
 )]
 
-use retroglyph_core::app::Frame;
-use retroglyph_core::backend::Backend;
-use retroglyph_core::color::{Color, Style};
-use retroglyph_core::event::{Event, KeyCode, MouseButton, MouseEventKind};
-use retroglyph_core::grid::{HasSize, Pos, Rect, Size};
-use retroglyph_core::surface::Surface;
-use retroglyph_core::terminal::Terminal;
+use retroglyph::app::Frame;
+use retroglyph::backend::Backend;
+use retroglyph::color::{Color, Style};
+use retroglyph::event::{Event, KeyCode, MouseButton, MouseEventKind};
+use retroglyph::grid::{HasSize, Pos, Rect, Size};
+use retroglyph::surface::Surface;
+use retroglyph::terminal::Terminal;
+use retroglyph::ui::align::Align;
+use retroglyph::ui::animate::{Easing, Tween};
+use retroglyph::ui::camera::Camera;
+use retroglyph::ui::layout::{Constraint, Layout, split_h, split_v};
+use retroglyph::ui::text::{draw_clipped, truncate};
 use retroglyph_examples::Example;
-use retroglyph_ui::align::Align;
-use retroglyph_ui::animate::{Easing, Tween};
-use retroglyph_ui::camera::Camera;
-use retroglyph_ui::layout::{Constraint, Layout, split_h, split_v};
-use retroglyph_ui::text::{draw_clipped, truncate};
 
 // ── Breakpoints ────────────────────────────────────────────────────────────
 

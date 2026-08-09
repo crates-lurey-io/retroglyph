@@ -8,7 +8,7 @@
 //! synthetic events rather than snapshotting an idle frame -- here, a sequence of
 //! `Event::Resize` events, since that's the one capability this example exists to prove. The
 //! `Headless` backend's own `resize` genuinely reallocates its grid (see
-//! `retroglyph_core::backend::Headless`'s `Backend` impl), so this exercises the real
+//! `retroglyph::backend::Headless`'s `Backend` impl), so this exercises the real
 //! `Terminal::resize` path, not a stand-in.
 
 #![allow(unreachable_pub)]
@@ -21,13 +21,13 @@ mod support;
 mod resize;
 
 use resize::Resize;
-use retroglyph_core::event::Event;
-use retroglyph_core::testing::TestHarness;
+use retroglyph::TestHarness;
+use retroglyph::event::Event;
 use retroglyph_examples::Example;
 use support::TestApp;
 
 /// Drives `E` through one synthetic event per tick, returning each frame's
-/// [`Headless::format_view`](retroglyph_core::backend::Headless::format_view) text.
+/// [`Headless::format_view`](retroglyph::backend::Headless::format_view) text.
 fn drive<E: Example>(events: &[Event]) -> Vec<String> {
     let mut harness = TestHarness::new(50, 25);
     let mut app = TestApp(E::init(harness.term_mut()));

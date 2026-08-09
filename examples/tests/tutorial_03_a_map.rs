@@ -14,10 +14,10 @@
 mod a_map;
 
 use a_map::AMap;
-use retroglyph_core::app::Frame;
-use retroglyph_core::backend::Headless;
-use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyModifiers};
-use retroglyph_core::terminal::Terminal;
+use retroglyph::app::Frame;
+use retroglyph::backend::Headless;
+use retroglyph::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+use retroglyph::terminal::Terminal;
 use retroglyph_examples::{Example, HEADLESS_FRAME_DELTA};
 
 /// A plain, unmodified key press.
@@ -35,10 +35,7 @@ fn drive(events: &[Event]) -> Vec<String> {
     let mut views = Vec::new();
     for (i, event) in events.iter().enumerate() {
         term.backend_mut().push_event(event.clone());
-        let frame = Frame {
-            delta: HEADLESS_FRAME_DELTA,
-            frame: i as u64,
-        };
+        let frame = Frame::new(HEADLESS_FRAME_DELTA, i as u64);
         if !state.tick(&mut term, &frame) {
             break;
         }

@@ -17,14 +17,14 @@
 //!
 //! Keys: `q` or `Escape` quits, or close the window.
 
-use retroglyph_core::backend::Backend;
-use retroglyph_core::color::{AnsiColor, Color, Style};
-use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::grid::{BlendMode, Grid, Rect};
-use retroglyph_core::surface::Surface;
-use retroglyph_core::terminal::Terminal;
-use retroglyph_core::text::{Line, Span};
-use retroglyph_core::tile::Tile;
+use retroglyph::backend::Backend;
+use retroglyph::color::{AnsiColor, Color, Style};
+use retroglyph::event::{Event, KeyCode};
+use retroglyph::grid::{BlendMode, Grid, Rect};
+use retroglyph::surface::Surface;
+use retroglyph::terminal::Terminal;
+use retroglyph::text::{Line, Span};
+use retroglyph::tile::Tile;
 use retroglyph_examples::Example;
 
 /// State for the colors example (none needed: the palette layout never changes).
@@ -188,7 +188,7 @@ impl Example for Colors {
     fn tick<B: Backend>(
         &mut self,
         term: &mut Terminal<B>,
-        _frame: &retroglyph_core::app::Frame,
+        _frame: &retroglyph::app::Frame,
     ) -> bool {
         if !self.handle_events(term) {
             return false;

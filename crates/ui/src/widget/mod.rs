@@ -38,6 +38,7 @@ mod list;
 mod list_direction;
 mod log;
 mod menu;
+mod menu_bar;
 mod meter;
 mod modal;
 mod panel;
@@ -63,6 +64,7 @@ pub use list::List;
 pub use list_direction::ListDirection;
 pub use log::Log;
 pub use menu::{Marker, Menu, MenuRow};
+pub use menu_bar::{MenuBar, MenuBarIds};
 pub use meter::Meter;
 pub use modal::Modal;
 pub use panel::{Panel, PanelTitle, TitlePosition};
@@ -270,7 +272,7 @@ pub trait MinSize {
 /// let area = Rect::new(0, 0, 4, 1);
 /// let mut grid = Grid::new(4, 1);
 /// let mut state = Duration::ZERO;
-/// let frame = Frame { delta: Duration::from_millis(100), frame: 0 };
+/// let frame = Frame::new(Duration::from_millis(100), 0);
 /// Blinker.render(&mut Surface::new(&mut grid, area, 0), &mut state, &frame);
 /// assert_eq!(state, Duration::from_millis(100));
 /// ```

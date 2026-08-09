@@ -19,10 +19,10 @@ mod support;
 mod keyboard;
 
 use keyboard::Keyboard;
-use retroglyph_core::app::Frame;
-use retroglyph_core::backend::Headless;
-use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyModifiers};
-use retroglyph_core::terminal::Terminal;
+use retroglyph::app::Frame;
+use retroglyph::backend::Headless;
+use retroglyph::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+use retroglyph::terminal::Terminal;
 use retroglyph_examples::{Example, HEADLESS_FRAME_DELTA};
 
 /// Drives `E` through one synthetic key event per tick, returning each frame's
@@ -36,10 +36,7 @@ fn headless_keyboard_snapshot<E: Example>(events: &[Event]) -> String {
     let mut views = Vec::new();
     for (i, event) in events.iter().enumerate() {
         term.backend_mut().push_event(event.clone());
-        let frame = Frame {
-            delta: HEADLESS_FRAME_DELTA,
-            frame: i as u64,
-        };
+        let frame = Frame::new(HEADLESS_FRAME_DELTA, i as u64);
         if !state.tick(&mut term, &frame) {
             break;
         }

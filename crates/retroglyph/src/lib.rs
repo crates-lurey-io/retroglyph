@@ -4,9 +4,9 @@
 //! and layout helpers, and input events -- `app`, `color`, `event`, `frames`, `grid`, `layout`,
 //! `surface`, `terminal`, `text`, `tile`, `symbols` -- plus a [`prelude`] with the handful of
 //! names a program can't avoid, and one feature-gated module per backend (`crossterm`,
-//! `software`, `gl`, `wgpu`, `ui`). Writing a new backend instead of a game? Depend on
-//! [`retroglyph-core`](retroglyph_core) directly for its lower-level `backend`, `dev`, and `math`
-//! modules.
+//! `software`, `gl`, `wgpu`, `terminal_wasm`, `ui`). Writing a new backend instead of a game?
+//! Depend on [`retroglyph-core`](retroglyph_core) directly for its lower-level `backend`, `dev`,
+//! and `math` modules.
 //!
 //! # Quick start
 //!
@@ -70,6 +70,14 @@
 //! WebGL2 wasm). Also pulls in the curated windowed re-exports (`WindowConfig`, `PresenterBuilder`,
 //! `Windowed`, `WindowedLaunchError`, `run_app`, `run_app_on`).
 //!
+//! ### `serde`
+//!
+//! ⚪ Optional.
+//!
+//! Adds `Serialize`/`Deserialize` impls to the curated types that support them (`Color`, `Style`,
+//! geometry, ..., plus [`ui::theme::Theme`]/`Density` when `ui` is also enabled). Forwards to
+//! `retroglyph-core`'s and `retroglyph-ui`'s own `serde` features; neither backend crate has one.
+//!
 //! ### `software`
 //!
 //! ⚪ Optional.
@@ -78,12 +86,30 @@
 //! `softbuffer`. Also pulls in the curated windowed re-exports (`WindowConfig`, `PresenterBuilder`,
 //! `Windowed`, `WindowedLaunchError`, `run_app`, `run_app_on`).
 //!
+//! ### `terminal-wasm`
+//!
+//! ⚪ Optional.
+//!
+//! Re-exports `retroglyph-terminal-wasm` as [`terminal_wasm`]: a browser `Backend` driven by
+//! pushed/pulled ANSI I/O (e.g. xterm.js). Its `#[wasm_bindgen]` FFI module only compiles for
+//! `target_arch = "wasm32"`, but the crate (and this re-export) build portably otherwise.
+//!
 //! ### `testing`
 //!
 //! ⚪ Optional.
 //!
 //! Enables [`TestHarness`] and its error, the published headless `App` driver for testing your own
 //! `App`. Forwards to `retroglyph-core`'s own `testing` feature.
+//!
+//! ### `tilesets`
+//!
+//! ⚪ Optional.
+//!
+//! Forwards each enabled backend's own `tilesets` feature (PNG sprite/tileset loading), so a
+//! caller doesn't need to know which backend crate actually owns it. Mirrors `default-font` above;
+//! see [`retroglyph_window::tileset`](https://docs.rs/retroglyph-window) for the `TilesetOptions`/
+//! `Codepage` config types that feature adds -- reach for `retroglyph-window` directly for those,
+//! same as any other finer-grained windowed control this facade doesn't curate.
 //!
 //! ### `tracing`
 //!
@@ -169,6 +195,10 @@ pub use retroglyph_gl as gl;
 /// [`softbuffer`](https://crates.io/crates/softbuffer).
 #[cfg(feature = "software")]
 pub use retroglyph_software as software;
+/// A browser [`Backend`](retroglyph_core::backend::Backend) driven by pushed/pulled ANSI I/O
+/// (e.g. [xterm.js](https://xtermjs.org/)).
+#[cfg(feature = "terminal-wasm")]
+pub use retroglyph_terminal_wasm as terminal_wasm;
 /// The immediate-mode widget/layout toolkit: panels, gauges, tables, input/focus, theming,
 /// animation.
 #[cfg(feature = "ui")]

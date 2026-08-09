@@ -25,10 +25,10 @@ mod support;
 #[allow(dead_code)] // `main`/the `wasm_entry!` FFI surface aren't exercised by these tests
 mod sprites_tileset;
 
-use retroglyph_core::app::Frame;
-use retroglyph_core::backend::Headless;
-use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyModifiers};
-use retroglyph_core::terminal::Terminal;
+use retroglyph::app::Frame;
+use retroglyph::backend::Headless;
+use retroglyph::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+use retroglyph::terminal::Terminal;
 use retroglyph_examples::{Example, HEADLESS_FRAME_DELTA};
 use sprites_tileset::SpritesTileset;
 
@@ -61,10 +61,7 @@ fn headless_snapshot() {
     let mut views = Vec::new();
     for (i, event) in events.iter().enumerate() {
         term.backend_mut().push_event(event.clone());
-        let frame = Frame {
-            delta: HEADLESS_FRAME_DELTA,
-            frame: i as u64,
-        };
+        let frame = Frame::new(HEADLESS_FRAME_DELTA, i as u64);
         if !state.tick(&mut term, &frame) {
             break;
         }
@@ -102,8 +99,8 @@ fn svg_snapshot() {
 // applied correctly to pixels is `retroglyph-software`'s and `retroglyph-gl`'s own business, and
 // tested there.
 
-use retroglyph_core::color::Tint;
-use retroglyph_core::grid::Pos;
+use retroglyph::color::Tint;
+use retroglyph::grid::Pos;
 
 /// Runs one frame with `events` already delivered, and hands back the terminal to inspect.
 fn after(events: &[Event]) -> Terminal<Headless> {
@@ -112,17 +109,11 @@ fn after(events: &[Event]) -> Terminal<Headless> {
     let mut state = SpritesTileset::init(&mut term);
     for (i, event) in events.iter().enumerate() {
         term.backend_mut().push_event(event.clone());
-        let frame = Frame {
-            delta: HEADLESS_FRAME_DELTA,
-            frame: i as u64,
-        };
+        let frame = Frame::new(HEADLESS_FRAME_DELTA, i as u64);
         state.tick(&mut term, &frame);
     }
     // One more tick so the final frame reflects the post-movement state.
-    let frame = Frame {
-        delta: HEADLESS_FRAME_DELTA,
-        frame: events.len() as u64,
-    };
+    let frame = Frame::new(HEADLESS_FRAME_DELTA, events.len() as u64);
     state.tick(&mut term, &frame);
     term
 }

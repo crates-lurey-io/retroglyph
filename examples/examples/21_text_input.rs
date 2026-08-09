@@ -18,19 +18,17 @@
 //! Keys: type to edit, Left/Right/Home/End/Backspace/Delete to navigate. Tab cycles the cursor
 //! style. Escape quits -- not `q`, which the field would just type. Or close the window.
 
-use retroglyph_core::app::Frame;
-use retroglyph_core::backend::{Backend, CursorStyle};
-use retroglyph_core::color::{Color, Style};
-use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::grid::{Pos, Rect};
-use retroglyph_core::terminal::Terminal;
-use retroglyph_core::text::width_usize;
+use retroglyph::app::Frame;
+use retroglyph::backend::{Backend, CursorStyle};
+use retroglyph::color::{Color, Style};
+use retroglyph::event::{Event, KeyCode};
+use retroglyph::grid::{Pos, Rect};
+use retroglyph::terminal::Terminal;
+use retroglyph::text::width_usize;
+use retroglyph::ui::Surface;
+use retroglyph::ui::state::TextInputState;
+use retroglyph::ui::widget::{Panel, StatefulWidget, TextInput, Widget as _};
 use retroglyph_examples::Example;
-use retroglyph_ui::state::TextInputState;
-
-use retroglyph_ui::widget::{Panel, StatefulWidget, TextInput, Widget as _};
-
-use retroglyph_ui::Surface;
 
 /// Every [`CursorStyle`] variant, in the order Tab cycles them (and DECSCUSR numbers them; see
 /// [`Terminal::set_cursor_style`]'s own docs).

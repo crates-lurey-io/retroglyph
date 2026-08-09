@@ -16,8 +16,8 @@ mod support;
 #[allow(dead_code)] // `main`/the `wasm_entry!` FFI surface aren't exercised by these tests
 mod sokoban;
 
-use retroglyph_core::event::{Event, KeyCode, KeyEvent, KeyModifiers};
-use retroglyph_core::testing::TestHarness;
+use retroglyph::TestHarness;
+use retroglyph::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use retroglyph_examples::{Example, HEADLESS_FRAME_DELTA};
 use sokoban::Sokoban;
 use support::TestApp;
@@ -28,7 +28,7 @@ const fn key(code: KeyCode) -> Event {
 }
 
 /// Drives `E` through one synthetic key event per tick, returning each frame's
-/// [`Headless::format_view`](retroglyph_core::backend::Headless::format_view) text.
+/// [`Headless::format_view`](retroglyph::backend::Headless::format_view) text.
 ///
 /// `with_step_delta(HEADLESS_FRAME_DELTA)` (retroglyph#1001): `Sokoban::tick` feeds `frame.delta`
 /// to `player`/`boxes`' slide animation, calibrated against [`HEADLESS_FRAME_DELTA`]'s 100ms (see

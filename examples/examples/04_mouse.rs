@@ -15,12 +15,12 @@
 //!
 //! Keys: `q` or `Escape` quits. Move the mouse and click to see it tracked, or close the window.
 
-use retroglyph_core::backend::Backend;
-use retroglyph_core::color::Style;
-use retroglyph_core::event::{Event, KeyCode, MouseEventKind};
-use retroglyph_core::grid::Pos;
-use retroglyph_core::surface::Surface;
-use retroglyph_core::terminal::Terminal;
+use retroglyph::backend::Backend;
+use retroglyph::color::Style;
+use retroglyph::event::{Event, KeyCode, MouseEventKind};
+use retroglyph::grid::Pos;
+use retroglyph::surface::Surface;
+use retroglyph::terminal::Terminal;
 use retroglyph_examples::Example;
 
 /// Ticks with no [`MouseEventKind::Moved`] event before assuming this backend never
@@ -128,7 +128,7 @@ impl Example for Mouse {
     fn tick<B: Backend>(
         &mut self,
         term: &mut Terminal<B>,
-        _frame: &retroglyph_core::app::Frame,
+        _frame: &retroglyph::app::Frame,
     ) -> bool {
         self.ticks += 1;
         if !self.handle_events(term) {

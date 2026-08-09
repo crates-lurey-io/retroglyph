@@ -2,7 +2,7 @@
 
 #![allow(unreachable_pub, dead_code)]
 
-/// WASM-only support for driving a [`Terminal<Headless>`](retroglyph_core::terminal::Terminal)
+/// WASM-only support for driving a [`Terminal<Headless>`](retroglyph::terminal::Terminal)
 /// from a browser `requestAnimationFrame` loop instead of a canvas/window.
 ///
 /// See [`__wasm_headless_entry!`](crate::__wasm_headless_entry) for the
@@ -18,9 +18,9 @@
 #[cfg(feature = "wasm-headless")]
 pub mod wasm_headless {
     /// Decode an FFI-friendly `(code, mods)` pair into a
-    /// [`KeyEvent`](retroglyph_core::event::KeyEvent).
+    /// [`KeyEvent`](retroglyph::event::KeyEvent).
     ///
-    /// `retroglyph_core::event` types are not `wasm_bindgen`-friendly (no
+    /// `retroglyph::event` types are not `wasm_bindgen`-friendly (no
     /// `#[wasm_bindgen]` on the enum, no stable C-like repr contract), so the
     /// browser side calls in with two plain integers instead of a rich event
     /// type crossing the FFI boundary directly:
@@ -28,19 +28,19 @@ pub mod wasm_headless {
     /// - `code`: for printable characters, the Unicode scalar value (as you'd
     ///   get from JS `event.key.codePointAt(0)` for a single-codepoint key).
     ///   Special keys use codepoints above `0x0010_FFFF` (outside the valid
-    ///   `char` range), one per [`KeyCode`](retroglyph_core::event::KeyCode)
+    ///   `char` range), one per [`KeyCode`](retroglyph::event::KeyCode)
     ///   variant that isn't `Char`/`F`. Function keys `F1..=F24` use
     ///   `SPECIAL_F0 + n`.
     /// - `mods`: a bitmask matching
-    ///   [`KeyModifiers`](retroglyph_core::event::KeyModifiers)'s internal
+    ///   [`KeyModifiers`](retroglyph::event::KeyModifiers)'s internal
     ///   layout: bit 0 = shift, bit 1 = control, bit 2 = alt, bit 3 = super.
     ///
     /// Returns `None` for codes that don't map to a known key (the caller
     /// should silently drop the event rather than panic — a malformed or
     /// future JS build shouldn't be able to crash the wasm module).
     #[must_use]
-    pub fn decode_key(code: u32, mods: u8) -> Option<retroglyph_core::event::KeyEvent> {
-        use retroglyph_core::event::{KeyCode, KeyEvent, KeyModifiers};
+    pub fn decode_key(code: u32, mods: u8) -> Option<retroglyph::event::KeyEvent> {
+        use retroglyph::event::{KeyCode, KeyEvent, KeyModifiers};
 
         // Special keys live just above the valid `char` range (0x0 ..=
         // 0x10_FFFF, minus the surrogate gap) so they can never collide with
@@ -95,7 +95,7 @@ pub mod wasm_headless {
     #[cfg(test)]
     mod tests {
         use super::decode_key;
-        use retroglyph_core::event::{KeyCode, KeyModifiers};
+        use retroglyph::event::{KeyCode, KeyModifiers};
 
         #[test]
         fn decodes_plain_char() {
@@ -154,12 +154,12 @@ pub mod wasm_headless {
 /// `pointerdown`/`pointermove`/`pointerup`) has to cross the FFI boundary
 /// the same way key events do. Mirrors the `(code, mods)` philosophy of
 /// `wasm_headless::decode_key`: plain integers in, a rich
-/// [`Event`](retroglyph_core::event::Event) out, `None` for anything
+/// [`Event`](retroglyph::event::Event) out, `None` for anything
 /// malformed rather than a panic.
 #[cfg(any(feature = "wasm-headless", feature = "wasm-terminal"))]
 pub mod wasm_pointer {
-    use retroglyph_core::event::{Event, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
-    use retroglyph_core::grid::Pos;
+    use retroglyph::event::{Event, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+    use retroglyph::grid::Pos;
 
     /// `kind` value for a press (finger down / left button down).
     pub const KIND_DOWN: u8 = 0;

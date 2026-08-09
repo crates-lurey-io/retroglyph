@@ -9,7 +9,7 @@
 //! [`Theme::DARK`] and hand-thread `theme.*` into each style knob; `.theme()` replaces that
 //! boilerplate. [`Ui`] pairs the frame's surface with [`Interaction`] (via
 //! [`Interaction::frame`]), so drawing each widget into its own area no longer needs a fresh
-//! [`Surface`](retroglyph_core::surface::Surface) built by hand.
+//! [`Surface`](retroglyph::surface::Surface) built by hand.
 //!
 //! ```sh
 //! cargo run --example 17_theme_switch --features crossterm
@@ -21,22 +21,18 @@
 //! active theme. Left/Right switches tabs, Up/Down moves the list selection. `q` or `Escape`
 //! quits, or close the window.
 
-use retroglyph_core::app::Frame;
-use retroglyph_core::backend::Backend;
-use retroglyph_core::color::Style;
-use retroglyph_core::event::{Event, KeyCode};
-use retroglyph_core::grid::Rect;
-use retroglyph_core::terminal::Terminal;
+use retroglyph::app::Frame;
+use retroglyph::backend::Backend;
+use retroglyph::color::Style;
+use retroglyph::event::{Event, KeyCode};
+use retroglyph::grid::Rect;
+use retroglyph::terminal::Terminal;
+use retroglyph::ui::interact::Interaction;
+use retroglyph::ui::state::ListState;
+use retroglyph::ui::theme::Theme;
+use retroglyph::ui::ui::Ui;
+use retroglyph::ui::widget::{Button, List, Panel, ProgressBar, Tabs};
 use retroglyph_examples::Example;
-use retroglyph_ui::interact::Interaction;
-
-use retroglyph_ui::state::ListState;
-
-use retroglyph_ui::theme::Theme;
-
-use retroglyph_ui::ui::Ui;
-
-use retroglyph_ui::widget::{Button, List, Panel, ProgressBar, Tabs};
 
 /// Identifies the demo's one interactive widget for [`Interaction`]'s hit-testing and focus ring.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
