@@ -108,7 +108,7 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: just
-      - uses: cargo-bins/cargo-binstall@v1.13.0
+      - uses: cargo-bins/cargo-binstall@v1.21.1
       - run: cargo binstall cargo-llms-txt --no-confirm -q
       - run: just doc
 
@@ -313,7 +313,7 @@ jobs:
           targets: wasm32-unknown-unknown
       # Same cargo-run-bin provisioning as the test-wasm job: cargo-binstall on PATH as a fast
       # fallback, and caching ./.bin so a warm cache skips the wasm-pack/wasm-bindgen install.
-      - uses: cargo-bins/cargo-binstall@v1.13.0
+      - uses: cargo-bins/cargo-binstall@v1.21.1
       - uses: Swatinem/rust-cache@v2
         with:
           cache-directories: .bin
@@ -400,7 +400,7 @@ jobs:
       # `cargo install` on every run: cargo-binstall on PATH (cargo-run-bin prefers it over
       # building from source, same as the Build WASM examples step in docs.yml) as a cold-cache
       # fallback, and caching ./.bin itself so a warm cache skips the install step entirely.
-      - uses: cargo-bins/cargo-binstall@v1.13.0
+      - uses: cargo-bins/cargo-binstall@v1.21.1
       - uses: Swatinem/rust-cache@v2
         with:
           cache-directories: .bin
