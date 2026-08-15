@@ -221,14 +221,7 @@ fn render_to_frame(ctx: &HeadlessContext, renderer: &GlRenderer) -> Result<Frame
         // back-to-front (upload + two instanced passes each) into the bound framebuffer, the same
         // loop the windowed `present` runs.
         res.clear(gl);
-        for l in 0..renderer.layers.len() {
-            res.upload(gl, &renderer.layers[l]);
-            res.draw_layer(gl, renderer.cell_count() as i32);
-            #[cfg(feature = "tilesets")]
-            if let Some(sprites) = renderer.sprite_layers.get(l) {
-                res.draw_sprites(gl, sprites);
-            }
-        }
+        crate::draw_all_layers(&renderer.layers, gl, &mut res, renderer.cell_count() as i32);
         gl.finish();
 
         let mut buf = vec![0u8; (w * h * 4) as usize];
