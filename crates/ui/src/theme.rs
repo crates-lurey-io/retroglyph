@@ -99,8 +99,8 @@ impl Theme {
     };
 
     /// The background for an interactive widget in `response`'s current state, over `base`
-    /// when idle. Precedence: [`pressed`](Response::pressed), then
-    /// [`hovered`](Response::hovered), then `base`.
+    /// when idle. Delegates to [`WidgetState::of`] for the precedence order; see there for why
+    /// `disabled` now takes priority over everything else.
     ///
     /// `base` is caller-supplied rather than defaulted to [`panel_bg`](Self::panel_bg) so this
     /// composes with widgets that already take a backdrop, e.g. a bar drawn over
@@ -120,18 +120,15 @@ impl Theme {
     /// ```
     #[must_use]
     pub const fn bg_for<Id>(&self, response: &Response<Id>, base: Color) -> Color {
-        if response.pressed() {
-            self.press_bg
-        } else if response.hovered() {
-            self.hover_bg
-        } else {
-            base
+        match WidgetState::of(response) {
+            WidgetState::Pressed => self.press_bg,
+            WidgetState::Hovered => self.hover_bg,
+            WidgetState::Disabled | WidgetState::Focused | WidgetState::Idle => base,
         }
     }
 
-    /// The foreground for an interactive widget in `response`'s current state. Precedence:
-    /// [`pressed`](Response::pressed) or [`focused`](Response::focused), then
-    /// [`hovered`](Response::hovered), then [`dim`](Self::dim).
+    /// The foreground for an interactive widget in `response`'s current state. Delegates to
+    /// [`WidgetState::of`] for the precedence order.
     ///
     /// Idle interactive text reads as [`dim`](Self::dim) rather than [`fg`](Self::fg): an
     /// interactive widget that looks identical to static text at rest gives no visual hint
@@ -152,25 +149,21 @@ impl Theme {
     /// ```
     #[must_use]
     pub const fn fg_for<Id>(&self, response: &Response<Id>) -> Color {
-        if response.pressed() || response.focused() {
-            self.accent
-        } else if response.hovered() {
-            self.fg
-        } else {
-            self.dim
+        match WidgetState::of(response) {
+            WidgetState::Disabled => self.disabled,
+            WidgetState::Pressed | WidgetState::Focused => self.accent,
+            WidgetState::Hovered => self.fg,
+            WidgetState::Idle => self.dim,
         }
     }
 
     /// The resolved [`Style`] for an interactive widget in `response`'s current state, over
-    /// `base` when idle. Precedence: [`disabled`](Response::disabled), then
-    /// [`pressed`](Response::pressed), then [`focused`](Response::focused), then
-    /// [`hovered`](Response::hovered), then idle.
+    /// `base` when idle. Delegates to [`WidgetState::of`] for the precedence order.
     ///
-    /// Unlike [`bg_for`](Self::bg_for)/[`fg_for`](Self::fg_for), which resolve each channel
-    /// independently, `style_for` resolves both at once against a single, shared precedence
-    /// order: that's the only place `disabled` can cleanly take priority over everything else,
-    /// and the only place a press (`accent` on `press_bg`) and a focus ring (`accent` on `base`,
-    /// no background change) can be told apart instead of both collapsing into the same `accent`
+    /// Resolves both channels at once against a single, shared precedence order, rather than
+    /// composing [`bg_for`](Self::bg_for) and [`fg_for`](Self::fg_for) independently: that's the
+    /// only place a press (`accent` on `press_bg`) and a focus ring (`accent` on `base`, no
+    /// background change) can be told apart instead of both collapsing into the same `accent`
     /// foreground.
     ///
     /// `base` is caller-supplied for the same reason as [`bg_for`](Self::bg_for): so this
@@ -195,19 +188,70 @@ impl Theme {
     /// ```
     #[must_use]
     pub fn style_for<Id>(&self, response: &Response<Id>, base: Color) -> Style {
+        match WidgetState::of(response) {
+            WidgetState::Disabled => Style::new().fg(self.disabled).bg(base),
+            WidgetState::Pressed => Style::new().fg(self.accent).bg(self.press_bg),
+            WidgetState::Focused => Style::new().fg(self.accent).bg(base),
+            WidgetState::Hovered => Style::new().fg(self.fg).bg(self.hover_bg),
+            WidgetState::Idle => Style::new().fg(self.dim).bg(base),
+        }
+    }
+}
+
+/// The single resolved state of an interactive widget, derived from a [`Response`]'s
+/// independent flags into one precedence order.
+///
+/// Precedence: [`Disabled`](Self::Disabled), then [`Pressed`](Self::Pressed), then
+/// [`Focused`](Self::Focused), then [`Hovered`](Self::Hovered), then [`Idle`](Self::Idle).
+///
+/// [`Theme`]'s `*_for` methods all derive this once via [`of`](Self::of) rather than each
+/// re-deriving their own precedence chain from [`Response`]'s flags, which is how `bg_for`/
+/// `fg_for` and `style_for` used to disagree on whether `disabled` mattered at all.
+///
+/// `#[non_exhaustive]`: widget state may grow further variants (e.g. a `Selected` state) without
+/// that being a breaking change for callers who already match with a wildcard arm.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WidgetState {
+    /// [`Response::disabled`] is `true`, regardless of any other flag.
+    Disabled,
+    /// [`Response::pressed`] is `true` and the widget isn't disabled.
+    Pressed,
+    /// [`Response::focused`] is `true` and the widget is neither disabled nor pressed.
+    Focused,
+    /// [`Response::hovered`] is `true` and the widget is neither disabled, pressed, nor focused.
+    Hovered,
+    /// None of the above: the widget's resting state.
+    Idle,
+}
+
+impl WidgetState {
+    /// Derives the single resolved state from `response`'s independent flags.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use retroglyph_ui::theme::WidgetState;
+    /// use retroglyph_ui::interact::Interaction;
+    /// use retroglyph_core::grid::Rect;
+    ///
+    /// let mut interaction = Interaction::<u32>::default();
+    /// let response = interaction.interact(Rect::new(0, 0, 1, 1), 1, Default::default());
+    /// assert_eq!(WidgetState::of(&response), WidgetState::Idle);
+    /// ```
+    #[must_use]
+    pub const fn of<Id>(response: &Response<Id>) -> Self {
         if response.disabled() {
-            return Style::new().fg(self.disabled).bg(base);
+            Self::Disabled
+        } else if response.pressed() {
+            Self::Pressed
+        } else if response.focused() {
+            Self::Focused
+        } else if response.hovered() {
+            Self::Hovered
+        } else {
+            Self::Idle
         }
-        if response.pressed() {
-            return Style::new().fg(self.accent).bg(self.press_bg);
-        }
-        if response.focused() {
-            return Style::new().fg(self.accent).bg(base);
-        }
-        if response.hovered() {
-            return Style::new().fg(self.fg).bg(self.hover_bg);
-        }
-        Style::new().fg(self.dim).bg(base)
     }
 }
 
@@ -257,6 +301,17 @@ mod tests {
     }
 
     #[test]
+    fn bg_for_is_base_when_disabled_even_if_pressed() {
+        let theme = Theme::DARK;
+        let response: Response<()> = Response {
+            disabled: true,
+            pressed: true,
+            ..Response::default()
+        };
+        assert_eq!(theme.bg_for(&response, theme.panel_bg), theme.panel_bg);
+    }
+
+    #[test]
     fn fg_for_is_dim_when_idle() {
         let theme = Theme::DARK;
         let response: Response<()> = Response::default();
@@ -293,6 +348,35 @@ mod tests {
             ..Response::default()
         };
         assert_eq!(theme.fg_for(&response), theme.accent);
+    }
+
+    #[test]
+    fn fg_for_is_disabled_even_if_pressed() {
+        let theme = Theme::DARK;
+        let response: Response<()> = Response {
+            disabled: true,
+            pressed: true,
+            ..Response::default()
+        };
+        assert_eq!(theme.fg_for(&response), theme.disabled);
+    }
+
+    #[test]
+    fn widget_state_of_precedence_disabled_over_everything() {
+        let response: Response<()> = Response {
+            disabled: true,
+            pressed: true,
+            focused: true,
+            hovered: true,
+            ..Response::default()
+        };
+        assert_eq!(WidgetState::of(&response), WidgetState::Disabled);
+    }
+
+    #[test]
+    fn widget_state_of_is_idle_by_default() {
+        let response: Response<()> = Response::default();
+        assert_eq!(WidgetState::of(&response), WidgetState::Idle);
     }
 
     #[test]
