@@ -1,6 +1,7 @@
 use retroglyph_core::event::{Event, KeyCode};
 
-/// Open flag, selection index, and scroll offset for an anchored popup menu.
+/// Selection index and scroll offset for an anchored popup menu. The menu is open iff a
+/// selection exists: there is no independent open flag to fall out of sync with it.
 ///
 /// [`ListState`](crate::state::ListState)'s sibling for content where some rows (separators,
 /// headings) can never be selected: a dropdown, a combobox's list, a command palette.
@@ -40,7 +41,6 @@ use retroglyph_core::event::{Event, KeyCode};
 /// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct MenuState {
-    open: bool,
     selected: Option<usize>,
     offset: usize,
 }
@@ -50,7 +50,6 @@ impl MenuState {
     #[must_use]
     pub const fn new() -> Self {
         Self {
-            open: false,
             selected: None,
             offset: 0,
         }
@@ -59,7 +58,7 @@ impl MenuState {
     /// Whether the menu is currently open.
     #[must_use]
     pub const fn is_open(&self) -> bool {
-        self.open
+        self.selected.is_some()
     }
 
     /// The currently selected row index, if any. Always `None` while [`is_open`](Self::is_open)
@@ -81,17 +80,20 @@ impl MenuState {
         self.offset = offset;
     }
 
-    /// Select an explicit row index directly, e.g. after resolving a click to a row.
-    /// Stored verbatim, with no `selectable` check of its own: callers that need "never select a
-    /// disabled row" should check that themselves first, the same responsibility
+    /// Select an explicit row index directly, e.g. after resolving a click to a row, or close
+    /// the menu by passing `None` (equivalent to [`close`](Self::close)). Stored verbatim, with
+    /// no `selectable` check of its own: callers that need "never select a disabled row" should
+    /// check that themselves first, the same responsibility
     /// [`ListState::select`](crate::state::ListState::select) leaves to its own callers.
     pub const fn select(&mut self, index: Option<usize>) {
-        self.selected = index;
+        match index {
+            Some(_) => self.selected = index,
+            None => self.close(),
+        }
     }
 
     /// Close the menu, clearing the selection and scroll offset.
     pub const fn close(&mut self) {
-        self.open = false;
         self.selected = None;
         self.offset = 0;
     }
@@ -101,7 +103,6 @@ impl MenuState {
     /// menu never opens.
     pub fn open(&mut self, len: usize, selectable: impl Fn(usize) -> bool) {
         if let Some(first) = first_selectable(len, &selectable) {
-            self.open = true;
             self.selected = Some(first);
             self.offset = 0;
         }
@@ -109,7 +110,7 @@ impl MenuState {
 
     /// [`close`](Self::close) if open, otherwise [`open`](Self::open).
     pub fn toggle(&mut self, len: usize, selectable: impl Fn(usize) -> bool) {
-        if self.open {
+        if self.is_open() {
             self.close();
         } else {
             self.open(len, selectable);
@@ -117,16 +118,22 @@ impl MenuState {
     }
 
     /// Move the selection to the next selectable row among `0..len`, skipping separators/labels.
-    /// Clamps at the last selectable row rather than wrapping. Selects the first selectable row
-    /// if nothing was selected yet.
+    /// Clamps at the last selectable row rather than wrapping. A no-op while the menu is closed:
+    /// navigation never opens it.
     pub fn select_next(&mut self, len: usize, selectable: impl Fn(usize) -> bool) {
+        if self.selected.is_none() {
+            return;
+        }
         self.selected = step(self.selected, 1, len, &selectable);
     }
 
     /// Move the selection to the previous selectable row among `0..len`, skipping
-    /// separators/labels. Clamps at the first selectable row rather than wrapping. Selects the
-    /// last selectable row if nothing was selected yet.
+    /// separators/labels. Clamps at the first selectable row rather than wrapping. A no-op while
+    /// the menu is closed: navigation never opens it.
     pub fn select_previous(&mut self, len: usize, selectable: impl Fn(usize) -> bool) {
+        if self.selected.is_none() {
+            return;
+        }
         self.selected = step(self.selected, -1, len, &selectable);
     }
 
@@ -178,7 +185,7 @@ impl MenuState {
         len: usize,
         selectable: impl Fn(usize) -> bool,
     ) -> Option<usize> {
-        if !self.open {
+        if !self.is_open() {
             return None;
         }
         let Event::Key(key) = event else {
@@ -404,5 +411,44 @@ mod tests {
         let down = Event::Key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
         assert_eq!(s.handle_event(&down, 3, selectable_at(&[0, 1, 2])), None);
         assert_eq!(s.selected(), None);
+    }
+
+    #[test]
+    fn select_next_on_a_closed_menu_is_a_no_op() {
+        let mut s = MenuState::new();
+        s.select_next(3, selectable_at(&[0, 1, 2]));
+        assert!(!s.is_open());
+        assert_eq!(s.selected(), None);
+    }
+
+    #[test]
+    fn select_previous_on_a_closed_menu_is_a_no_op() {
+        let mut s = MenuState::new();
+        s.select_previous(3, selectable_at(&[0, 1, 2]));
+        assert!(!s.is_open());
+        assert_eq!(s.selected(), None);
+    }
+
+    #[test]
+    fn select_while_closed_does_not_report_a_selection() {
+        // A selection can no longer exist independently of openness: `select(Some(_))` on a
+        // closed menu opens it, rather than leaving behind the old invalid "selected but
+        // closed" state.
+        let mut s = MenuState::new();
+        assert!(!s.is_open());
+        s.select(Some(2));
+        assert!(s.is_open());
+        assert_eq!(s.selected(), Some(2));
+    }
+
+    #[test]
+    fn select_none_closes() {
+        let mut s = MenuState::new();
+        s.open(2, selectable_at(&[0, 1]));
+        s.set_offset(5);
+        s.select(None);
+        assert!(!s.is_open());
+        assert_eq!(s.selected(), None);
+        assert_eq!(s.offset(), 0);
     }
 }
