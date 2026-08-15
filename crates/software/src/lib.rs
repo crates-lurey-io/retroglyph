@@ -131,7 +131,7 @@ use grixy::buf::GridBuf;
 use grixy::ops::GridWrite;
 use grixy::ops::layout::{LinearLayout, RowMajor};
 use retroglyph_core::color::Tint;
-use retroglyph_core::event::{Event, coalesces_with};
+use retroglyph_core::event::{Event, push_coalesced};
 use retroglyph_core::grid::HasSize;
 use retroglyph_core::grid::{Pos, Size};
 use retroglyph_core::tile::Tile;
@@ -298,17 +298,10 @@ impl SoftwareRenderer {
     /// deliver `CursorMoved`/drag motion at device polling rate (hundreds/sec) though only the
     /// latest position matters once the next frame polls the queue, so this replaces the queue's
     /// tail in place instead of growing it unbounded (retroglyph#294, retroglyph#768), matching
-    /// `retroglyph-window`'s `WindowBackend::push_event`. Every other event kind (clicks,
-    /// scrolls, keys, resize, ...) still pushes in O(1) as before; only a back-to-back `Moved` or
-    /// same-button `Drag` run collapses. See [`coalesces_with`] for the shared rule.
+    /// `retroglyph-window`'s `WindowBackend::push_event`. See [`push_coalesced`] for the shared
+    /// rule.
     pub fn push_event(&mut self, event: Event) {
-        if let Some(back) = self.ctx.event_buffer.back_mut()
-            && coalesces_with(&event, back)
-        {
-            *back = event;
-            return;
-        }
-        self.ctx.event_buffer.push_back(event);
+        push_coalesced(&mut self.ctx.event_buffer, event);
     }
 
     /// Initializes the window surface from a raw window/display handle.

@@ -13,6 +13,7 @@ mod mouse;
 pub use key::{KeyCode, KeyEvent, KeyEventKind, KeyLocation, KeyModifiers, KeyState, ModifierKey};
 pub use mouse::{MouseButton, MouseEvent, MouseEventKind, PhysicalPos};
 
+use alloc::collections::VecDeque;
 use alloc::string::String;
 
 /// The system's light/dark color-scheme preference, as reported by the
@@ -146,6 +147,28 @@ pub const fn coalesces_with(new: &Event, existing: &Event) -> bool {
             }),
         ) if *new_button as u8 == *existing_button as u8
     )
+}
+
+/// Appends `event` to `queue`, replacing the tail in place instead of growing the queue when
+/// [`coalesces_with`] says the two coalesce.
+///
+/// The sole enforcement point for the coalescing rule: every backend-owned event queue (`Headless`,
+/// `retroglyph-window`'s `WindowBackend`, `retroglyph-software`'s `SoftwareRenderer`,
+/// `retroglyph-terminal-wasm`'s `TerminalWasm`) should push through this rather than re-checking
+/// `coalesces_with` against its own tail. [`Terminal::requeue_events`](crate::terminal::Terminal::requeue_events)
+/// deliberately does not use this: it replays already-drained events back onto the queue in
+/// order, where coalescing them again would silently drop events a caller already observed.
+///
+/// Returns `true` if `event` replaced the tail, `false` if it was pushed onto the queue.
+pub fn push_coalesced(queue: &mut VecDeque<Event>, event: Event) -> bool {
+    if let Some(tail) = queue.back_mut()
+        && coalesces_with(&event, tail)
+    {
+        *tail = event;
+        return true;
+    }
+    queue.push_back(event);
+    false
 }
 
 #[cfg(test)]
