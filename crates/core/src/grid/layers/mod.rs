@@ -282,17 +282,7 @@ impl Grid {
             layer, 0,
             "layer 0 is always allocated and cannot be deallocated"
         );
-        let idx = usize::from(layer);
-        if idx >= self.layers.len() {
-            return;
-        }
-        self.layers[idx] = None;
-        if layer == self.max_layer {
-            self.max_layer = (0..layer)
-                .rev()
-                .find(|&id| self.layers[usize::from(id)].is_some())
-                .unwrap_or(0);
-        }
+        self.set_layer(layer, None);
     }
 
     /// Whether `layer` is unallocated, or allocated but every tile on it is untouched (see
