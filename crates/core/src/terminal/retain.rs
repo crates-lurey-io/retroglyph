@@ -6,7 +6,7 @@
 //! `drop_layer` defers deallocating a layer until its erase has actually reached the backend.
 //! See each method's own doc for the full contract.
 
-use super::Terminal;
+use super::{LayerOp, Terminal};
 use crate::backend::Backend;
 
 impl<B: Backend> Terminal<B> {
@@ -49,11 +49,7 @@ impl<B: Backend> Terminal<B> {
     /// }
     /// ```
     pub fn retain_layer(&mut self, layer: impl Into<u8>) {
-        let idx = usize::from(layer.into());
-        if self.retained_layers.len() <= idx {
-            self.retained_layers.resize(idx + 1, false);
-        }
-        self.retained_layers[idx] = true;
+        self.set_pending_layer_op(layer.into(), LayerOp::Retain);
     }
 
     /// Marks `layer` to be deallocated, forgetting it was ever drawn to.
@@ -76,10 +72,11 @@ impl<B: Backend> Terminal<B> {
     /// This is a one-shot request, not a sticky mode: unlike [`retain_layer`](Self::retain_layer),
     /// which defers one frame's redraw, this defers the actual deallocation, so drawing to `layer`
     /// again before the next `present` (undoing the drop) cancels it instead of losing that draw:
-    /// the layer stays allocated and behaves like any other write. Any pending
-    /// [`retain_layer`](Self::retain_layer) call for `layer` is cleared immediately, though:
-    /// retaining content that no longer exists would resurrect it on the next present regardless
-    /// of whether the drop itself goes through.
+    /// the layer stays allocated and behaves like any other write. `retain_layer` and `drop_layer`
+    /// share one pending op per layer, last call wins, so a call here also overwrites any pending
+    /// [`retain_layer`](Self::retain_layer) call for the same `layer`: retaining content that no
+    /// longer exists would resurrect it on the next present regardless of whether the drop itself
+    /// goes through.
     ///
     /// # Panics
     ///
@@ -104,14 +101,20 @@ impl<B: Backend> Terminal<B> {
         let id = layer.into();
         assert_ne!(id, 0, "layer 0 is always allocated and cannot be dropped");
         self.current.clear(id);
-        let idx = usize::from(id);
-        if idx < self.retained_layers.len() {
-            self.retained_layers[idx] = false;
+        self.set_pending_layer_op(id, LayerOp::Drop);
+    }
+
+    /// Queues `op` as the one-shot [`LayerOp`] pending on `layer`, overwriting whatever op (if
+    /// any) was already pending on it: the two writers of `pending_layer_ops`,
+    /// [`retain_layer`](Self::retain_layer) and [`drop_layer`](Self::drop_layer), share this so
+    /// the last call for a given layer within a frame always wins, and `Retain`/`Drop` can never
+    /// both end up pending on the same layer at once.
+    fn set_pending_layer_op(&mut self, layer: u8, op: LayerOp) {
+        let idx = usize::from(layer);
+        if self.pending_layer_ops.len() <= idx {
+            self.pending_layer_ops.resize(idx + 1, LayerOp::None);
         }
-        if self.dropped_layers.len() <= idx {
-            self.dropped_layers.resize(idx + 1, false);
-        }
-        self.dropped_layers[idx] = true;
+        self.pending_layer_ops[idx] = op;
     }
 }
 
@@ -478,6 +481,29 @@ mod tests {
         term.draw(|_| {}).expect("draw failed");
 
         assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), ' ');
+    }
+
+    #[test]
+    fn test_drop_then_retain_is_last_call_wins() {
+        use crate::surface::Layer;
+
+        // Reverse call order from `test_drop_layer_clears_pending_retention_for_that_layer`:
+        // `retain_layer` has no cross-clear of its own, so a pending drop is only ever
+        // overwritten by whichever call for the same layer comes last within the frame. Pins the
+        // resulting "retain wins, drop cancelled" behavior (retroglyph#1370) so a later change to
+        // the one-shot-op representation can't silently flip it.
+        let mut term = Terminal::new(Headless::new(3, 1));
+        term.draw(|s| s.on_tier(Layer::Hud).put((0, 0), 'H', Style::default()))
+            .expect("draw failed");
+
+        term.drop_layer(Layer::Hud);
+        term.retain_layer(Layer::Hud);
+        term.draw(|_| {}).expect("draw failed");
+
+        // The drop was cancelled: `Hud`'s last-presented content is still shown, and the layer
+        // is still allocated rather than deallocated.
+        assert_eq!(term.backend().grid()[Pos::new(0, 0)].glyph(), 'H');
+        assert_ne!(term.current.max_layer(), 0);
     }
 
     #[test]
