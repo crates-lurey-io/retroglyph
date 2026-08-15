@@ -255,14 +255,17 @@ fn cube_map_to_indexed(r: u8, g: u8, b: u8) -> u8 {
             .iter()
             .zip(0u8..)
             .map(|(ansi, i)| (i, gem::rgb::distance_sq((r, g, b), ansi.to_rgb())))
-            .chain(std::iter::once((
+            .chain(core::iter::once((
                 cube_index,
                 gem::rgb::distance_sq((r, g, b), cube_rgb),
             )))
             // Candidate group 3: nearest grayscale ramp entry (indices 232-255).
-            .chain(GRAYSCALE_RAMP.iter().zip(232u8..=u8::MAX).map(|(&gray, i)| {
-                (i, gem::rgb::distance_sq((r, g, b), (gray, gray, gray)))
-            })),
+            .chain(
+                GRAYSCALE_RAMP
+                    .iter()
+                    .zip(232u8..=u8::MAX)
+                    .map(|(&gray, i)| (i, gem::rgb::distance_sq((r, g, b), (gray, gray, gray)))),
+            ),
     )
 }
 
