@@ -515,18 +515,36 @@ impl Grid {
     /// not allocation: see [`max_layer`](Self::max_layer).
     fn layer_or_alloc(&mut self, id: u8) -> &mut LayerBuf {
         let idx = usize::from(id);
-        if idx >= self.layers.len() {
-            self.layers.resize_with(idx + 1, || None);
-        }
-        if self.layers[idx].is_none() {
-            self.layers[idx] = Some(LayerBuf::new(self.width, self.height));
-        }
-        if id > self.max_layer {
-            self.max_layer = id;
+        if self.layer(id).is_none() {
+            self.set_layer(id, Some(LayerBuf::new(self.width, self.height)));
         }
         self.layers[idx]
             .as_mut()
             .expect("idx was just allocated above if it wasn't already Some")
+    }
+
+    /// The single mutator for `layers`/`max_layer`: every allocation, deallocation, and
+    /// replacement of a layer goes through here so the two fields can never drift apart (see
+    /// retroglyph#1378). `Some` grows the table as needed and raises `max_layer` to at least
+    /// `id`; `None` clears the slot and, if `id` was `max_layer`, rescans downward for the next
+    /// still-allocated layer (or falls back to 0).
+    fn set_layer(&mut self, id: u8, buf: Option<LayerBuf>) {
+        let idx = usize::from(id);
+        if let Some(lb) = buf {
+            if idx >= self.layers.len() {
+                self.layers.resize_with(idx + 1, || None);
+            }
+            self.layers[idx] = Some(lb);
+            self.max_layer = self.max_layer.max(id);
+        } else if idx < self.layers.len() {
+            self.layers[idx] = None;
+            if id == self.max_layer {
+                self.max_layer = (0..id)
+                    .rev()
+                    .find(|&i| self.layers[usize::from(i)].is_some())
+                    .unwrap_or(0);
+            }
+        }
     }
 
     /// Borrows layer 0 (always allocated).
@@ -574,20 +592,8 @@ impl Grid {
         );
         let idx = usize::from(layer);
         match src.layers.get(idx).and_then(Option::as_ref) {
-            Some(src_lb) => {
-                if idx >= self.layers.len() {
-                    self.layers.resize_with(idx + 1, || None);
-                }
-                self.layers[idx] = Some(src_lb.clone());
-                if layer > self.max_layer {
-                    self.max_layer = layer;
-                }
-            }
-            None => {
-                if idx < self.layers.len() {
-                    self.layers[idx] = None;
-                }
-            }
+            Some(src_lb) => self.set_layer(layer, Some(src_lb.clone())),
+            None => self.set_layer(layer, None),
         }
         self.has_spans |= src.has_spans;
     }

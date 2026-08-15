@@ -309,4 +309,21 @@ mod tests {
 
         assert_eq!(dst.tile(1, (0, 0)), None);
     }
+
+    #[test]
+    fn copy_layer_from_lowers_max_layer_when_the_source_layer_is_unallocated() {
+        // retroglyph#1378: deallocating `dst`'s top layer through `copy_layer_from` must lower
+        // `max_layer` exactly like `deallocate_layer` does, or the single-layer `present` fast
+        // path stays stuck off for the buffer's life.
+        let src = Grid::new(4, 1);
+
+        let mut dst = Grid::new(4, 1);
+        dst.put_tile(5, (0, 0), Tile::new('X', Style::default()));
+        assert_eq!(dst.max_layer(), 5);
+
+        dst.copy_layer_from(5, &src);
+
+        assert_eq!(dst.max_layer(), 0);
+        assert_eq!(dst.tile(5, (0, 0)), None);
+    }
 }
