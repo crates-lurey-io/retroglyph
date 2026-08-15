@@ -67,11 +67,12 @@ pub struct ScrollState {
     dragging: bool,
     time_accumulator: f32,
     last_pointer_y: f32,
-    /// Recent (time, pointer-y) samples for estimating fling velocity at drag end. Four is enough
-    /// to average out one jittery pointer report while staying inside the ~150ms look-back window
-    /// `calculate_fling_velocity` uses; more just holds staler samples the window discards anyway.
-    samples: [Option<(f32, f32)>; 4],
-    samples_idx: usize,
+    /// Recent (time, pointer-y) samples for estimating fling velocity at drag end, oldest first.
+    /// Four is enough to average out one jittery pointer report while staying inside the ~150ms
+    /// look-back window `calculate_fling_velocity` uses; more just holds staler samples the
+    /// window discards anyway. Only `samples[..sample_len]` is meaningful.
+    samples: [(f32, f32); 4],
+    sample_len: usize,
     physics: ScrollPhysics,
 }
 
@@ -92,8 +93,8 @@ impl ScrollState {
             dragging: false,
             time_accumulator: 0.0,
             last_pointer_y: 0.0,
-            samples: [None; 4],
-            samples_idx: 0,
+            samples: [(0.0, 0.0); 4],
+            sample_len: 0,
             physics: ScrollPhysics::DEFAULT,
         }
     }
@@ -107,8 +108,8 @@ impl ScrollState {
             dragging: false,
             time_accumulator: 0.0,
             last_pointer_y: 0.0,
-            samples: [None; 4],
-            samples_idx: 0,
+            samples: [(0.0, 0.0); 4],
+            sample_len: 0,
             physics,
         }
     }
@@ -247,8 +248,8 @@ impl ScrollState {
         self.dragging = true;
         self.velocity = 0.0;
         self.last_pointer_y = y;
-        self.samples = [None; 4];
-        self.samples_idx = 0;
+        self.samples = [(0.0, 0.0); 4];
+        self.sample_len = 0;
         self.record_sample(self.time_accumulator, y);
     }
 
@@ -350,28 +351,30 @@ impl ScrollState {
     }
 
     const fn record_sample(&mut self, time: f32, y: f32) {
-        self.samples[self.samples_idx] = Some((time, y));
-        self.samples_idx = (self.samples_idx + 1) % self.samples.len();
+        if self.sample_len < self.samples.len() {
+            self.samples[self.sample_len] = (time, y);
+            self.sample_len += 1;
+        } else {
+            // Full: evict the oldest by shifting everything left one slot, then append. Hand-
+            // written instead of `copy_within` because this runs in a `const fn` (`copy_within`
+            // isn't const-stable) and the array is fixed at 4 elements.
+            let mut i = 0;
+            while i + 1 < self.samples.len() {
+                self.samples[i] = self.samples[i + 1];
+                i += 1;
+            }
+            self.samples[self.samples.len() - 1] = (time, y);
+        }
     }
 
     fn calculate_fling_velocity(&self) -> f32 {
-        let mut valid = [None; 4];
-        let mut count = 0;
-        for i in 0..self.samples.len() {
-            let idx = (self.samples_idx + i) % self.samples.len();
-            if let Some(sample) = self.samples[idx] {
-                valid[count] = Some(sample);
-                count += 1;
-            }
-        }
+        let samples = &self.samples[..self.sample_len];
 
-        if count < 2 {
+        if samples.len() < 2 {
             return 0.0;
         }
 
-        // `count >= 2` was just checked above, so `valid[count - 1]` was written by the loop
-        // above (which fills `valid[0..count]` in order) and is always `Some`.
-        let newest = valid[count - 1].expect("valid[count - 1] is populated for count >= 2");
+        let newest = samples[samples.len() - 1];
 
         // If the latest sample is older than 100ms, the pointer stopped moving before the drag
         // ended (drag paused, not a fling): 100ms is long enough that a genuinely flinging finger
@@ -382,9 +385,7 @@ impl ScrollState {
 
         // Look back for oldest sample within 150ms of newest
         let mut oldest = newest;
-        for i in (0..count - 1).rev() {
-            // `i` ranges over `0..count - 1`, all populated by the loop above.
-            let sample = valid[i].expect("valid[i] is populated for i < count");
+        for &sample in samples[..samples.len() - 1].iter().rev() {
             // 150ms look-back: recent enough to reflect the finger's final motion, long enough
             // to smooth over one or two skipped/jittery pointer reports. Widening it would average
             // in motion from earlier in the drag that no longer reflects the release speed.
@@ -473,6 +474,26 @@ mod tests {
         s.tick(core::time::Duration::from_millis(100), 10.0);
         assert!(s.velocity() < init_vel);
         assert!(s.offset() > 10.0);
+    }
+
+    #[test]
+    fn scroll_state_fling_velocity_wraps_past_four_samples() {
+        // Drives 6 update_drag calls (7 samples total including begin_drag's), forcing the
+        // 4-slot sample buffer to evict twice. This exercises the eviction path (`sample_len ==
+        // samples.len()` in `record_sample`), which no other test reaches.
+        let mut s = ScrollState::new();
+        s.begin_drag(0.0);
+        for step in 1_u32..=6 {
+            s.tick(core::time::Duration::from_millis(10), 10.0);
+            #[allow(clippy::cast_precision_loss)] // step stays well under f32's exact range
+            s.update_drag(step as f32, 10.0);
+        }
+        s.end_drag();
+
+        // Pointer moved consistently in the positive-y direction, i.e. offset decreasing, so the
+        // fling velocity should be negative (matches update_drag's `delta_y = last - y` sign
+        // convention for downward drag).
+        assert!(s.velocity() < 0.0);
     }
 
     #[test]
