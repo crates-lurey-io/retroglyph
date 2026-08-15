@@ -36,6 +36,66 @@ pub struct PanelTitle<'a> {
     align: Align,
 }
 
+/// The style/layout fields [`Panel`] and [`Modal`](super::Modal) both carry: title text and
+/// alignment, border/fill style, border glyph set, and padding. Split out so the two widgets'
+/// builder methods, theming, and defaults live once instead of twice; `Panel` additionally holds
+/// a `titles: Vec<PanelTitle>` that has no `Modal` equivalent, which is why this doesn't just
+/// become `Panel` itself (that, plus keeping `Modal` [`Copy`] -- see its own doc comment).
+#[derive(Clone, Copy, Debug, Default)]
+pub(super) struct PanelChrome<'a> {
+    title: Option<&'a str>,
+    title_align: Align,
+    border_style: Style,
+    fill_style: Style,
+    border_type: BorderType,
+    padding: Sides,
+}
+
+impl<'a> PanelChrome<'a> {
+    pub(super) const fn title(mut self, title: &'a str) -> Self {
+        self.title = Some(title);
+        self
+    }
+
+    pub(super) const fn title_align(mut self, align: Align) -> Self {
+        self.title_align = align;
+        self
+    }
+
+    pub(super) const fn border_style(mut self, style: Style) -> Self {
+        self.border_style = style;
+        self
+    }
+
+    pub(super) const fn fill_style(mut self, style: Style) -> Self {
+        self.fill_style = style;
+        self
+    }
+
+    pub(super) const fn border_type(mut self, border_type: BorderType) -> Self {
+        self.border_type = border_type;
+        self
+    }
+
+    pub(super) const fn padding(mut self, padding: Sides) -> Self {
+        self.padding = padding;
+        self
+    }
+
+    /// See [`Panel::theme`]/[`Modal::theme`](super::Modal::theme): both are exactly this call.
+    pub(super) fn theme(self, theme: Theme) -> Self {
+        self.theme_on(theme, theme.panel_bg)
+    }
+
+    /// See [`Panel::theme_on`]/[`Modal::theme_on`](super::Modal::theme_on): both are exactly this
+    /// call.
+    pub(super) fn theme_on(mut self, theme: Theme, bg: Color) -> Self {
+        self.border_style = Style::new().fg(theme.border).bg(theme.title_bg);
+        self.fill_style = Style::new().bg(bg);
+        self
+    }
+}
+
 /// A bordered panel: a filled background with a box border and, optionally, one or more titles
 /// along the top and/or bottom edge.
 ///
@@ -76,13 +136,8 @@ pub struct PanelTitle<'a> {
 /// (only an allocation failure, never a silently dropped title), as pushing onto any other `Vec`.
 #[derive(Clone, Debug, Default)]
 pub struct Panel<'a> {
-    title: Option<&'a str>,
-    title_align: Align,
+    chrome: PanelChrome<'a>,
     titles: Vec<PanelTitle<'a>>,
-    border_style: Style,
-    fill_style: Style,
-    border_type: BorderType,
-    padding: Sides,
 }
 
 impl<'a> Panel<'a> {
@@ -91,16 +146,25 @@ impl<'a> Panel<'a> {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            title_align: Align::Center,
-            ..Self::default()
+            chrome: PanelChrome::default().title_align(Align::Center),
+            titles: Vec::new(),
         }
         .theme(Theme::DARK)
+    }
+
+    /// Builds a [`Panel`] from chrome already assembled by [`Modal`](super::Modal), with no
+    /// titles beyond whatever `chrome.title` (if any) draws through [`Panel::render`].
+    pub(super) const fn from_chrome(chrome: PanelChrome<'a>) -> Self {
+        Self {
+            chrome,
+            titles: Vec::new(),
+        }
     }
 
     /// Set the panel's title.
     #[must_use]
     pub const fn title(mut self, title: &'a str) -> Self {
-        self.title = Some(title);
+        self.chrome = self.chrome.title(title);
         self
     }
 
@@ -108,7 +172,7 @@ impl<'a> Panel<'a> {
     /// [`Align::Center`].
     #[must_use]
     pub const fn title_align(mut self, align: Align) -> Self {
-        self.title_align = align;
+        self.chrome = self.chrome.title_align(align);
         self
     }
 
@@ -143,14 +207,14 @@ impl<'a> Panel<'a> {
     /// Set the box outline and title's style.
     #[must_use]
     pub const fn border_style(mut self, style: Style) -> Self {
-        self.border_style = style;
+        self.chrome = self.chrome.border_style(style);
         self
     }
 
     /// Set the interior background's style.
     #[must_use]
     pub const fn fill_style(mut self, style: Style) -> Self {
-        self.fill_style = style;
+        self.chrome = self.chrome.fill_style(style);
         self
     }
 
@@ -158,7 +222,7 @@ impl<'a> Panel<'a> {
     /// [`BorderType::Plain`], the same as [`BoxBorder::border_type`].
     #[must_use]
     pub const fn border_type(mut self, border_type: BorderType) -> Self {
-        self.border_type = border_type;
+        self.chrome = self.chrome.border_type(border_type);
         self
     }
 
@@ -170,7 +234,7 @@ impl<'a> Panel<'a> {
     /// Defaults to [`Sides::ZERO`] (no padding beyond the 1-cell border).
     #[must_use]
     pub const fn padding(mut self, padding: Sides) -> Self {
-        self.padding = padding;
+        self.chrome = self.chrome.padding(padding);
         self
     }
 
@@ -193,10 +257,11 @@ impl<'a> Panel<'a> {
     /// ```
     #[must_use]
     pub const fn inner(&self, area: Rect) -> Rect {
-        let left = 1 + self.padding.left;
-        let top = 1 + self.padding.top;
-        let horizontal = 2 + self.padding.left + self.padding.right;
-        let vertical = 2 + self.padding.top + self.padding.bottom;
+        let padding = self.chrome.padding;
+        let left = 1 + padding.left;
+        let top = 1 + padding.top;
+        let horizontal = 2 + padding.left + padding.right;
+        let vertical = 2 + padding.top + padding.bottom;
         Rect::new(
             area.left().saturating_add(left),
             area.top().saturating_add(top),
@@ -212,8 +277,9 @@ impl<'a> Panel<'a> {
     /// Like every other builder method here, whichever call comes last wins: call `.theme(...)`
     /// before any manual [`Panel::border_style`]/[`Panel::fill_style`] override you want to keep.
     #[must_use]
-    pub fn theme(self, theme: Theme) -> Self {
-        self.theme_on(theme, theme.panel_bg)
+    pub fn theme(mut self, theme: Theme) -> Self {
+        self.chrome = self.chrome.theme(theme);
+        self
     }
 
     /// Same as [`Panel::theme`], but `fill_style` is drawn on `bg` instead of `theme.panel_bg` --
@@ -222,8 +288,7 @@ impl<'a> Panel<'a> {
     /// exactly `theme_on(theme, theme.panel_bg)`.
     #[must_use]
     pub fn theme_on(mut self, theme: Theme, bg: Color) -> Self {
-        self.border_style = Style::new().fg(theme.border).bg(theme.title_bg);
-        self.fill_style = Style::new().bg(bg);
+        self.chrome = self.chrome.theme_on(theme, bg);
         self
     }
 }
@@ -237,8 +302,8 @@ impl Measure for Panel<'_> {
     /// only whatever a caller renders into [`Panel::inner`], so it has nothing to measure against
     /// `width` yet.
     fn height_for(&self, _width: u16) -> u16 {
-        2u16.saturating_add(self.padding.top)
-            .saturating_add(self.padding.bottom)
+        2u16.saturating_add(self.chrome.padding.top)
+            .saturating_add(self.chrome.padding.bottom)
     }
 }
 
@@ -251,22 +316,34 @@ impl Widget for Panel<'_> {
 
         // Fill interior (inside the border), in this surface's own local coordinates.
         let inner = Rect::new(1, 1, width.saturating_sub(2), height.saturating_sub(2));
-        fill_rect(surface, inner, ' ', self.fill_style);
+        fill_rect(surface, inner, ' ', self.chrome.fill_style);
 
         BoxBorder::new()
-            .style(self.border_style)
-            .border_type(self.border_type)
+            .style(self.chrome.border_style)
+            .border_type(self.chrome.border_type)
             .render(surface);
 
         // Top edge: `.title(...)`'s implicit title (if any) claims space first, then any
         // `add_title(..., TitlePosition::Top, ...)` titles in declaration order.
         let mut top = TitleCursor::new(width);
-        if let Some(t) = self.title {
-            top.draw(surface, 0, t, self.title_align, self.border_style);
+        if let Some(t) = self.chrome.title {
+            top.draw(
+                surface,
+                0,
+                t,
+                self.chrome.title_align,
+                self.chrome.border_style,
+            );
         }
         for title in &self.titles {
             if title.position == TitlePosition::Top {
-                top.draw(surface, 0, title.text, title.align, self.border_style);
+                top.draw(
+                    surface,
+                    0,
+                    title.text,
+                    title.align,
+                    self.chrome.border_style,
+                );
             }
         }
 
@@ -281,7 +358,7 @@ impl Widget for Panel<'_> {
                     height - 1,
                     title.text,
                     title.align,
-                    self.border_style,
+                    self.chrome.border_style,
                 );
             }
         }
