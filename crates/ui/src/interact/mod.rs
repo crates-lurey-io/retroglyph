@@ -213,11 +213,6 @@ pub const DEFAULT_DOUBLE_CLICK_WINDOW: u16 = 30;
 /// convention [`ListState`](crate::state::ListState) uses, rather than the
 /// interior-mutability/global-context pattern egui's `Memory` relies on to
 /// keep its implicit ids from needing to be threaded everywhere.
-// Several of these are independent one-shot snapshots (primary/secondary
-// press/release, keyboard activation), not states of a single state
-// machine: see the field-level comment above `resolved_press` for why
-// they're snapshotted individually rather than read live off `pointer`.
-#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub struct Interaction<Id> {
     pointer: Pointer,
@@ -231,27 +226,19 @@ pub struct Interaction<Id> {
     prev_hits: HitTester<Id>,
     focus: FocusRing<Id>,
     resolved_hover: Option<Id>,
-    // The pointer position `resolved_hover` was computed from, kept
-    // alongside it so `interact` can independently ask "was *my* rect under
-    // the pointer" (see `scroll_delta` below) without needing `resolved_hover`
-    // to have picked this id as the single topmost winner.
-    resolved_pos: Option<Pos>,
-    // Snapshots of the pointer's one-shot flags, taken once in `begin_frame`
-    // and read by every `interact` call for the rest of this frame. Not read
-    // straight off `pointer` during `interact`: `handle_event` runs *between*
-    // `begin_frame` and `interact` calls (see the frame lifecycle docs), so a
-    // press/release arriving this frame would otherwise be visible to
-    // `interact` immediately while `resolved_hover` (computed before that
-    // event) still reflects last frame's pointer position: `active` would
-    // then latch onto whatever was hovered *last* frame, not the widget the
-    // fresh press actually landed on. Resolving everything from one
-    // consistent snapshot keeps hover/press/release/click/scroll uniformly
-    // one frame behind the input that produced them, matching the docs.
-    resolved_press: bool,
-    resolved_release: bool,
-    resolved_secondary_press: bool,
-    resolved_secondary_release: bool,
-    resolved_scroll: i32,
+    // A snapshot of the whole pointer, taken once in `begin_frame` and read by every `interact`
+    // call for the rest of this frame. Not read straight off `pointer` during `interact`:
+    // `handle_event` runs *between* `begin_frame` and `interact` calls (see the frame lifecycle
+    // docs), so a press/release arriving this frame would otherwise be visible to `interact`
+    // immediately while `resolved_hover` (computed before that event) still reflects last frame's
+    // pointer position: `active` would then latch onto whatever was hovered *last* frame, not the
+    // widget the fresh press actually landed on. Resolving everything from one consistent
+    // snapshot keeps hover/press/release/click/scroll uniformly one frame behind the input that
+    // produced them, matching the docs. Named with the same `resolved` prefix as `resolved_hover`
+    // so a slip that reads live `pointer` here instead stays visible; `held` and
+    // `past_drag_threshold` deliberately read live `pointer` (see their own comments) and must
+    // keep doing so.
+    resolved: Pointer,
     active: Option<Id>,
     // Tracked separately from `active`: a secondary press can land on one
     // widget while the primary button is mid-drag on another (or not
@@ -296,12 +283,7 @@ impl<Id> Interaction<Id> {
             prev_hits: HitTester::new(),
             focus: FocusRing::new(),
             resolved_hover: None,
-            resolved_pos: None,
-            resolved_press: false,
-            resolved_release: false,
-            resolved_secondary_press: false,
-            resolved_secondary_release: false,
-            resolved_scroll: 0,
+            resolved: Pointer::new(),
             active: None,
             secondary_active: None,
             drag_origin: None,
@@ -398,19 +380,14 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
         // Taken before `focus.begin_frame` (a no-op on `current`) and before this frame's own
         // `handle_event`/`interact` calls can move focus: see the field comment on `prev_focused`.
         self.prev_focused = self.focus.focused();
-        self.resolved_pos = self.pointer.pos();
-        self.resolved_hover = self.resolved_pos.and_then(|pos| self.hits.topmost_at(pos));
-        self.resolved_press = self.pointer.pressed(MouseButton::Left);
-        self.resolved_release = self.pointer.released(MouseButton::Left);
-        self.resolved_secondary_press = self.pointer.pressed(MouseButton::Right);
-        self.resolved_secondary_release = self.pointer.released(MouseButton::Right);
-        self.resolved_scroll = self.pointer.scroll_delta();
+        self.resolved = self.pointer;
+        self.resolved_hover = self.resolved.pos().and_then(|pos| self.hits.topmost_at(pos));
 
-        if self.resolved_press {
+        if self.resolved.pressed(MouseButton::Left) {
             self.active = self.resolved_hover;
-            self.drag_origin = self.resolved_pos;
+            self.drag_origin = self.resolved.pos();
         }
-        if self.resolved_secondary_press {
+        if self.resolved.pressed(MouseButton::Right) {
             self.secondary_active = self.resolved_hover;
         }
 
@@ -600,7 +577,7 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
         // for `CLICK`: gated on `senses_click` (which already folds in
         // `!disabled`) the same way `held`/`clicked` below are, rather than
         // relying on `is_active` alone.
-        let released_here = senses_click && is_active && self.resolved_release;
+        let released_here = senses_click && is_active && self.resolved.released(MouseButton::Left);
         // Not gated on `self.pointer.is_down()`: the release
         // frame (where `is_down` just went false) must still see `dragging
         // == true` so `clicked` below correctly stays suppressed for a
@@ -612,8 +589,8 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
         // is: those are resolved from *last* frame's hit-test snapshot (see the `Interaction`
         // frame-lifecycle docs), but a slide-off cancellation needs to see the pointer's
         // *current* position the instant it leaves this rect, not one frame later. Mirrors how
-        // `dragging` above already reads `self.pointer.pos()` live instead of `resolved_pos`, and
-        // how `scroll_delta` below bypasses the single-topmost-winner rule: same "read live
+        // `dragging` above already reads `self.pointer.pos()` live instead of `resolved.pos()`,
+        // and how `scroll_delta` below bypasses the single-topmost-winner rule: same "read live
         // state, scoped to my own rect" shape, applied a third time.
         let held = senses_click
             && is_active
@@ -638,7 +615,7 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
         let scrollable_here = !disabled
             && sense.wants_pointer()
             && sense.contains(Sense::SCROLL)
-            && self.resolved_pos.is_some_and(|pos| rect.contains_pos(pos));
+            && self.resolved.pos().is_some_and(|pos| rect.contains_pos(pos));
 
         // The secondary button gets a narrower resolution than the primary
         // one: no drag-threshold suppression (secondary-button drags aren't
@@ -649,7 +626,7 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
         let secondary_clicked = sense.contains(Sense::SECONDARY_CLICK)
             && !disabled
             && secondary_is_active
-            && self.resolved_secondary_release
+            && self.resolved.released(MouseButton::Right)
             && hovered;
 
         let clicked = (senses_click && released_here && hovered && !dragging) || key_activated;
@@ -675,7 +652,7 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
         }
 
         // `is_active.then_some(self.drag_origin).flatten()`, matching `press_origin` below: not
-        // gated on `resolved_pos`/`hovered`, live, matching `held`/`dragging` above,
+        // gated on `resolved.pos()`/`hovered`, live, matching `held`/`dragging` above,
         // so a drag that has moved outside this widget's own rect still keeps reporting. Gated on
         // `senses_click` for the same reason `released_here`/`held` are above: `is_active` alone
         // says nothing about whether this widget ever asked for `CLICK`.
@@ -697,7 +674,8 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
         Response {
             id,
             hovered,
-            pressed: (senses_click && is_active && self.resolved_press) || key_activated,
+            pressed: (senses_click && is_active && self.resolved.pressed(MouseButton::Left))
+                || key_activated,
             released: released_here || key_activated,
             clicked,
             double_clicked,
@@ -709,14 +687,14 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
             secondary_clicked,
             disabled,
             scroll_delta: if scrollable_here {
-                self.resolved_scroll
+                self.resolved.scroll_delta()
             } else {
                 0
             },
-            // Resolved from the same `resolved_pos`/`resolved_hover` snapshot `hovered` comes
+            // Resolved from the same `resolved`/`resolved_hover` snapshot `hovered` comes
             // from above, so the two stay consistent (one frame stale together) rather than
             // mixing a stale hover flag with a live position.
-            pointer_pos: hovered.then_some(self.resolved_pos).flatten(),
+            pointer_pos: hovered.then_some(self.resolved.pos()).flatten(),
             // `drag_origin` is set once, in `begin_frame`, when a press lands on `active`, and
             // cleared in `end_frame` on release: live state, not part of the per-`interact`
             // resolved-snapshot fields above, matching how `held` reads `active` directly rather
@@ -731,11 +709,11 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
     /// later [`focus_mut`](Self::focus_mut)-driven Tab handling starts
     /// clean. Call once per frame, after drawing.
     pub const fn end_frame(&mut self) {
-        if self.resolved_release {
+        if self.resolved.released(MouseButton::Left) {
             self.active = None;
             self.drag_origin = None;
         }
-        if self.resolved_secondary_release {
+        if self.resolved.released(MouseButton::Right) {
             self.secondary_active = None;
         }
         self.activate_focused = false;
