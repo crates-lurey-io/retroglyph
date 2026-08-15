@@ -804,54 +804,18 @@ pub fn anchored_rect(anchor: Rect, size: Size, preferred: Side, bounds: Rect) ->
         preferred.opposite()
     };
 
-    let (x, y) = match resolved {
-        Side::Above => {
-            let x = anchor
-                .left()
-                .min(bounds.right().saturating_sub(width))
-                .max(bounds.left());
-            let y = anchor
-                .top()
-                .saturating_sub(height)
-                .min(bounds.bottom().saturating_sub(height))
-                .max(bounds.top());
-            (x, y)
-        }
-        Side::Below => {
-            let x = anchor
-                .left()
-                .min(bounds.right().saturating_sub(width))
-                .max(bounds.left());
-            let y = anchor
-                .bottom()
-                .min(bounds.bottom().saturating_sub(height))
-                .max(bounds.top());
-            (x, y)
-        }
-        Side::Left => {
-            let x = anchor
-                .left()
-                .saturating_sub(width)
-                .min(bounds.right().saturating_sub(width))
-                .max(bounds.left());
-            let y = anchor
-                .top()
-                .min(bounds.bottom().saturating_sub(height))
-                .max(bounds.top());
-            (x, y)
-        }
-        Side::Right => {
-            let x = anchor
-                .right()
-                .min(bounds.right().saturating_sub(width))
-                .max(bounds.left());
-            let y = anchor
-                .top()
-                .min(bounds.bottom().saturating_sub(height))
-                .max(bounds.top());
-            (x, y)
-        }
+    let (ax, ay) = match resolved {
+        Side::Above => (anchor.left(), anchor.top().saturating_sub(height)),
+        Side::Below => (anchor.left(), anchor.bottom()),
+        Side::Left => (anchor.left().saturating_sub(width), anchor.top()),
+        Side::Right => (anchor.right(), anchor.top()),
     };
+    let x = ax
+        .min(bounds.right().saturating_sub(width))
+        .max(bounds.left());
+    let y = ay
+        .min(bounds.bottom().saturating_sub(height))
+        .max(bounds.top());
 
     Rect::new(x, y, width, height)
 }
