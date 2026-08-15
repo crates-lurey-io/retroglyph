@@ -39,7 +39,6 @@ pub(super) fn wrap_line(line: &Line, max_width: u16) -> Vec<WrappedLine> {
         glyphs: Vec::new(),
         width: 0,
     }];
-    let mut col: u16 = 0;
 
     for span in &line.spans {
         for grapheme in span.content.graphemes(true) {
@@ -49,7 +48,6 @@ pub(super) fn wrap_line(line: &Line, max_width: u16) -> Vec<WrappedLine> {
                     glyphs: Vec::new(),
                     width: 0,
                 });
-                col = 0;
                 continue;
             }
 
@@ -60,7 +58,8 @@ pub(super) fn wrap_line(line: &Line, max_width: u16) -> Vec<WrappedLine> {
             }
 
             // Soft wrap: this grapheme would overflow the line.
-            if col + gw > max_width && col > 0 {
+            let col = lines.last().expect("always at least one line").width;
+            if u32::from(col) + u32::from(gw) > u32::from(max_width) && col > 0 {
                 let current = lines.last_mut().expect("always at least one line");
 
                 // Try to break at the last space on the current line.
@@ -68,13 +67,11 @@ pub(super) fn wrap_line(line: &Line, max_width: u16) -> Vec<WrappedLine> {
                     // Drain everything after the space into a new line.
                     let remainder: Vec<WrappedGlyph> =
                         current.glyphs.drain(space_idx + 1..).collect();
-                    // Drop the space itself.
+                    // Drop the space itself: it's the width-1 glyph the rposition above matched.
                     current.glyphs.pop();
-                    current.width = current.glyphs.iter().map(|g| g.width).sum();
 
                     let new_width: u16 = remainder.iter().map(|g| g.width).sum();
-                    // col will be incremented by gw in the fall-through below.
-                    col = new_width;
+                    current.width -= new_width + 1;
                     lines.push(WrappedLine {
                         glyphs: remainder,
                         width: new_width,
@@ -85,7 +82,6 @@ pub(super) fn wrap_line(line: &Line, max_width: u16) -> Vec<WrappedLine> {
                         glyphs: Vec::new(),
                         width: 0,
                     });
-                    col = 0;
                     // Drop the space that triggered this break: it would just be
                     // leading whitespace on the new line.
                     if grapheme == " " {
@@ -95,13 +91,12 @@ pub(super) fn wrap_line(line: &Line, max_width: u16) -> Vec<WrappedLine> {
             }
 
             let current = lines.last_mut().expect("always at least one line");
-            current.width += gw;
+            current.width = current.width.saturating_add(gw);
             current.glyphs.push(WrappedGlyph {
                 grapheme: String::from(grapheme),
                 style: span.style,
                 width: gw,
             });
-            col += gw;
         }
     }
 
@@ -291,5 +286,14 @@ mod tests {
         let rows = wrap_str("hello", 10);
         assert_eq!(rows.len(), 1);
         assert!(matches!(rows[0], Cow::Owned(_)));
+    }
+
+    #[test]
+    fn test_wrap_str_max_width_does_not_overflow() {
+        // Regression: col/width additions must not panic in debug at max_width == u16::MAX.
+        let text = "a".repeat(70_000);
+        let rows = wrap_str(&text, u16::MAX);
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].len(), u16::MAX as usize);
     }
 }
