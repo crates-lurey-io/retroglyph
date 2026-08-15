@@ -195,9 +195,8 @@ impl RunOptions {
     /// called every tick regardless of input.
     ///
     /// `target_fps` becomes [`RunOptions::target_fps`](crate::app::RunOptions::target_fps) verbatim, including `0`: passing `0` here
-    /// builds without panicking, but [`run_on_with`](crate::app::run_on_with) panics once it constructs the
-    /// [`FrameClock`](crate::frames::FrameClock) that paces it (see that function's
-    /// `# Panics` section).
+    /// builds without panicking, but [`run_on_with`](crate::app::run_on_with) panics once it derives
+    /// a frame budget from it (see that function's `# Panics` section).
     #[must_use]
     pub const fn animated(target_fps: u32) -> Self {
         Self {
@@ -207,7 +206,7 @@ impl RunOptions {
     }
 
     /// Caps the loop at this many [`App::update`](crate::app::App::update) calls per second whenever a frame actually
-    /// runs, using a [`FrameClock`](crate::frames::FrameClock) internally to pace them
+    /// runs, sleeping out the remainder of each frame's budget to pace them
     /// evenly. `None` (the default) runs uncapped: as fast as `update` allows for back-to-back
     /// [`Flow::Continue`](crate::app::Flow::Continue) frames, or immediately after whatever woke an
     /// [`event_driven`](Self::event_driven) loop from [`Flow::Idle`](crate::app::Flow::Idle).
@@ -296,9 +295,8 @@ impl Default for RunOptions {
 ///
 /// The zero-config [`run_on`](crate::app::run_on) is equivalent to `run_on_with(term, app,
 /// RunOptions::default())`. Pass [`RunOptions::animated`](crate::app::RunOptions::animated) for a continuously-rendering loop
-/// capped at a fixed rate instead, using a [`FrameClock`](crate::frames::FrameClock)
-/// internally so `update` is called at even intervals rather than however fast the host can
-/// spin.
+/// capped at a fixed rate instead, sleeping out the remainder of each frame's budget so
+/// `update` is called at even intervals rather than however fast the host can spin.
 ///
 /// With [`RunOptions::is_event_driven`](crate::app::RunOptions::is_event_driven) `true` (the default), [`Flow::Idle`](crate::app::Flow::Idle) blocks the loop on
 /// input (via [`Terminal::wait_for_input`](crate::terminal::Terminal::wait_for_input)) instead of calling `update` again immediately:
@@ -314,8 +312,8 @@ impl Default for RunOptions {
 ///
 /// # Panics
 ///
-/// Panics if `options.target_fps` is `Some(0)`: pacing at a `FrameClock` internally, which
-/// requires a non-zero rate (see [`FrameClock::new`](crate::frames::FrameClock::new)).
+/// Panics if `options.target_fps` is `Some(0)`: the frame budget it derives requires a
+/// non-zero rate.
 #[cfg(feature = "std")]
 pub fn run_on_with<B, A>(
     mut term: Terminal<B>,
@@ -327,23 +325,19 @@ where
     A: App<B>,
 {
     app.init(&mut term);
-    let mut clock = options.target_fps().map(crate::frames::FrameClock::new);
+    let frame_budget = options.target_fps().map(|fps| {
+        assert!(fps > 0, "RunOptions::target_fps must be non-zero");
+        Duration::from_secs_f64(1.0 / f64::from(fps))
+    });
     let mut frame_count = 0u64;
     let mut last = std::time::Instant::now();
     loop {
-        if let Some(clock) = clock.as_mut() {
-            // Block out the rest of this frame's budget before ticking `update` again, so a
-            // paced loop doesn't busy-spin between updates the way an uncapped one does.
-            let elapsed = last.elapsed();
-            if let Some(remaining) = clock.step().checked_sub(elapsed) {
-                std::thread::sleep(remaining);
-            }
-            clock.advance(clock.step().max(elapsed));
-            // A fixed-timestep `FrameClock` is meant to be drained in a `while tick()` loop for
-            // logic that must run in whole steps; here it only paces wall-clock timing, so a
-            // single `tick()` (there is always at least one step ready, since we just slept/
-            // advanced past the threshold) resets the accumulator for the next iteration.
-            let _ = clock.tick();
+        // Block out the rest of this frame's budget before ticking `update` again, so a paced
+        // loop doesn't busy-spin between updates the way an uncapped one does.
+        if let Some(budget) = frame_budget
+            && let Some(remaining) = budget.checked_sub(last.elapsed())
+        {
+            std::thread::sleep(remaining);
         }
         let now = std::time::Instant::now();
         let delta = now.duration_since(last);
@@ -717,6 +711,22 @@ mod tests {
         // A high cap keeps this test fast; the point is that a paced loop still terminates on
         // `Flow::Exit` and delivers the same number of updates as an uncapped loop would.
         run_on_with(term, app, RunOptions::animated(1000)).expect("run_on_with");
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn run_on_with_animated_options_paces_updates_to_the_target_fps() {
+        // Regression guard for retroglyph#1393: the frame budget replacing `FrameClock` must
+        // still sleep out the remainder of each frame, not just derive a step it never sleeps on.
+        let term = Terminal::new(Headless::new(2, 1));
+        let app = DrawsAndExits {
+            frames: 0,
+            exit_at: 4,
+        };
+        let start = std::time::Instant::now();
+        // 50 fps = 20ms/frame; 5 updates (0..=4) means 4 sleeps between them.
+        run_on_with(term, app, RunOptions::animated(50)).expect("run_on_with");
+        assert!(start.elapsed() >= Duration::from_millis(4 * 20));
     }
 
     #[cfg(feature = "std")]
