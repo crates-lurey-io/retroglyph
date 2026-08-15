@@ -170,6 +170,7 @@ mod tests {
     use super::*;
     use crate::backend::{Cursor, DrawCell, Headless, Input, Output};
     use crate::grid::{Rect, Size};
+    use crate::terminal::LayerOp;
 
     #[test]
     fn test_terminal_poll_and_read() {
@@ -470,7 +471,7 @@ mod tests {
         // decision silently undone by `poll` re-applying the already-handled resize.
         terminal.retain_layer(0u8);
         assert_eq!(terminal.poll(Duration::ZERO), Some(Event::Resize(8, 2)));
-        assert_eq!(terminal.retained_layers, [true]);
+        assert_eq!(terminal.pending_layer_ops, [LayerOp::Retain]);
     }
 
     #[test]

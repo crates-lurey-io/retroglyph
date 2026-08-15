@@ -71,23 +71,27 @@ pub struct Terminal<B: Backend> {
     /// Lets embedding drivers detect whether application code already presented during a frame,
     /// so they can skip a redundant driver-side present.
     present_count: u64,
-    /// Layers marked by [`retain_layer`](Self::retain_layer) to be re-synced from `previous`
-    /// instead of diffed as a real redraw on the next [`present`](Self::present).
+    /// The one-shot op, if any, that [`retain_layer`](Self::retain_layer) or
+    /// [`drop_layer`](Self::drop_layer) has queued for each layer on the next
+    /// [`present`](Self::present).
     ///
-    /// Indexed by layer id; `retained_layers[id]` is `true` if that layer's `previous` content
-    /// should be copied into `current` before diffing. Reset to all `false` once consumed at the
-    /// start of `present` (it's a one-shot opt-in, not a sticky mode) and on
-    /// [`resize`](Self::resize).
-    retained_layers: Vec<bool>,
-    /// Layers marked by [`drop_layer`](Self::drop_layer) to be deallocated, on both `current` and
-    /// `previous`, once `present` no longer needs them for this frame's diff.
-    ///
-    /// Indexed by layer id, same convention as `retained_layers`. Consumed (and reset to all
-    /// `false`) after `present`'s diff has been computed and sent to the backend, but before the
-    /// current/previous swap: deallocating any earlier would make the layer invisible to the diff
-    /// (`diff`/`flatten_into` only walk `current`'s own `max_layer`), silently dropping the erase
-    /// the backend needs instead of sending it (retroglyph#1028).
-    dropped_layers: Vec<bool>,
+    /// Indexed by layer id. A later call for the same layer within a frame simply overwrites the
+    /// earlier one (last call wins), so `Retain` and `Drop` can never both be pending for the
+    /// same layer at once, unlike the two-`Vec<bool>` representation this replaced. Reset to all
+    /// [`LayerOp::None`] once each op is consumed in `present` (it's a one-shot opt-in, not a
+    /// sticky mode) and on [`resize`](Self::resize).
+    pending_layer_ops: Vec<LayerOp>,
+}
+
+/// The one-shot op, if any, queued on a layer for the next [`present`](Terminal::present).
+///
+/// See [`Terminal::retain_layer`] and [`Terminal::drop_layer`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum LayerOp {
+    #[default]
+    None,
+    Retain,
+    Drop,
 }
 
 impl<B: Backend> Terminal<B> {
@@ -112,8 +116,7 @@ impl<B: Backend> Terminal<B> {
             queued_events: VecDeque::new(),
             flattened_stale: false,
             present_count: 0,
-            retained_layers: Vec::new(),
-            dropped_layers: Vec::new(),
+            pending_layer_ops: Vec::new(),
         }
     }
 
@@ -175,12 +178,11 @@ impl<B: Backend> Terminal<B> {
             flattened_previous.clear_all();
         }
         // Defensive: `resize` already clears `previous` unconditionally, so the next `present`
-        // would just copy empty content forward for a still-marked layer. Dropping pending
-        // retention here too keeps that a non-event rather than relying on it.
-        self.retained_layers.clear();
-        // Same reasoning: a pending `drop_layer` deallocation is meaningless once `resize` has
+        // would just copy empty content forward for a still-marked layer. Dropping any pending
+        // op here too keeps that a non-event rather than relying on it: a pending retention would
+        // just copy empty content forward, and a pending drop is meaningless once `resize` has
         // already reallocated every layer's buffers at the new dimensions.
-        self.dropped_layers.clear();
+        self.pending_layer_ops.clear();
         self.backend.resize(Size::new(width, height));
     }
 

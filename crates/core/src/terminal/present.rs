@@ -5,7 +5,9 @@
 //! shapes (compositing vs. cell, single-layer vs. multi-layer) with the error-recovery contract
 //! documented on it; its own doc comment and the tests below cover that matrix directly.
 
-use super::Terminal;
+use alloc::vec::Vec;
+
+use super::{LayerOp, Terminal};
 use crate::backend::{Backend, Compositing, Output};
 use crate::grid::{Grid, HasSize};
 use crate::surface::Surface;
@@ -42,6 +44,18 @@ impl<B: Backend> Terminal<B> {
         self.present_count
     }
 
+    /// Layer ids with `op` currently pending, in ascending order.
+    ///
+    /// The single `u8::try_from` site for `pending_layer_ops`: see `present`'s own `# Panics`
+    /// note for why it never actually panics.
+    fn pending_layers(&self, op: LayerOp) -> impl Iterator<Item = u8> + '_ {
+        self.pending_layer_ops
+            .iter()
+            .enumerate()
+            .filter(move |&(_, &o)| o == op)
+            .map(|(id, _)| u8::try_from(id).expect("layer table is indexed by u8 layer ids"))
+    }
+
     /// Present the current frame: computes the diff against the previous frame, sends changed
     /// cells to the backend, flushes, then swaps buffers. Always presents unconditionally, even
     /// if nothing was drawn since the last call; most callers want [`draw`](Self::draw) instead
@@ -70,9 +84,9 @@ impl<B: Backend> Terminal<B> {
     ///
     /// # Panics
     ///
-    /// Never panics in practice: `retained_layers` and `dropped_layers` are indexed by u8 layer
-    /// id and grown only up to `idx + 1` for `idx = usize::from(layer_id)` in
-    /// [`retain_layer`](Self::retain_layer)/[`drop_layer`](Self::drop_layer), so their length is
+    /// Never panics in practice: `pending_layer_ops` is indexed by u8 layer id and grown only up
+    /// to `idx + 1` for `idx = usize::from(layer_id)` in
+    /// [`retain_layer`](Self::retain_layer)/[`drop_layer`](Self::drop_layer), so its length is
     /// always at most 256 and every index encountered here fits in u8.
     ///
     /// # Errors
@@ -88,7 +102,8 @@ impl<B: Backend> Terminal<B> {
     #[doc(alias = "render")]
     pub fn present(&mut self) -> Result<(), <B as Output>::Error> {
         self.present_count = self.present_count.wrapping_add(1);
-        if self.retained_layers.iter().any(|&retained| retained) {
+        let retained: Vec<u8> = self.pending_layers(LayerOp::Retain).collect();
+        if !retained.is_empty() {
             // Overwrite each retained layer's (empty, never-drawn-this-frame) content in
             // `current` with `previous`'s, so the diff below finds no change on it: the backend
             // gets nothing to redraw, and the copy (a flat per-layer clone) is far cheaper than
@@ -104,18 +119,9 @@ impl<B: Backend> Terminal<B> {
             // layer is copied whole, at the same geometry, and must be indistinguishable from
             // what was presented last frame, whatever the app did or didn't draw into it this
             // frame (retroglyph#955, retroglyph#956).
-            for (id, &retained) in self.retained_layers.iter().enumerate() {
-                if retained {
-                    // `retained_layers` is indexed by u8 layer id: `retain_layer` only ever grows
-                    // it to `idx + 1` for `idx = usize::from(layer_id)`, so its length is at most
-                    // 256 and every index here fits in u8. `expect` makes that a checked invariant
-                    // instead of a silently-truncating `as`.
-                    let id = u8::try_from(id).expect("layer table is indexed by u8 layer ids");
-                    self.current.copy_layer_from(id, &self.previous);
-                }
-            }
-            for retained in &mut self.retained_layers {
-                *retained = false;
+            for id in retained {
+                self.current.copy_layer_from(id, &self.previous);
+                self.pending_layer_ops[usize::from(id)] = LayerOp::None;
             }
         }
         let mut swap_flattened = false;
@@ -191,22 +197,16 @@ impl<B: Backend> Terminal<B> {
         // to erase whatever it last showed there. Also gated on `flush` succeeding, for the same
         // reason as the swaps below: on failure, `previous` must keep the layer allocated so a
         // retried `present` can still resend the erase that never actually reached the backend.
-        if self.dropped_layers.iter().any(|&dropped| dropped) {
-            for (id, &dropped) in self.dropped_layers.iter().enumerate() {
-                if dropped {
-                    let id = u8::try_from(id).expect("layer table is indexed by u8 layer ids");
-                    // If the app drew to `layer` again after calling `drop_layer` but before
-                    // this present, that write is a live redraw the app clearly wants kept, not
-                    // stale content: cancel the drop instead of discarding it.
-                    if self.current.layer_is_empty(id) {
-                        self.current.deallocate_layer(id);
-                        self.previous.deallocate_layer(id);
-                    }
-                }
+        let dropped: Vec<u8> = self.pending_layers(LayerOp::Drop).collect();
+        for id in dropped {
+            // If the app drew to `layer` again after calling `drop_layer` but before this
+            // present, that write is a live redraw the app clearly wants kept, not stale content:
+            // cancel the drop instead of discarding it.
+            if self.current.layer_is_empty(id) {
+                self.current.deallocate_layer(id);
+                self.previous.deallocate_layer(id);
             }
-            for dropped in &mut self.dropped_layers {
-                *dropped = false;
-            }
+            self.pending_layer_ops[usize::from(id)] = LayerOp::None;
         }
         // Both swaps happen only after `flush` succeeds, for the same reason described above.
         if swap_flattened {
