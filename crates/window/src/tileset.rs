@@ -342,14 +342,16 @@ impl TilesetOptions {
     #[must_use]
     pub const fn builder(bytes: Vec<u8>) -> TilesetBuilder {
         TilesetBuilder {
-            bytes,
-            tile_width: 0,
-            tile_height: 0,
-            columns: None,
-            codepage: Codepage::Cp437,
-            align: SpriteAlign::TopLeft,
-            color: SheetColor::Art,
-            transparent_color: None,
+            opts: Self {
+                bytes,
+                tile_width: 0,
+                tile_height: 0,
+                columns: None,
+                codepage: Codepage::Cp437,
+                align: SpriteAlign::TopLeft,
+                color: SheetColor::Art,
+                transparent_color: None,
+            },
         }
     }
 }
@@ -406,22 +408,15 @@ impl TilesetOptions {
 ///     .unwrap();
 /// ```
 pub struct TilesetBuilder {
-    bytes: Vec<u8>,
-    tile_width: u16,
-    tile_height: u16,
-    columns: Option<u16>,
-    codepage: Codepage,
-    align: SpriteAlign,
-    color: SheetColor,
-    transparent_color: Option<(u8, u8, u8)>,
+    opts: TilesetOptions,
 }
 
 impl TilesetBuilder {
     /// Sets the pixel dimensions of each tile.
     #[must_use]
     pub const fn tile_size(mut self, width: u16, height: u16) -> Self {
-        self.tile_width = width;
-        self.tile_height = height;
+        self.opts.tile_width = width;
+        self.opts.tile_height = height;
         self
     }
 
@@ -430,14 +425,14 @@ impl TilesetBuilder {
     /// Useful for sheets with padding. If not set, derived from image width.
     #[must_use]
     pub const fn columns(mut self, cols: u16) -> Self {
-        self.columns = Some(cols);
+        self.opts.columns = Some(cols);
         self
     }
 
     /// Sets the codepoint mapping.
     #[must_use]
     pub fn codepage(mut self, codepage: Codepage) -> Self {
-        self.codepage = codepage;
+        self.opts.codepage = codepage;
         self
     }
 
@@ -446,7 +441,7 @@ impl TilesetBuilder {
     /// Shorthand for `codepage(Codepage::Unicode { start })`.
     #[must_use]
     pub fn start_codepoint(mut self, start: char) -> Self {
-        self.codepage = Codepage::Unicode { start };
+        self.opts.codepage = Codepage::Unicode { start };
         self
     }
 
@@ -456,7 +451,7 @@ impl TilesetBuilder {
     /// its box exactly; see [`SpriteAlign`].
     #[must_use]
     pub const fn align(mut self, align: SpriteAlign) -> Self {
-        self.align = align;
+        self.opts.align = align;
         self
     }
 
@@ -466,7 +461,7 @@ impl TilesetBuilder {
     /// Defaults to [`SheetColor::Art`]: composited verbatim. See [`SheetColor`].
     #[must_use]
     pub const fn color(mut self, color: SheetColor) -> Self {
-        self.color = color;
+        self.opts.color = color;
         self
     }
 
@@ -483,7 +478,7 @@ impl TilesetBuilder {
     /// of an alpha channel.
     #[must_use]
     pub const fn transparent_color(mut self, r: u8, g: u8, b: u8) -> Self {
-        self.transparent_color = Some((r, g, b));
+        self.opts.transparent_color = Some((r, g, b));
         self
     }
 
@@ -494,24 +489,15 @@ impl TilesetBuilder {
     /// Returns [`TilesetError::ZeroTileSize`] if tile dimensions are 0, or
     /// [`TilesetError::EmptyCodepage`] if `Custom` codepage is empty.
     pub fn build(self) -> Result<TilesetOptions, TilesetError> {
-        if self.tile_width == 0 || self.tile_height == 0 {
+        if self.opts.tile_width == 0 || self.opts.tile_height == 0 {
             return Err(TilesetError::ZeroTileSize);
         }
-        if let Codepage::Custom(ref t) = self.codepage
+        if let Codepage::Custom(ref t) = self.opts.codepage
             && t.is_empty()
         {
             return Err(TilesetError::EmptyCodepage);
         }
-        Ok(TilesetOptions {
-            bytes: self.bytes,
-            tile_width: self.tile_width,
-            tile_height: self.tile_height,
-            columns: self.columns,
-            codepage: self.codepage,
-            align: self.align,
-            color: self.color,
-            transparent_color: self.transparent_color,
-        })
+        Ok(self.opts)
     }
 }
 

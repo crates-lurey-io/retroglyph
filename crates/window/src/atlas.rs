@@ -127,6 +127,29 @@ impl AtlasGeometry {
     }
 }
 
+/// Per-font slot bases and their total, the shared answer to "where does font `i`'s glyphs start,
+/// and how many slots does the whole chain need": font `i` starts at the sum of the addressable
+/// glyph counts of every font before it in chain order.
+struct SlotLayout {
+    /// Flat atlas slot at which each font in the chain's glyphs start, indexed by the font's
+    /// position in the chain.
+    bases: Vec<u32>,
+    /// Total slots the chain occupies (`bases.last() + that font's own glyph count`, or 0 for an
+    /// empty chain).
+    total: u32,
+}
+
+/// Computes [`SlotLayout`] for `fonts`, one pass over the chain.
+fn slot_layout(fonts: &FontChain<'_>) -> SlotLayout {
+    let mut bases = Vec::with_capacity(fonts.font_count());
+    let mut total = 0;
+    for font in fonts.fonts() {
+        bases.push(total);
+        total += addressable_glyphs(font);
+    }
+    SlotLayout { bases, total }
+}
+
 /// The CPU-side coverage buffer for a whole atlas, grid-packed per [`AtlasGeometry`].
 #[derive(Clone, Debug)]
 #[non_exhaustive]
@@ -151,17 +174,16 @@ impl AtlasData {
     #[allow(clippy::cast_possible_truncation)]
     pub fn build(fonts: &FontChain<'static>, cell_size: (u32, u32)) -> Self {
         let (cell_w, cell_h) = cell_size;
-        let count: u32 = fonts.fonts().map(addressable_glyphs).sum();
-        let geometry = AtlasGeometry::new(cell_w, cell_h, count);
+        let SlotLayout { bases, total } = slot_layout(fonts);
+        let geometry = AtlasGeometry::new(cell_w, cell_h, total);
 
         let tex_w = geometry.tex_w();
         let tex_h = geometry.tex_h();
         let mut coverage = vec![0u8; (tex_w * tex_h * geometry.layers) as usize];
 
-        let mut slot = 0;
-        for font in fonts.fonts() {
+        for (font, base) in fonts.fonts().zip(bases) {
             for index in 0..addressable_glyphs(font) {
-                let (layer, gcol, grow) = AtlasGeometry::locate(slot);
+                let (layer, gcol, grow) = AtlasGeometry::locate(base + index);
                 let (ox, oy) = (gcol * cell_w, grow * cell_h);
                 // `glyph_pixels` yields each set pixel `(x, y)` decoded MSB-first (the bit order
                 // lives in the font module, #164), so this stays width-agnostic.
@@ -171,7 +193,6 @@ impl AtlasData {
                     let idx = ((layer * tex_h + py) * tex_w + px) as usize;
                     coverage[idx] = 0xFF;
                 }
-                slot += 1;
             }
         }
 
@@ -191,6 +212,7 @@ pub struct GlyphAtlas {
     /// Flat atlas slot at which each font in the chain's glyphs start, indexed by the font's
     /// position in the chain ([`ResolvedGlyph::font_index`](crate::font::ResolvedGlyph::font_index)).
     bases: Vec<u32>,
+    total: u32,
     cell_w: u32,
     cell_h: u32,
     space_slot: u16,
@@ -204,21 +226,30 @@ impl GlyphAtlas {
     /// one cell size, so a chain whose fonts disagree has no atlas geometry to build.
     #[must_use]
     pub fn new(fonts: FontChain<'static>, glyph_size: (u8, u8)) -> Self {
-        let mut bases = Vec::with_capacity(fonts.font_count());
-        let mut next = 0;
-        for font in fonts.fonts() {
-            bases.push(next);
-            next += addressable_glyphs(font);
-        }
-        let mut atlas = Self {
+        let SlotLayout { bases, total } = slot_layout(&fonts);
+        let space_slot = fonts
+            .resolve(' ')
+            .map_or(0, |glyph| Self::slot_of(&bases, &glyph));
+        Self {
             fonts,
             bases,
+            total,
             cell_w: u32::from(glyph_size.0),
             cell_h: u32::from(glyph_size.1),
-            space_slot: 0,
-        };
-        atlas.space_slot = atlas.resolve(' ').unwrap_or(0);
-        atlas
+            space_slot,
+        }
+    }
+
+    /// A resolved glyph's flat atlas slot: its font's base plus its own glyph index.
+    ///
+    /// # Panics
+    ///
+    /// Does not panic. The `u16` cast cannot truncate for a chain whose
+    /// [`slot_count`](Self::slot_count) is within [`MAX_SLOTS`], which a backend's builder is
+    /// expected to have checked.
+    #[allow(clippy::cast_possible_truncation)]
+    fn slot_of(bases: &[u32], glyph: &crate::font::ResolvedGlyph) -> u16 {
+        (bases[glyph.font_index()] + u32::from(glyph.index())) as u16
     }
 
     /// Glyph cell size in unscaled pixels.
@@ -241,8 +272,8 @@ impl GlyphAtlas {
     /// Compare against [`MAX_SLOTS`] before building: a chain past that has glyphs
     /// [`resolve`](Self::resolve) cannot name.
     #[must_use]
-    pub fn slot_count(&self) -> u32 {
-        self.fonts.fonts().map(addressable_glyphs).sum()
+    pub const fn slot_count(&self) -> u32 {
+        self.total
     }
 
     /// The backing font chain.
@@ -263,17 +294,10 @@ impl GlyphAtlas {
 
     /// Resolves `ch` to its atlas slot, or `None` when no font in the chain can draw it, not even
     /// as the substituted solid block, in which case the caller draws no glyph for that cell.
-    ///
-    /// # Panics
-    ///
-    /// Does not panic. The `u16` cast cannot truncate for a chain whose
-    /// [`slot_count`](Self::slot_count) is within [`MAX_SLOTS`], which a backend's builder is
-    /// expected to have checked.
     #[must_use]
-    #[allow(clippy::cast_possible_truncation)]
     pub fn resolve(&self, ch: char) -> Option<u16> {
         let glyph = self.fonts.resolve(ch)?;
-        Some((self.bases[glyph.font_index()] + u32::from(glyph.index())) as u16)
+        Some(Self::slot_of(&self.bases, &glyph))
     }
 
     /// Whether [`resolve`](Self::resolve) fell back to the substituted "not defined" glyph for
