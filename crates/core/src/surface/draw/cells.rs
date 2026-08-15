@@ -1,7 +1,7 @@
 //! Single-cell and whole-region writes: [`put`](Surface::put) and its rect/grid-scale twins.
 
 use crate::color::{Style, Tint};
-use crate::grid::{Grid, HasSize, Pos, Rect};
+use crate::grid::{Grid, Pos, Rect};
 use crate::tile::Tile;
 use unicode_width::UnicodeWidthChar;
 
@@ -10,29 +10,53 @@ use super::Surface;
 impl Surface<'_> {
     /// The whole-rect counterpart to [`shift`](Self::shift): translates a local `rect` (same
     /// convention as `fill_rect`/`clear_region`, and as `shift`'s own `x`/`y`) into the absolute
-    /// grid rect it covers under this surface's own clip, or `None` if none of it lands.
+    /// grid rect it covers under this surface's own translate offset and clip, plus the
+    /// columns/rows cropped off its near (left/top) edge, or `None` if none of it lands.
     ///
-    /// Only handles `origin_offset == (0, 0)` (true of every surface except one produced by
-    /// [`clip_translate`](Self::clip_translate)): with any other offset `shift` still refuses a
-    /// negative post-offset coordinate per cell, which a single rect-wide translation can't
-    /// reproduce without re-deriving per-cell bounds, so callers fall back to `shift` itself
-    /// instead.
-    fn local_rect_to_absolute(&self, rect: Rect) -> Option<Rect> {
-        if self.origin_offset != (0, 0) {
+    /// `rect`'s near edge is cropped rather than the whole call dropped whenever it starts left
+    /// of/above the origin after `origin_offset` is subtracted: there is no single coordinate for
+    /// [`shift`](Self::shift) to reject the way it does per cell, only part of `rect`'s footprint
+    /// may be off-screen. The returned crop is `rect`'s own near-edge crop plus whatever the clip
+    /// intersect trims beyond it, so a caller re-deriving a source rect (as
+    /// [`blit`](Self::blit) does) gets the total offset into `rect` in one number per axis.
+    ///
+    /// Never intersects with [`area`](Self::area) before the clip intersect: every surface
+    /// constructor in `geometry.rs` narrows `clip` to at most `area`, so `clip ⊆ area` always
+    /// holds and an extra area-bound intersect would be a no-op.
+    fn map_local_rect(&self, rect: Rect) -> Option<(Rect, (u16, u16))> {
+        let w = rect.width();
+        let h = rect.height();
+        if w == 0 || h == 0 {
             return None;
         }
-        let local = rect.intersect(self.area.to_rect());
-        if local.is_empty() {
+
+        let sx = i64::from(rect.left()) - i64::from(self.origin_offset.0);
+        let sy = i64::from(rect.top()) - i64::from(self.origin_offset.1);
+        let crop_left = u16::try_from(sx.min(0).unsigned_abs()).unwrap_or(u16::MAX);
+        let crop_top = u16::try_from(sy.min(0).unsigned_abs()).unwrap_or(u16::MAX);
+        if crop_left >= w || crop_top >= h {
             return None;
         }
-        let abs = Rect::new(
-            self.area.left() + local.left(),
-            self.area.top() + local.top(),
-            local.width(),
-            local.height(),
-        )
-        .intersect(self.clip);
-        (!abs.is_empty()).then_some(abs)
+        let Ok(local_x) = u16::try_from(sx.max(0)) else {
+            return None;
+        };
+        let Ok(local_y) = u16::try_from(sy.max(0)) else {
+            return None;
+        };
+
+        let abs_x = self.area.left().saturating_add(local_x);
+        let abs_y = self.area.top().saturating_add(local_y);
+        let visible_w = (w - crop_left).min(u16::MAX - abs_x);
+        let visible_h = (h - crop_top).min(u16::MAX - abs_y);
+
+        let dst_rect = Rect::new(abs_x, abs_y, visible_w, visible_h).intersect(self.clip);
+        (!dst_rect.is_empty()).then(|| {
+            let crop = (
+                crop_left + (dst_rect.left() - abs_x),
+                crop_top + (dst_rect.top() - abs_y),
+            );
+            (dst_rect, crop)
+        })
     }
 
     /// Clips `rect` (in the same coordinate space as `fill_rect`/`clear_region`'s own `rect`
@@ -175,7 +199,7 @@ impl Surface<'_> {
 
         if self.tint == Tint::None
             && single_width
-            && let Some(abs) = self.local_rect_to_absolute(rect)
+            && let Some((abs, _)) = self.map_local_rect(rect)
         {
             self.grid.fill_rect(self.layer, abs, Tile::new(ch, style));
             return;
@@ -237,40 +261,12 @@ impl Surface<'_> {
             return;
         }
 
-        // Local `(x, y)` shifted by this surface's translate offset, same subtraction `shift`
-        // does for a single cell, but a footprint that starts left of/above the origin crops its
-        // near edge instead of being dropped whole (there is no single `(x, y)` for `shift` to
-        // reject: only part of the footprint may be off-screen).
-        let sx = i64::from(x) - i64::from(self.origin_offset.0);
-        let sy = i64::from(y) - i64::from(self.origin_offset.1);
-        let crop_left = u16::try_from(sx.min(0).unsigned_abs()).unwrap_or(u16::MAX);
-        let crop_top = u16::try_from(sy.min(0).unsigned_abs()).unwrap_or(u16::MAX);
-        if crop_left >= w || crop_top >= h {
-            return;
-        }
-        let Ok(local_x) = u16::try_from(sx.max(0)) else {
-            return;
-        };
-        let Ok(local_y) = u16::try_from(sy.max(0)) else {
+        let Some((dst_rect, (crop_left, crop_top))) = self.map_local_rect(Rect::new(x, y, w, h))
+        else {
             return;
         };
 
-        let abs_x = self.area.left().saturating_add(local_x);
-        let abs_y = self.area.top().saturating_add(local_y);
-        let visible_w = (w - crop_left).min(u16::MAX - abs_x);
-        let visible_h = (h - crop_top).min(u16::MAX - abs_y);
-
-        let dst_rect = Rect::new(abs_x, abs_y, visible_w, visible_h).intersect(self.clip);
-        if dst_rect.is_empty() {
-            return;
-        }
-
-        let src_rect = Rect::new(
-            crop_left + (dst_rect.left() - abs_x),
-            crop_top + (dst_rect.top() - abs_y),
-            dst_rect.width(),
-            dst_rect.height(),
-        );
+        let src_rect = Rect::new(crop_left, crop_top, dst_rect.width(), dst_rect.height());
         self.grid.blit_cross_layer(
             self.layer,
             grid,
@@ -314,16 +310,8 @@ impl Surface<'_> {
     /// assert_eq!(grid[Pos::new(1, 1)].glyph(), '#');
     /// ```
     pub fn clear_region(&mut self, rect: Rect) {
-        if let Some(abs) = self.local_rect_to_absolute(rect) {
+        if let Some((abs, _)) = self.map_local_rect(rect) {
             self.grid.fill_rect(self.layer, abs, Tile::default());
-            return;
-        }
-
-        let rect = self.clip_local_rect(rect);
-        for pos in rect {
-            if let Some((x, y)) = self.shift(pos.x, pos.y) {
-                self.grid.put_tile(self.layer, (x, y), Tile::default());
-            }
         }
     }
 }
