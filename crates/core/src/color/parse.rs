@@ -4,52 +4,20 @@
 use alloc::string::String;
 
 use super::Color;
-use super::ansi::AnsiColor;
+use super::ansi::{ANSI_TABLE, AnsiColor};
 
 /// The name [`Color::fmt`](crate::color::Color::fmt) writes for an ANSI color, e.g. `"bright-red"`.
 const fn ansi_name(color: AnsiColor) -> &'static str {
-    match color {
-        AnsiColor::Black => "black",
-        AnsiColor::Red => "red",
-        AnsiColor::Green => "green",
-        AnsiColor::Yellow => "yellow",
-        AnsiColor::Blue => "blue",
-        AnsiColor::Magenta => "magenta",
-        AnsiColor::Cyan => "cyan",
-        AnsiColor::White => "white",
-        AnsiColor::BrightBlack => "bright-black",
-        AnsiColor::BrightRed => "bright-red",
-        AnsiColor::BrightGreen => "bright-green",
-        AnsiColor::BrightYellow => "bright-yellow",
-        AnsiColor::BrightBlue => "bright-blue",
-        AnsiColor::BrightMagenta => "bright-magenta",
-        AnsiColor::BrightCyan => "bright-cyan",
-        AnsiColor::BrightWhite => "bright-white",
-    }
+    ANSI_TABLE[color as usize].1
 }
 
 /// The inverse of [`ansi_name`]: matches a name with separators already stripped and lowercased
 /// (e.g. `"brightred"`), as produced by [`Color::from_str`](crate::color::Color::from_str)'s normalization.
 fn parse_ansi_name(name: &str) -> Option<AnsiColor> {
-    Some(match name {
-        "black" => AnsiColor::Black,
-        "red" => AnsiColor::Red,
-        "green" => AnsiColor::Green,
-        "yellow" => AnsiColor::Yellow,
-        "blue" => AnsiColor::Blue,
-        "magenta" => AnsiColor::Magenta,
-        "cyan" => AnsiColor::Cyan,
-        "white" => AnsiColor::White,
-        "brightblack" => AnsiColor::BrightBlack,
-        "brightred" => AnsiColor::BrightRed,
-        "brightgreen" => AnsiColor::BrightGreen,
-        "brightyellow" => AnsiColor::BrightYellow,
-        "brightblue" => AnsiColor::BrightBlue,
-        "brightmagenta" => AnsiColor::BrightMagenta,
-        "brightcyan" => AnsiColor::BrightCyan,
-        "brightwhite" => AnsiColor::BrightWhite,
-        _ => return None,
-    })
+    ANSI_TABLE
+        .iter()
+        .find(|(_, n, _)| n.chars().filter(|c| *c != '-').eq(name.chars()))
+        .map(|(c, _, _)| *c)
 }
 
 /// Parses `#rgb` or `#rrggbb` (case-insensitive) into an `(r, g, b)` triple.
@@ -235,6 +203,20 @@ mod tests {
         );
         assert_eq!(Color::Indexed(7).to_string(), "7");
         assert_eq!(Color::rgb(255, 128, 0).to_string(), "#ff8000");
+    }
+
+    #[test]
+    fn test_ansi_name_and_parse_are_inverses() {
+        use super::super::ansi::ANSI_TABLE;
+
+        for (color, _, _) in ANSI_TABLE {
+            let name = ansi_name(color);
+            assert_eq!(
+                name.parse(),
+                Ok(Color::Ansi(color)),
+                "round trip of {name:?}"
+            );
+        }
     }
 
     #[test]
