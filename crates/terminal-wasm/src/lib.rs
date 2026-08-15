@@ -173,7 +173,7 @@ mod app_entry;
 
 use retroglyph_core::backend::DrawCell;
 use retroglyph_core::backend::{Cursor, CursorStyle, Input, Output};
-use retroglyph_core::event::{Event, coalesces_with};
+use retroglyph_core::event::{Event, push_coalesced};
 use retroglyph_core::grid::HasSize;
 use retroglyph_core::grid::{Pos, Size};
 use retroglyph_core::terminal::Terminal;
@@ -306,30 +306,27 @@ impl TerminalWasm {
     ///   intermediate one. Any other event kind (including a `Down`/`Up`/scroll mouse event, or a
     ///   `Drag` with a different button) always pushes normally, so this never reorders or merges
     ///   anything but a `Moved` or same-button `Drag` run. The same rule is shared with the
-    ///   `retroglyph-window` backend and `Headless` (retroglyph#768).
+    ///   `retroglyph-window` backend and `Headless` (retroglyph#768); [`push_coalesced`] is the
+    ///   shared enforcement point.
     /// - **Capacity cap.** Once the queue holds `EVENT_QUEUE_CAP` (4096) events, pushing another
-    ///   silently drops the *oldest* queued event (via `pop_front`) to make room. Oldest was
-    ///   chosen over dropping the new event so a consumer that's fallen behind and only pulls a
-    ///   few events per frame still gets its queue trending toward current/recent input as it
-    ///   catches up, rather than being stuck forever behind the exact backlog that triggered the
-    ///   cap. This is silent rather than logged: this crate's non-wasm32 API surface has no
-    ///   other fallible/observable operations and stays log-free (see the `wasm` module below for
-    ///   where this crate *does* use `log`, at the FFI boundary specifically), and a queue that's
-    ///   this far behind is already producing stale input for the consumer regardless.
+    ///   silently drops the *oldest* queued event (via `pop_front`) to make room, unless the push
+    ///   coalesced into the existing tail (in which case the queue didn't grow, so nothing needs
+    ///   trimming). Oldest was chosen over dropping the new event so a consumer that's fallen
+    ///   behind and only pulls a few events per frame still gets its queue trending toward
+    ///   current/recent input as it catches up, rather than being stuck forever behind the exact
+    ///   backlog that triggered the cap. This is silent rather than logged: this crate's
+    ///   non-wasm32 API surface has no other fallible/observable operations and stays log-free
+    ///   (see the `wasm` module below for where this crate *does* use `log`, at the FFI boundary
+    ///   specifically), and a queue that's this far behind is already producing stale input for
+    ///   the consumer regardless.
     ///
     /// Crate-private: [`Input::push_event`] is the sole public way to push an event onto a
     /// `TerminalWasm`, so there is only one way for external callers to do this.
     pub(crate) fn push_event(&mut self, event: Event) {
-        if let Some(back) = self.event_queue.back_mut()
-            && coalesces_with(&event, back)
+        if !push_coalesced(&mut self.event_queue, event) && self.event_queue.len() > EVENT_QUEUE_CAP
         {
-            *back = event;
-            return;
-        }
-        if self.event_queue.len() >= EVENT_QUEUE_CAP {
             self.event_queue.pop_front();
         }
-        self.event_queue.push_back(event);
     }
 
     /// Drains and returns the ANSI bytes rendered since the last call, as a

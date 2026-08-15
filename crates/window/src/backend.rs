@@ -4,7 +4,7 @@
 use crate::presenter::Presenter;
 use retroglyph_core::backend::DrawCell;
 use retroglyph_core::backend::{Compositing, Cursor, Input, Output};
-use retroglyph_core::event::{Event, coalesces_with};
+use retroglyph_core::event::{Event, push_coalesced};
 use retroglyph_core::grid::Size;
 use std::collections::VecDeque;
 use std::time::Duration;
@@ -193,17 +193,10 @@ impl<P: Presenter> Input for WindowBackend<P> {
         // Coalesce consecutive `Mouse(Moved)` or same-button `Mouse(Drag)` events: winit can
         // deliver `CursorMoved`/drag motion at device polling rate (hundreds/sec) though only the
         // latest position matters once the next frame polls the queue, so replace the queue's
-        // tail in place instead of growing it unbounded (retroglyph#294, retroglyph#768). Every
-        // other event kind (clicks, scrolls, keys, resize, ...) still pushes in O(1) as before;
-        // only a back-to-back `Moved` or same-button `Drag` run collapses. See [`coalesces_with`]
-        // for the shared rule (also used by `retroglyph-terminal-wasm` and `Headless`).
-        if let Some(back) = self.events.back_mut()
-            && coalesces_with(&event, back)
-        {
-            *back = event;
-            return;
-        }
-        self.events.push_back(event);
+        // tail in place instead of growing it unbounded (retroglyph#294, retroglyph#768). See
+        // [`push_coalesced`] for the shared rule (also used by `retroglyph-terminal-wasm` and
+        // `Headless`).
+        push_coalesced(&mut self.events, event);
     }
 }
 
