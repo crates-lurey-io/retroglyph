@@ -1419,7 +1419,12 @@ fn expand_dirty_spans(dirty: &mut [bool], layer: &[Tile], cols: usize, rows: usi
 ///   fill underneath one before it's blended would erase transparency the sprite's own pixels are
 ///   supposed to let show through: core's `Tile`/`Grid` model has no such per-pixel concept, so
 ///   the cell-backend-parity rule this function otherwise implements just doesn't apply to them.
-fn resolve_bg_fill(layers: &[LayerShadow], layer_id: u8, idx: usize, has_sprite: bool) -> Option<u32> {
+fn resolve_bg_fill(
+    layers: &[LayerShadow],
+    layer_id: u8,
+    idx: usize,
+    has_sprite: bool,
+) -> Option<u32> {
     let layer_idx = usize::from(layer_id);
     let tile = layers[layer_idx].tiles.as_ref()[idx];
     if layer_idx == 0 {
