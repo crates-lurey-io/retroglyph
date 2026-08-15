@@ -49,9 +49,26 @@ fn thumb_len(track: u16, total_len: usize, visible_len: usize) -> u16 {
 struct TrackMap {
     max_offset: usize,
     max_start: u16,
+    len: u16,
 }
 
 impl TrackMap {
+    /// Derives the guard, thumb length, and offset/row bounds shared by [`thumb_geometry`] and
+    /// [`offset_for_pos`]. `None` if there's nothing to scroll (`track` has no rows, `visible_len`
+    /// is zero, or `total_len <= visible_len`), mirroring both callers' guards.
+    fn new(track: u16, total_len: usize, visible_len: usize) -> Option<Self> {
+        if track == 0 || visible_len == 0 || total_len <= visible_len {
+            return None;
+        }
+
+        let len = thumb_len(track, total_len, visible_len);
+        Some(Self {
+            max_offset: total_len - visible_len, // > 0, since total_len > visible_len here
+            max_start: track.saturating_sub(len), // last row the thumb can start on
+            len,
+        })
+    }
+
     /// `offset` (clamped to `0..=max_offset`) -> the thumb's top row, in `0..=max_start`.
     fn row_for(&self, offset: usize) -> u16 {
         if self.max_offset == 0 {
@@ -110,20 +127,8 @@ pub fn thumb_geometry(
     visible_len: usize,
     offset: usize,
 ) -> Option<(u16, u16)> {
-    let track = area.height();
-    if track == 0 || visible_len == 0 || total_len <= visible_len {
-        return None;
-    }
-
-    let len = thumb_len(track, total_len, visible_len);
-    let max_offset = total_len - visible_len; // > 0, since total_len > visible_len here
-    let max_start = track.saturating_sub(len); // last row the thumb can start on
-    let map = TrackMap {
-        max_offset,
-        max_start,
-    };
-
-    Some((map.row_for(offset), len))
+    let map = TrackMap::new(area.height(), total_len, visible_len)?;
+    Some((map.row_for(offset), map.len))
 }
 
 /// The offset a vertical scrollbar should jump to for a click/drag at `pos`.
@@ -135,8 +140,7 @@ pub fn thumb_geometry(
 /// [`thumb_geometry`]) there's nothing to scroll.
 #[must_use]
 pub fn offset_for_pos(area: Rect, total_len: usize, visible_len: usize, pos: Pos) -> Option<usize> {
-    let track = area.height();
-    if !area.contains_pos(pos) || track == 0 || visible_len == 0 || total_len <= visible_len {
+    if !area.contains_pos(pos) {
         return None;
     }
 
@@ -145,14 +149,7 @@ pub fn offset_for_pos(area: Rect, total_len: usize, visible_len: usize, pos: Pos
     // conversion happens, instead of leaving it implicit.
     let row = pos.y.checked_sub(area.top())?;
 
-    let len = thumb_len(track, total_len, visible_len);
-    let max_offset = total_len - visible_len;
-    let max_start = track.saturating_sub(len);
-    let map = TrackMap {
-        max_offset,
-        max_start,
-    };
-
+    let map = TrackMap::new(area.height(), total_len, visible_len)?;
     Some(map.offset_for(row))
 }
 
