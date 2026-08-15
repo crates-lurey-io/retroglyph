@@ -336,9 +336,8 @@ pub trait Presenter: Output {
     /// that, it stays constant for the presenter's lifetime.
     ///
     /// Lets callers (e.g. `winit::run`'s cursor/mouse handlers) use
-    /// [`CellGeometry::pixel_to_cell`] directly instead of pairing [`cell_size`](Self::cell_size)
-    /// with the [`translate_pixel_to_cell`](crate::winit::translate::translate_pixel_to_cell) free
-    /// function.
+    /// [`CellGeometry::pixel_to_cell`] directly instead of re-deriving cell size from
+    /// [`cell_size`](Self::cell_size) themselves.
     #[must_use]
     fn geometry(&self) -> CellGeometry;
 
