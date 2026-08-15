@@ -97,25 +97,10 @@ impl Surface<'_> {
     /// ```
     pub fn put(&mut self, pos: impl Into<Pos>, ch: char, style: Style) {
         let pos = pos.into();
-        #[cfg(feature = "egc")]
-        {
-            let mut buf = [0u8; 4];
-            let s = ch.encode_utf8(&mut buf);
-            self.put_grapheme(pos.x, pos.y, s, style);
-        }
-        #[cfg(not(feature = "egc"))]
-        {
-            let Some((x, y)) = self.shift(pos.x, pos.y) else {
-                return;
-            };
-            if !self.wide_spacer_fits(x, y, ch.width().unwrap_or(1)) {
-                return;
-            }
-            let tile = Tile::new(ch, style);
-            if self.grid.put_tile(self.layer, (x, y), tile).is_some() {
-                self.apply_tint(x, y);
-            }
-        }
+        let Some((x, y)) = self.shift(pos.x, pos.y) else {
+            return;
+        };
+        self.put_char_at(x, y, ch, style);
     }
 
     /// [`put`](Self::put), in coordinates relative to this surface's own area origin, where a
@@ -149,45 +134,10 @@ impl Surface<'_> {
     /// ```
     pub fn put_signed(&mut self, pos: (i32, i32), ch: char, style: Style) {
         let (x, y) = pos;
-        let x = x.saturating_sub(self.origin_offset.0);
-        let y = y.saturating_sub(self.origin_offset.1);
-        if x < 0 || y < 0 {
-            return;
-        }
-        let Ok(x) = u16::try_from(x) else {
+        let Some((x, y)) = self.shift_signed(x, y) else {
             return;
         };
-        let Ok(y) = u16::try_from(y) else {
-            return;
-        };
-        if x >= self.width() || y >= self.height() {
-            return;
-        }
-        let abs_x = self.area.left() + x;
-        let abs_y = self.area.top() + y;
-        if !self.clip.contains(abs_x, abs_y) {
-            return;
-        }
-        #[cfg(feature = "egc")]
-        {
-            let mut buf = [0u8; 4];
-            let s = ch.encode_utf8(&mut buf);
-            self.put_grapheme_at(abs_x, abs_y, s, style);
-        }
-        #[cfg(not(feature = "egc"))]
-        {
-            if !self.wide_spacer_fits(abs_x, abs_y, ch.width().unwrap_or(1)) {
-                return;
-            }
-            let tile = Tile::new(ch, style);
-            if self
-                .grid
-                .put_tile(self.layer, (abs_x, abs_y), tile)
-                .is_some()
-            {
-                self.apply_tint(abs_x, abs_y);
-            }
-        }
+        self.put_char_at(x, y, ch, style);
     }
 
     /// Fill `rect` (clipped to this surface's own clip) with `ch` in `style`.

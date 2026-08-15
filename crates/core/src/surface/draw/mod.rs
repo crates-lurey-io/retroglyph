@@ -1,8 +1,10 @@
 //! Private geometry and single-cell write helpers shared by the [`draw`](super) submodules.
 
-#[cfg(feature = "egc")]
-use crate::color::Style;
-use crate::color::Tint;
+use crate::color::{Style, Tint};
+#[cfg(not(feature = "egc"))]
+use crate::tile::Tile;
+#[cfg(not(feature = "egc"))]
+use unicode_width::UnicodeWidthChar;
 
 use super::Surface;
 
@@ -24,8 +26,21 @@ impl Surface<'_> {
     /// against [`clip_rect`](Self::clip_rect), not `area`, since the clip, never the area, is
     /// what decides whether a write lands.
     pub(super) fn shift(&self, x: u16, y: u16) -> Option<(u16, u16)> {
-        let sx = i32::from(x).checked_sub(self.origin_offset.0)?;
-        let sy = i32::from(y).checked_sub(self.origin_offset.1)?;
+        self.shift_signed(i32::from(x), i32::from(y))
+    }
+
+    /// [`shift`](Self::shift), taking `(x, y)` as signed coordinates that may already be
+    /// negative before the offset is even subtracted: [`put_signed`](Self::put_signed)'s own
+    /// entry point, where a caller's arithmetic (e.g. a scrolling camera) can go negative
+    /// relative to the viewport before this surface's `origin_offset` is applied at all, a case
+    /// `shift`'s `u16` parameters cannot express.
+    ///
+    /// A `checked_sub` failure (the signed offset arithmetic overflowing `i32`) is treated the
+    /// same as a shifted coordinate landing outside this surface, matching `shift`'s own
+    /// out-of-bounds handling: both are just a `None`.
+    pub(super) fn shift_signed(&self, x: i32, y: i32) -> Option<(u16, u16)> {
+        let sx = x.checked_sub(self.origin_offset.0)?;
+        let sy = y.checked_sub(self.origin_offset.1)?;
         if sx < 0 || sy < 0 {
             return None;
         }
@@ -106,18 +121,18 @@ impl Surface<'_> {
     /// or an equivalent translation a caller had to do by hand): the width-2 spacer-in-clip
     /// check, [`Grid::write_grapheme`]'s wide-char bookkeeping, and this surface's tint.
     ///
-    /// Shared by [`put_grapheme`](Self::put_grapheme) and [`put_signed`](Self::put_signed),
-    /// which cannot just call `put_grapheme` with its own local coordinates: `put_signed`
-    /// already subtracts `origin_offset` itself (see its doc), so routing through `shift` again
-    /// would subtract it twice.
+    /// Shared by [`put_grapheme`](Self::put_grapheme) and [`put_char_at`](Self::put_char_at)
+    /// (the latter only under `egc`, on behalf of every plain-`char` writer: `put`, `put_signed`,
+    /// `put_offset`), both of which already have an *absolute* coordinate in hand and would
+    /// otherwise have to repeat the wide-spacer check, grid write, and tint themselves.
     ///
     /// Returns whether the write actually landed, so a caller that also needs to touch the
-    /// written tile afterward (e.g. [`put_offset`](Self::put_offset) setting a pixel offset)
-    /// can tell a refused write apart from a successful one instead of blindly poking whatever
-    /// tile is already at `(x, y)`. [`Grid::write_grapheme`] can refuse on its own (e.g. `(x, y)`
-    /// outside the grid, reachable when this surface's clip/area is wider than the grid itself),
-    /// distinct from the clip check above, so `apply_tint` is gated on its own `bool` too rather
-    /// than assumed to always land once `wide_spacer_fits` passes.
+    /// written tile afterward (e.g. `put_offset` setting a pixel offset) can tell a refused write
+    /// apart from a successful one instead of blindly poking whatever tile is already at
+    /// `(x, y)`. [`Grid::write_grapheme`] can refuse on its own (e.g. `(x, y)` outside the grid,
+    /// reachable when this surface's clip/area is wider than the grid itself), distinct from the
+    /// clip check above, so `apply_tint` is gated on its own `bool` too rather than assumed to
+    /// always land once `wide_spacer_fits` passes.
     #[cfg(feature = "egc")]
     pub(super) fn put_grapheme_at(&mut self, x: u16, y: u16, grapheme: &str, style: Style) -> bool {
         use unicode_width::UnicodeWidthStr;
@@ -147,5 +162,43 @@ impl Surface<'_> {
     /// there.
     pub(super) fn wide_spacer_fits(&self, x: u16, y: u16, width: usize) -> bool {
         width != 2 || self.clip.contains(x.saturating_add(1), y)
+    }
+
+    /// Writes `ch` at the already-*absolute* grid coordinate `(x, y)` (post-[`shift`]/
+    /// [`shift_signed`]): the single glyph-write sequence every one of this surface's per-cell
+    /// writers shares, gated on the `egc` feature since a grapheme cluster and a plain `char`
+    /// need different [`Grid`] write calls.
+    ///
+    /// With `egc` enabled, a `char` is just a one-codepoint grapheme, so this defers to
+    /// [`put_grapheme_at`](Self::put_grapheme_at) rather than repeating its wide-spacer check,
+    /// grid write, and tint. Without it, the sequence is inlined directly: `wide_spacer_fits`,
+    /// then [`Grid::put_tile`], then [`apply_tint`](Self::apply_tint) gated on the write having
+    /// actually landed (`put_tile` can still refuse, e.g. out-of-grid).
+    ///
+    /// Returns whether the write landed, same reason [`put_grapheme_at`](Self::put_grapheme_at)
+    /// does: `put_offset` needs to tell a refused write apart from a successful one before
+    /// touching the tile's pixel offset. Callers that don't need that (`put`, `put_signed`)
+    /// simply discard it, so this is deliberately not `#[must_use]`.
+    pub(super) fn put_char_at(&mut self, x: u16, y: u16, ch: char, style: Style) -> bool {
+        #[cfg(feature = "egc")]
+        {
+            let mut buf = [0u8; 4];
+            let s = ch.encode_utf8(&mut buf);
+            self.put_grapheme_at(x, y, s, style)
+        }
+        #[cfg(not(feature = "egc"))]
+        {
+            if !self.wide_spacer_fits(x, y, ch.width().unwrap_or(1)) {
+                return false;
+            }
+            let wrote = self
+                .grid
+                .put_tile(self.layer, (x, y), Tile::new(ch, style))
+                .is_some();
+            if wrote {
+                self.apply_tint(x, y);
+            }
+            wrote
+        }
     }
 }
