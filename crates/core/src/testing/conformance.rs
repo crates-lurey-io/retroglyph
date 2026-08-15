@@ -472,7 +472,10 @@ mod tests {
             // ones the caller never touched).
             delta.digest(
                 b"headless",
-                backend.format_view().chars().map(|c| fnv1a(&(c as u32).to_ne_bytes())),
+                backend
+                    .format_view()
+                    .chars()
+                    .map(|c| fnv1a(&(c as u32).to_ne_bytes())),
             );
             Self { backend, delta }
         }
