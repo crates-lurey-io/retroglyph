@@ -6,7 +6,6 @@ use retroglyph_core::event::{
     Event, KeyCode, KeyEvent, KeyEventKind, KeyLocation, KeyModifiers, ModifierKey, MouseButton,
     PhysicalPos,
 };
-use retroglyph_core::grid::Pos;
 
 /// Maps a winit logical [`Key`](winit::keyboard::Key) plus modifiers to a [`KeyCode`].
 ///
@@ -131,27 +130,6 @@ pub const fn translate_physical_pos(x: f64, y: f64) -> PhysicalPos {
     PhysicalPos {
         x: x.max(0.0) as u32,
         y: y.max(0.0) as u32,
-    }
-}
-
-/// Converts physical pixel coordinates to a grid cell [`Pos`], given a raw `cell_w`/`cell_h`
-/// pixel size.
-///
-/// Clamps to `u16::MAX` so out-of-bounds cursor positions (negative or extremely large) don't
-/// panic: the game loop is responsible for bounds-checking against the terminal size.
-///
-/// `run.rs`'s own cursor/mouse handlers call
-/// [`CellGeometry::pixel_to_cell`](crate::geometry::CellGeometry::pixel_to_cell) via
-/// [`Presenter::geometry`](crate::presenter::Presenter::geometry) directly rather than this
-/// function, since they have a full `Presenter` (and so a `CellGeometry`) available. This is kept
-/// as a separate public function for callers that only have a raw `cell_w`/`cell_h` pixel size on
-/// hand, not a `CellGeometry`; both share the same private clamp/divide helper so the two can't
-/// drift apart (see retroglyph#821).
-#[must_use]
-pub fn translate_pixel_to_cell(px_x: f64, px_y: f64, cell_w: u32, cell_h: u32) -> Pos {
-    Pos {
-        x: crate::geometry::pixel_to_cell_axis(px_x, cell_w),
-        y: crate::geometry::pixel_to_cell_axis(px_y, cell_h),
     }
 }
 
@@ -305,48 +283,6 @@ mod tests {
         // completed `Commit` is forwarded.
         let ime = winit::event::Ime::Preedit("nihon".to_string(), Some((0, 5)));
         assert_eq!(translate_ime(ime), None);
-    }
-
-    // ── pixel_to_cell ─────────────────────────────────────────────────────────
-
-    #[test]
-    fn pixel_to_cell_basic() {
-        // 8×16 cells: pixel (20, 48) → col 2, row 3
-        let pos = translate_pixel_to_cell(20.0, 48.0, 8, 16);
-        assert_eq!(pos, Pos { x: 2, y: 3 });
-    }
-
-    #[test]
-    fn pixel_to_cell_origin() {
-        let pos = translate_pixel_to_cell(0.0, 0.0, 8, 16);
-        assert_eq!(pos, Pos { x: 0, y: 0 });
-    }
-
-    #[test]
-    fn pixel_to_cell_negative_coords_clamp_to_zero() {
-        // Cursor briefly outside the window can produce negative physical coords.
-        let pos = translate_pixel_to_cell(-5.0, -10.0, 8, 16);
-        assert_eq!(pos, Pos { x: 0, y: 0 });
-    }
-
-    #[test]
-    fn pixel_to_cell_zero_cell_size_returns_origin() {
-        // Degenerate case: backend not yet initialised with a valid cell size.
-        let pos = translate_pixel_to_cell(100.0, 200.0, 0, 0);
-        assert_eq!(pos, Pos { x: 0, y: 0 });
-    }
-
-    #[test]
-    fn pixel_to_cell_clamps_to_u16_max() {
-        // A huge pixel coordinate must not overflow u16.
-        let pos = translate_pixel_to_cell(f64::from(u32::MAX), f64::from(u32::MAX), 1, 1);
-        assert_eq!(
-            pos,
-            Pos {
-                x: u16::MAX,
-                y: u16::MAX
-            }
-        );
     }
 
     // ── translate_modifiers ──────────────────────────────────────────────────

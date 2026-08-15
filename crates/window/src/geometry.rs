@@ -67,13 +67,8 @@ impl CellGeometry {
 }
 
 /// Divides one clamped, non-negative pixel axis by a cell dimension, saturating to `u16::MAX`.
-///
-/// Shared by [`CellGeometry::pixel_to_cell`] and
-/// [`translate_pixel_to_cell`](crate::winit::translate::translate_pixel_to_cell) so the
-/// clamp/divide/saturate rule lives in exactly one place.
-#[must_use]
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-pub(crate) fn pixel_to_cell_axis(px: f64, cell: u32) -> u16 {
+fn pixel_to_cell_axis(px: f64, cell: u32) -> u16 {
     // .max(0.0) guards against negatives before the f64→u32 cast.
     // .min(u16::MAX as u32) guarantees the u32→u16 cast never truncates.
     let index =
