@@ -33,13 +33,9 @@
 //! both are correct, and the assertions would fail on every backend, always, for a reason that has
 //! nothing to do with the obligation under test. A backend whose only observable output is an
 //! appended log implements this by hashing the slice appended since the last call (and advancing
-//! a remembered offset past it). A framebuffer-shaped backend implements it by hashing the
-//! positions that differ from the previous call's content (and remembering the new content for
-//! next time) rather than the whole buffer. Either way, `snapshot` needs its own "since last
-//! call" bookkeeping the production backend has no other reason to carry, which is usually
-//! easiest to add via a small test-only wrapper around the real backend rather than on the
-//! backend type itself; see the `tests` module below for a worked example over
-//! [`Headless`](crate::backend::Headless).
+//! a remembered offset past it). A framebuffer-shaped backend implements it by hashing the slots
+//! that differ from the previous call's content, which is what [`SlotDelta`] is for; see the
+//! `tests` module below for a worked example over [`Headless`](crate::backend::Headless).
 //!
 //! # Coverage
 //!
@@ -96,6 +92,48 @@ pub fn fnv1a(bytes: &[u8]) -> u64 {
         hash = hash.wrapping_mul(PRIME);
     }
     hash
+}
+
+/// Per-slot "changed since last call" bookkeeping for a framebuffer-shaped [`Observable`].
+///
+/// A framebuffer-shaped backend (a `Grid`, a layer list, anything replaced rather than appended
+/// to) can't hash its slice-since-last-time the way an append-log backend can, because there is
+/// no new slice: the whole buffer is rewritten in place. `SlotDelta` remembers the previous call's
+/// per-slot digests and XORs in only the ones that changed, plus a slot-count term so a
+/// shrink-then-grow back to the same per-slot content doesn't hash identically to no change at
+/// all (that term is also what a plain `zip` of previous/current would silently drop on a resize).
+#[derive(Default)]
+pub struct SlotDelta {
+    previous: Vec<u64>,
+}
+
+impl SlotDelta {
+    /// Starts with no remembered previous call, so the first [`Self::digest`] call hashes every
+    /// slot in `current` as changed.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Hashes the slots of `current` that differ from the previous call's, salted with `salt` so
+    /// callers sharing one [`fnv1a`] namespace don't collide, and remembers `current` for next
+    /// time.
+    ///
+    /// XOR composition is order-independent for unique slot indices, so it does not matter that
+    /// the per-slot terms below are accumulated in iteration order.
+    pub fn digest(&mut self, salt: &[u8], current: impl IntoIterator<Item = u64>) -> u64 {
+        let current: Vec<u64> = current.into_iter().collect();
+        let mut hash = fnv1a(salt);
+        for (index, (was, now)) in self.previous.iter().zip(current.iter()).enumerate() {
+            if was != now {
+                hash ^= fnv1a(&(index as u64).to_ne_bytes());
+                hash ^= fnv1a(&now.to_ne_bytes());
+            }
+        }
+        hash ^= fnv1a(&(current.len() as u64).to_ne_bytes());
+        self.previous = current;
+        hash
+    }
 }
 
 /// A backend that can report a digest of what changed since the last call.
@@ -407,7 +445,6 @@ pub fn assert_input_contract<B: Input, F: FnMut() -> B>(mut make: F) {
 mod tests {
     use super::*;
     use crate::backend::Headless;
-    use alloc::string::String;
 
     #[test]
     fn fnv1a_is_deterministic_and_input_sensitive() {
@@ -418,19 +455,26 @@ mod tests {
 
     /// Wraps [`Headless`](crate::backend::Headless) so [`Observable::snapshot`] hashes only what changed since the
     /// previous call, per the module docs. `Headless` is framebuffer-shaped (a `Grid`, replaced
-    /// rather than appended to), so "changed" means "differs from the view remembered from the
-    /// previous call": this remembers [`Headless::format_view`](crate::backend::Headless::format_view)'s output and hashes only the
-    /// `(index, char)` pairs that differ from it, rather than the whole view every time.
+    /// rather than appended to), so this hashes [`Headless::format_view`](crate::backend::Headless::format_view)'s output through
+    /// [`SlotDelta`], one slot per `char`.
     struct HeadlessObserver {
         backend: Headless,
-        previous: String,
+        delta: SlotDelta,
     }
 
     impl HeadlessObserver {
         fn new(width: u16, height: u16) -> Self {
             let backend = Headless::new(width, height);
-            let previous = backend.format_view();
-            Self { backend, previous }
+            let mut delta = SlotDelta::new();
+            // Seed `delta` with the blank initial view so the first real `snapshot()` call
+            // diffs against "what a freshly made backend looks like", not against nothing (an
+            // empty `previous` would make every slot of the first draw look changed, even the
+            // ones the caller never touched).
+            delta.digest(
+                b"headless",
+                backend.format_view().chars().map(|c| fnv1a(&(c as u32).to_ne_bytes())),
+            );
+            Self { backend, delta }
         }
     }
 
@@ -473,16 +517,13 @@ mod tests {
 
     impl Observable for HeadlessObserver {
         fn snapshot(&mut self) -> u64 {
-            let current = self.backend.format_view();
-            let mut hash = fnv1a(b"headless-diff");
-            for (index, (was, now)) in self.previous.chars().zip(current.chars()).enumerate() {
-                if was != now {
-                    hash ^= fnv1a(&(index as u64).to_ne_bytes());
-                    hash ^= fnv1a(&(now as u32).to_ne_bytes());
-                }
-            }
-            self.previous = current;
-            hash
+            self.delta.digest(
+                b"headless",
+                self.backend
+                    .format_view()
+                    .chars()
+                    .map(|c| fnv1a(&(c as u32).to_ne_bytes())),
+            )
         }
     }
 
