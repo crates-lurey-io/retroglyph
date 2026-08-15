@@ -145,8 +145,8 @@ impl SpriteAlign {
         sprite_h: u32,
         span_w: u16,
         span_h: u16,
-        glyph_w: u8,
-        glyph_h: u8,
+        glyph_w: u16,
+        glyph_h: u16,
     ) -> (i16, i16) {
         let box_w = span_w as u32 * if glyph_w == 0 { 1 } else { glyph_w as u32 };
         let box_h = span_h as u32 * if glyph_h == 0 { 1 } else { glyph_h as u32 };

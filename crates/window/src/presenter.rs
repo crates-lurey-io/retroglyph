@@ -222,6 +222,7 @@ impl RecoverableError for GenericSurfaceError {
 /// ```
 /// use retroglyph_core::backend::{DrawCell, Output};
 /// use retroglyph_core::grid::Size;
+/// use retroglyph_window::geometry::CellGeometry;
 /// use retroglyph_window::presenter::{Presenter, WindowHandle};
 /// use std::sync::Arc;
 ///
@@ -263,8 +264,8 @@ impl RecoverableError for GenericSurfaceError {
 ///         Ok(())
 ///     }
 ///
-///     fn cell_size(&self) -> (u32, u32) {
-///         (8, 16)
+///     fn geometry(&self) -> CellGeometry {
+///         CellGeometry::new(8, 16, 1)
 ///     }
 /// }
 /// ```
@@ -326,7 +327,7 @@ pub trait Presenter: Output {
     /// context lost on wasm, page flip pending on DRI/KMS).
     fn present(&mut self) -> Result<(), Self::SurfaceError>;
 
-    /// Cell size in physical pixels `(width, height)`.
+    /// This presenter's cell geometry: glyph size and integer scale.
     ///
     /// Physical pixels, not logical/DPI-scaled pixels, and never auto-scaled by this crate for
     /// display DPI: see the crate-level "DPI, scale, and the resize contract" docs. A presenter
@@ -334,28 +335,21 @@ pub trait Presenter: Output {
     /// [`resize`](Output::resize) or [`scale_factor_changed`](Self::scale_factor_changed)); absent
     /// that, it stays constant for the presenter's lifetime.
     ///
+    /// Lets callers (e.g. `winit::run`'s cursor/mouse handlers) use
+    /// [`CellGeometry::pixel_to_cell`] directly instead of pairing [`cell_size`](Self::cell_size)
+    /// with the [`translate_pixel_to_cell`](crate::winit::translate::translate_pixel_to_cell) free
+    /// function.
+    #[must_use]
+    fn geometry(&self) -> CellGeometry;
+
+    /// Cell size in physical pixels `(width, height)`: [`geometry`](Self::geometry)'s
+    /// [`cell_size`](CellGeometry::cell_size).
+    ///
     /// `(u32, u32)` rather than [`Size`](retroglyph_core::grid::Size) because grid coordinates
     /// are `u16` but pixel arithmetic uses `u32` (winit `PhysicalSize`).
     #[must_use]
-    fn cell_size(&self) -> (u32, u32);
-
-    /// This presenter's cell geometry, as a [`CellGeometry`] rather than the raw
-    /// `(width, height)` pair [`cell_size`](Self::cell_size) returns.
-    ///
-    /// Lets callers (e.g. `winit::run`'s cursor/mouse handlers) use
-    /// [`CellGeometry::pixel_to_cell`] directly instead of pairing a raw `cell_size()` with the
-    /// [`translate_pixel_to_cell`](crate::winit::translate::translate_pixel_to_cell) free
-    /// function. The default implementation derives a geometry from [`cell_size`](Self::cell_size)
-    /// at `scale` 1, clamping each dimension to `u8::MAX`: exact for presenters whose cell size
-    /// fits in a `u8` (true of every glyph/tile size in practice), lossy only past that, which
-    /// only affects [`pixel_to_cell`](CellGeometry::pixel_to_cell) precision for callers that
-    /// don't override this method (test doubles, not `retroglyph-software`/`retroglyph-gl`, both
-    /// of which override it to return their real internal geometry).
-    #[must_use]
-    fn geometry(&self) -> CellGeometry {
-        let (cell_w, cell_h) = self.cell_size();
-        #[allow(clippy::cast_possible_truncation)]
-        CellGeometry::new(cell_w.min(255) as u8, cell_h.min(255) as u8, 1)
+    fn cell_size(&self) -> (u32, u32) {
+        self.geometry().cell_size()
     }
 }
 

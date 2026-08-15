@@ -51,8 +51,8 @@ impl Sprite {
         &self,
         span_w: u16,
         span_h: u16,
-        glyph_w: u8,
-        glyph_h: u8,
+        glyph_w: u16,
+        glyph_h: u16,
     ) -> (i16, i16) {
         self.align.offset_in_span(
             self.pixel_width,

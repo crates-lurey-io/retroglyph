@@ -17,6 +17,7 @@ use retroglyph_core::backend::{Input, Output};
 use retroglyph_core::event::{Event, KeyModifiers, MouseEvent, MouseEventKind};
 use retroglyph_core::grid::{Pos, Size};
 use retroglyph_window::backend::WindowBackend;
+use retroglyph_window::geometry::CellGeometry;
 use retroglyph_window::presenter::{Presenter, WindowHandle};
 use std::sync::Arc;
 use std::time::Duration;
@@ -70,8 +71,8 @@ impl Presenter for NullPresenter {
         Ok(())
     }
 
-    fn cell_size(&self) -> (u32, u32) {
-        (8, 16)
+    fn geometry(&self) -> CellGeometry {
+        CellGeometry::new(8, 16, 1)
     }
 }
 
