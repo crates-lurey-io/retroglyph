@@ -178,6 +178,19 @@ impl<T: Copy + Default, const N: usize> core::ops::IndexMut<usize> for SmallBuf<
     }
 }
 
+/// A flexible pane (`Fill`/`Min`/`Max`) tracked by `solve` while distributing the remainder.
+///
+/// `pane` is the constraint's index in the original slice, so records can be freely reordered
+/// (e.g. sorted by `frac`) without losing track of which pane each record belongs to.
+#[derive(Clone, Copy, Default)]
+struct Flexible {
+    pane: usize,
+    weight: u16,
+    cap: Option<u16>,
+    share: u32,
+    frac: u32,
+}
+
 /// Compute the length of each pane along an axis of `total` cells.
 fn solve(total: u16, constraints: &[Constraint]) -> SmallBuf<u16, STACK_CAP> {
     let mut sizes: SmallBuf<u16, STACK_CAP> = SmallBuf::with_capacity(constraints.len());
@@ -199,55 +212,62 @@ fn solve(total: u16, constraints: &[Constraint]) -> SmallBuf<u16, STACK_CAP> {
     // share on top of the floor already reserved above; Max panes start at zero and
     // are capped at their declared value (any share past the cap is simply left
     // unclaimed, not redistributed).
-    let mut flexible: SmallBuf<(usize, u16, Option<u16>), STACK_CAP> =
-        SmallBuf::with_capacity(constraints.len());
+    let mut flexible: SmallBuf<Flexible, STACK_CAP> = SmallBuf::with_capacity(constraints.len());
     for (i, c) in constraints.iter().enumerate() {
         match c {
-            Constraint::Fill(weight) => flexible.push((i, *weight, None)),
-            Constraint::Min(_) => flexible.push((i, 1, None)),
-            Constraint::Max(cap) => flexible.push((i, 1, Some(*cap))),
+            Constraint::Fill(weight) => flexible.push(Flexible {
+                pane: i,
+                weight: *weight,
+                cap: None,
+                ..Flexible::default()
+            }),
+            Constraint::Min(_) => flexible.push(Flexible {
+                pane: i,
+                weight: 1,
+                cap: None,
+                ..Flexible::default()
+            }),
+            Constraint::Max(cap) => flexible.push(Flexible {
+                pane: i,
+                weight: 1,
+                cap: Some(*cap),
+                ..Flexible::default()
+            }),
             Constraint::Fixed(_) | Constraint::Percent(_) | Constraint::Ratio(_, _) => {}
         }
     }
     if !flexible.is_empty() {
         let remainder = total.saturating_sub(used);
-        let total_weight: u32 = flexible.iter().map(|&(_, w, _)| u32::from(w)).sum();
+        let total_weight: u32 = flexible.iter().map(|f| u32::from(f.weight)).sum();
         if let Some(total_weight) = core::num::NonZeroU32::new(total_weight) {
             // Largest-remainder method: give every pane the integer floor of its
             // proportional share, then hand out the leftover cells one at a time to
             // the panes with the largest fractional remainder (ties -> earlier pane
             // first). For equal weights every fraction ties, so this reduces to the
             // original round-robin-from-the-front behavior exactly.
-            let mut shares: SmallBuf<u32, STACK_CAP> = SmallBuf::with_capacity(flexible.len());
-            let mut fracs: SmallBuf<u32, STACK_CAP> = SmallBuf::with_capacity(flexible.len());
             let mut floor_sum: u32 = 0;
-            for &(_, weight, _) in flexible.iter() {
-                let product = u32::from(remainder) * u32::from(weight);
-                let share = product / total_weight;
-                fracs.push(product % total_weight);
-                shares.push(share);
-                floor_sum += share;
+            for f in flexible.iter_mut() {
+                let product = u32::from(remainder) * u32::from(f.weight);
+                f.share = product / total_weight;
+                f.frac = product % total_weight;
+                floor_sum += f.share;
             }
             let mut leftover = u32::from(remainder).saturating_sub(floor_sum);
-            let mut order: SmallBuf<usize, STACK_CAP> = SmallBuf::with_capacity(flexible.len());
-            for idx in 0..flexible.len() {
-                order.push(idx);
-            }
-            order.sort_by(|&a, &b| fracs[b].cmp(&fracs[a]).then(a.cmp(&b)));
-            for &idx in order.iter() {
+            flexible.sort_unstable_by(|a, b| b.frac.cmp(&a.frac).then(a.pane.cmp(&b.pane)));
+            for f in flexible.iter_mut() {
                 if leftover == 0 {
                     break;
                 }
-                shares[idx] += 1;
+                f.share += 1;
                 leftover -= 1;
             }
-            for (k, &(i, _, cap)) in flexible.iter().enumerate() {
-                // `shares[k]` is an integer share of `remainder` (a `u16` widened to `u32`), so it
+            for f in flexible.iter() {
+                // `f.share` is an integer share of `remainder` (a `u16` widened to `u32`), so it
                 // can never exceed `remainder` itself and fits back in a `u16`.
                 #[allow(clippy::cast_possible_truncation)]
-                let share = shares[k] as u16;
-                let grown = sizes[i].saturating_add(share);
-                sizes[i] = cap.map_or(grown, |max| grown.min(max));
+                let share = f.share as u16;
+                let grown = sizes[f.pane].saturating_add(share);
+                sizes[f.pane] = f.cap.map_or(grown, |max| grown.min(max));
             }
         }
     }
@@ -1047,6 +1067,23 @@ mod tests {
         let panes = split_h(area, &[Constraint::Fill(0), Constraint::Fill(0)]);
         let widths: Vec<u16> = panes.iter().map(Rect::width).collect();
         assert_eq!(widths, vec![0, 0]);
+    }
+
+    #[test]
+    fn tied_fractional_shares_go_to_the_earlier_pane_first() {
+        let area = Rect::new(0, 0, 20, 1);
+        // Fill(1), Min(1), Fill(1): weight pool is 1+1+1=3, remainder is 20.
+        // Ideal shares are 20/3 ~= 6.67 each, so all three fracs tie at 2/3;
+        // floors are 6, 6, 6 (sum 18), leaving 2 leftover cells that must go
+        // to the two EARLIEST panes in `pane` order (index 0 then 1), not to
+        // whichever pane a hash/sort happened to place first.
+        let panes = split_h(
+            area,
+            &[Constraint::Fill(1), Constraint::Min(1), Constraint::Fill(1)],
+        );
+        let widths: Vec<u16> = panes.iter().map(Rect::width).collect();
+        assert_eq!(widths, vec![7, 7, 6]);
+        assert_eq!(widths.iter().sum::<u16>(), 20);
     }
 
     #[test]
