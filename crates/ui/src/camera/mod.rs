@@ -77,10 +77,35 @@ mod transform;
 /// A rectangular viewport onto a larger world, with world/screen conversions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Camera {
+    requested: Rect,
+    fit: ViewportFit,
     viewport: Rect,
     world: Size,
     origin: Pos,
     zoom: Size,
+}
+
+/// Which shape [`Camera::viewport`](Camera::viewport) is derived from `requested` with: set by
+/// [`set_viewport`](Camera::set_viewport) and [`set_viewport_fitted`](Camera::set_viewport_fitted)
+/// respectively, and re-applied by [`set_world`](Camera::set_world) so a world change re-derives
+/// `viewport` instead of leaving it stale against the previous world.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ViewportFit {
+    /// `viewport` is `requested` unchanged.
+    Exact,
+    /// `viewport` is `requested` shrunk to the world's size on any axis where the world is
+    /// smaller, and centered within `requested`.
+    Letterbox,
+}
+
+/// Shrinks `rect` to `world`'s size on any axis where `world` is smaller, and centers the shrunk
+/// rect within `rect`. Identity when `world` is at least as large as `rect` on both axes.
+fn letterbox(rect: Rect, world: Size) -> Rect {
+    let width = rect.width().min(world.width());
+    let height = rect.height().min(world.height());
+    let x = rect.left().saturating_add((rect.width() - width) / 2);
+    let y = rect.top().saturating_add((rect.height() - height) / 2);
+    Rect::new(x, y, width, height)
 }
 
 impl Camera {
@@ -90,6 +115,8 @@ impl Camera {
     #[must_use]
     pub const fn new(viewport: Rect, world: Size) -> Self {
         Self {
+            requested: viewport,
+            fit: ViewportFit::Exact,
             viewport,
             world,
             origin: Pos::new(0, 0),
@@ -159,17 +186,19 @@ impl Camera {
     /// Never panics: a `viewport` larger than `world` re-clamps the origin to `(0, 0)` via
     /// [`saturating_sub`](u16::saturating_sub) rather than underflowing.
     pub fn set_viewport(&mut self, viewport: Rect) {
-        self.viewport = viewport;
-        self.set_origin(self.origin);
+        self.requested = viewport;
+        self.fit = ViewportFit::Exact;
+        self.apply_viewport();
     }
 
-    /// Replace the world dimensions (for example when a level changes), keeping the viewport
-    /// unchanged and re-clamping the origin so it stays in bounds.
+    /// Replace the world dimensions (for example when a level changes), keeping the requested
+    /// viewport rect unchanged and re-deriving [`viewport`](Self::viewport) and `origin` against
+    /// the new world.
     ///
     /// If the camera was last positioned with
-    /// [`set_viewport_fitted`](Self::set_viewport_fitted), this does not re-run that letterboxing
-    /// against the new world; call `set_viewport_fitted` again afterward if the new world may be
-    /// smaller than the viewport on either axis.
+    /// [`set_viewport_fitted`](Self::set_viewport_fitted), this re-runs that letterboxing against
+    /// the new world too, so [`viewport`](Self::viewport) stays correct without calling
+    /// `set_viewport_fitted` again.
     ///
     /// Never panics: the re-clamp uses the same saturating arithmetic as
     /// [`set_viewport`](Self::set_viewport).
@@ -191,9 +220,20 @@ impl Camera {
     /// ```
     pub fn set_world(&mut self, world: Size) {
         self.world = world;
-        self.origin = Rect::from_tl_size(self.origin, self.viewport.size())
-            .clamp_within(world.to_rect())
-            .top_left();
+        self.apply_viewport();
+    }
+
+    /// Re-derives `viewport` from `requested` and `fit`, then re-clamps `origin` against it.
+    /// The single funnel [`set_viewport`](Self::set_viewport),
+    /// [`set_viewport_fitted`](Self::set_viewport_fitted), and [`set_world`](Self::set_world) all
+    /// go through, so `viewport` is always derived fresh rather than a stale snapshot from
+    /// whichever of those ran last.
+    fn apply_viewport(&mut self) {
+        self.viewport = match self.fit {
+            ViewportFit::Exact => self.requested,
+            ViewportFit::Letterbox => letterbox(self.requested, self.world),
+        };
+        self.set_origin(self.origin);
     }
 
     /// Replace the viewport like [`set_viewport`](Self::set_viewport), but shrink it to the
@@ -235,15 +275,9 @@ impl Camera {
     /// assert_eq!(cam.viewport(), Rect::new(0, 0, 10, 10));
     /// ```
     pub fn set_viewport_fitted(&mut self, viewport: Rect) {
-        let width = viewport.width().min(self.world.width());
-        let height = viewport.height().min(self.world.height());
-        let x = viewport
-            .left()
-            .saturating_add((viewport.width() - width) / 2);
-        let y = viewport
-            .top()
-            .saturating_add((viewport.height() - height) / 2);
-        self.set_viewport(Rect::new(x, y, width, height));
+        self.requested = viewport;
+        self.fit = ViewportFit::Letterbox;
+        self.apply_viewport();
     }
 
     /// Center the view on `target` (world coords), clamped to the world edges so
@@ -429,6 +463,18 @@ mod tests {
         c.set_viewport_fitted(Rect::new(0, 0, 9, 9));
         // 9 - 4 = 5 of slack, split 2/3: two columns/rows left and top, three right and bottom.
         assert_eq!(c.viewport(), Rect::new(2, 2, 4, 4));
+    }
+
+    #[test]
+    fn set_world_re_derives_a_fitted_viewport_instead_of_leaving_it_stale() {
+        let mut c = Camera::new(Rect::new(2, 2, 20, 20), Size::new(5, 5));
+        c.set_viewport_fitted(Rect::new(2, 2, 20, 20));
+        assert_eq!(c.viewport(), Rect::new(9, 9, 5, 5));
+
+        // A larger world no longer needs letterboxing: `viewport` re-expands to the originally
+        // requested rect instead of staying pinned to the previous world's letterboxed rect.
+        c.set_world(Size::new(100, 100));
+        assert_eq!(c.viewport(), Rect::new(2, 2, 20, 20));
     }
 
     #[test]
