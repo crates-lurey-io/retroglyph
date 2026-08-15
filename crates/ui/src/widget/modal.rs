@@ -2,6 +2,7 @@
 use retroglyph_core::color::{Color, Style};
 use retroglyph_core::grid::Rect;
 
+use super::panel::PanelChrome;
 use super::{BorderType, Panel, Widget};
 use crate::Surface;
 use crate::align::Align;
@@ -54,12 +55,7 @@ use crate::theme::Theme;
 pub struct Modal<'a> {
     width: u16,
     height: u16,
-    title: Option<&'a str>,
-    title_align: Align,
-    border_style: Style,
-    fill_style: Style,
-    border_type: BorderType,
-    padding: Sides,
+    chrome: PanelChrome<'a>,
 }
 
 impl<'a> Modal<'a> {
@@ -70,12 +66,7 @@ impl<'a> Modal<'a> {
         Self {
             width,
             height,
-            title: None,
-            title_align: Align::Center,
-            border_style: Style::new(),
-            fill_style: Style::new(),
-            border_type: BorderType::default(),
-            padding: Sides::ZERO,
+            chrome: PanelChrome::default().title_align(Align::Center),
         }
         .theme(Theme::DARK)
     }
@@ -83,7 +74,7 @@ impl<'a> Modal<'a> {
     /// Set the modal's title.
     #[must_use]
     pub const fn title(mut self, title: &'a str) -> Self {
-        self.title = Some(title);
+        self.chrome = self.chrome.title(title);
         self
     }
 
@@ -91,21 +82,21 @@ impl<'a> Modal<'a> {
     /// [`Align::Center`], the same as [`Panel::title_align`].
     #[must_use]
     pub const fn title_align(mut self, align: Align) -> Self {
-        self.title_align = align;
+        self.chrome = self.chrome.title_align(align);
         self
     }
 
     /// Set the box outline and title's style.
     #[must_use]
     pub const fn border_style(mut self, style: Style) -> Self {
-        self.border_style = style;
+        self.chrome = self.chrome.border_style(style);
         self
     }
 
     /// Set the interior background's style.
     #[must_use]
     pub const fn fill_style(mut self, style: Style) -> Self {
-        self.fill_style = style;
+        self.chrome = self.chrome.fill_style(style);
         self
     }
 
@@ -113,7 +104,7 @@ impl<'a> Modal<'a> {
     /// [`BorderType::Plain`], the same as [`Panel::border_type`].
     #[must_use]
     pub const fn border_type(mut self, border_type: BorderType) -> Self {
-        self.border_type = border_type;
+        self.chrome = self.chrome.border_type(border_type);
         self
     }
 
@@ -121,7 +112,7 @@ impl<'a> Modal<'a> {
     /// [`Panel::padding`] (a [`Modal`] is just a centered [`Panel`]). Defaults to [`Sides::ZERO`].
     #[must_use]
     pub const fn padding(mut self, padding: Sides) -> Self {
-        self.padding = padding;
+        self.chrome = self.chrome.padding(padding);
         self
     }
 
@@ -132,8 +123,9 @@ impl<'a> Modal<'a> {
     /// Call before any manual [`Modal::border_style`]/[`Modal::fill_style`] override you want to
     /// keep: whichever call comes last wins.
     #[must_use]
-    pub fn theme(self, theme: Theme) -> Self {
-        self.theme_on(theme, theme.panel_bg)
+    pub fn theme(mut self, theme: Theme) -> Self {
+        self.chrome = self.chrome.theme(theme);
+        self
     }
 
     /// Same as [`Modal::theme`], but `fill_style` is drawn on `bg` instead of `theme.panel_bg` --
@@ -142,8 +134,7 @@ impl<'a> Modal<'a> {
     /// unaffected by `bg`). [`Modal::theme`] is exactly `theme_on(theme, theme.panel_bg)`.
     #[must_use]
     pub fn theme_on(mut self, theme: Theme, bg: Color) -> Self {
-        self.border_style = Style::new().fg(theme.border).bg(theme.title_bg);
-        self.fill_style = Style::new().bg(bg);
+        self.chrome = self.chrome.theme_on(theme, bg);
         self
     }
 
@@ -151,15 +142,7 @@ impl<'a> Modal<'a> {
     /// [`Rect`].
     pub fn render(self, screen: Rect, surface: &mut Surface<'_>) -> Rect {
         let rect = centered_rect(screen, self.width, self.height);
-        let mut panel = Panel::new()
-            .border_style(self.border_style)
-            .fill_style(self.fill_style)
-            .title_align(self.title_align)
-            .border_type(self.border_type)
-            .padding(self.padding);
-        if let Some(title) = self.title {
-            panel = panel.title(title);
-        }
+        let panel = Panel::from_chrome(self.chrome);
         panel.render(&mut surface.scope(rect));
         panel.inner(rect)
     }
@@ -170,6 +153,15 @@ mod tests {
     use retroglyph_core::grid::{Grid, Pos};
 
     use super::*;
+
+    /// PanelChrome-sharing with `Panel` (retroglyph#1385) must not cost `Modal` its `Copy`: it's
+    /// the reason `Modal` embeds `PanelChrome` by value instead of a `Panel` (not `Copy`, owns a
+    /// `Vec` of titles).
+    #[test]
+    fn modal_is_copy() {
+        const fn assert_copy<T: Copy>() {}
+        assert_copy::<Modal<'_>>();
+    }
 
     #[test]
     fn centers_the_box_and_returns_the_inner_content_rect() {
