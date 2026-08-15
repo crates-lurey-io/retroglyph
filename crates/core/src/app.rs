@@ -155,13 +155,35 @@ where
     run_on_with(term, app, RunOptions::default())
 }
 
+/// Whether [`Flow::Idle`](crate::app::Flow::Idle) blocks the loop on input or keeps looping without presenting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Idle {
+    /// Block on input (via [`Terminal::wait_for_input`](crate::terminal::Terminal::wait_for_input))
+    /// instead of calling `update` again immediately. `wake` is the longest an idle loop blocks
+    /// before calling `update` again anyway, even with no input: `None` blocks indefinitely,
+    /// right for apps with nothing to redraw until input arrives; `Some(d)` additionally wakes
+    /// the loop every `d`, for apps that need a periodic idle redraw (a blinking cursor, a
+    /// clock) without paying full frame-rate cost.
+    Block {
+        /// The longest an idle loop blocks before calling `update` again, or `None` to block
+        /// indefinitely.
+        wake: Option<Duration>,
+    },
+    /// Keep `Flow::Idle` non-blocking: skip `present`, keep looping at whatever rate
+    /// [`RunOptions::target_fps`](crate::app::RunOptions::target_fps) allows. Right for apps that animate from
+    /// [`Frame::delta`](crate::app::Frame::delta) and only return `Idle` between animation-driven
+    /// `Continue` frames, where blocking would freeze the animation until the next stray input
+    /// event. See [`RunOptions::animated`](crate::app::RunOptions::animated) for that shape.
+    Spin,
+}
+
 /// Options controlling [`run_on_with`](crate::app::run_on_with)'s pacing and idle behavior.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct RunOptions {
     target_fps: Option<u32>,
-    event_driven: bool,
-    idle_wake: Option<Duration>,
+    idle: Idle,
 }
 
 impl RunOptions {
@@ -180,8 +202,7 @@ impl RunOptions {
     pub const fn animated(target_fps: u32) -> Self {
         Self {
             target_fps: Some(target_fps),
-            event_driven: false,
-            idle_wake: None,
+            idle: Idle::Spin,
         }
     }
 
@@ -214,32 +235,50 @@ impl RunOptions {
     /// [`RunOptions::animated`](crate::app::RunOptions::animated) for that shape.
     #[must_use]
     pub const fn event_driven(mut self, event_driven: bool) -> Self {
-        self.event_driven = event_driven;
+        self.idle = if event_driven {
+            Idle::Block { wake: None }
+        } else {
+            Idle::Spin
+        };
         self
     }
 
     /// Returns whether [`Flow::Idle`](crate::app::Flow::Idle) blocks on input rather than looping immediately.
     #[must_use]
     pub const fn is_event_driven(&self) -> bool {
-        self.event_driven
+        matches!(self.idle, Idle::Block { .. })
     }
 
     /// When [`is_event_driven`](Self::is_event_driven) is `true`, the longest an idle loop blocks
     /// before calling `update` again anyway, even with no input. `None` (the default) blocks
     /// indefinitely: right for apps with nothing to redraw until input arrives. `Some(d)`
     /// additionally wakes the loop every `d`, for apps that need a periodic idle redraw (a
-    /// blinking cursor, a clock) without paying full frame-rate cost. Ignored when
-    /// [`is_event_driven`](Self::is_event_driven) is `false`.
+    /// blinking cursor, a clock) without paying full frame-rate cost. Builder calls apply in
+    /// order: this always switches [`idle`](Self::idle) to [`Idle::Block`] with `idle_wake`,
+    /// even after a preceding [`event_driven(false)`](Self::event_driven) or
+    /// [`animated`](Self::animated); a later `event_driven(false)` still switches back to
+    /// [`Idle::Spin`] and drops the wake interval.
     #[must_use]
     pub const fn with_idle_wake(mut self, idle_wake: Duration) -> Self {
-        self.idle_wake = Some(idle_wake);
+        self.idle = Idle::Block {
+            wake: Some(idle_wake),
+        };
         self
     }
 
     /// Returns the configured [`idle_wake`](Self::with_idle_wake) interval, if any.
     #[must_use]
     pub const fn idle_wake(&self) -> Option<Duration> {
-        self.idle_wake
+        match self.idle {
+            Idle::Block { wake } => wake,
+            Idle::Spin => None,
+        }
+    }
+
+    /// Returns the configured [`Idle`] behavior.
+    #[must_use]
+    pub const fn idle(&self) -> Idle {
+        self.idle
     }
 }
 
@@ -248,8 +287,7 @@ impl Default for RunOptions {
     fn default() -> Self {
         Self {
             target_fps: None,
-            event_driven: true,
-            idle_wake: None,
+            idle: Idle::Block { wake: None },
         }
     }
 }
@@ -326,7 +364,9 @@ where
         }
         // `Flow` is `#[non_exhaustive]`; treat any variant other than `Exit`/`Idle` the same as
         // `Continue` (keep looping and presenting) rather than exiting on an unknown future value.
-        if flow == Flow::Idle && options.is_event_driven() {
+        if flow == Flow::Idle
+            && let Idle::Block { wake } = options.idle()
+        {
             // The heart of the fix for retroglyph#603: block here instead of immediately
             // re-entering the loop, so an idle frame costs approximately nothing rather than
             // spinning `update` as fast as the host allows. `wait_for_input` buffers any event it
@@ -334,7 +374,7 @@ where
             // next iteration; this call only answers "did something happen", it doesn't steal
             // the event. A `target_fps` clock (if set) still gets its top-of-loop sleep on the
             // next iteration; it isn't bypassed by waking early.
-            term.wait_for_input(options.idle_wake().unwrap_or(Duration::MAX));
+            term.wait_for_input(wake.unwrap_or(Duration::MAX));
         }
     }
 }
@@ -710,24 +750,42 @@ mod tests {
     fn run_options_animated_sets_fields() {
         let animated = RunOptions::animated(30);
         assert_eq!(animated.target_fps(), Some(30));
+        assert_eq!(animated.idle(), Idle::Spin);
         assert!(!animated.is_event_driven());
         assert_eq!(animated.idle_wake(), None);
 
         let default = RunOptions::default();
         assert_eq!(default.target_fps(), None);
+        assert_eq!(default.idle(), Idle::Block { wake: None });
         assert!(default.is_event_driven());
         assert_eq!(default.idle_wake(), None);
     }
 
     #[test]
     fn run_options_setters_override_defaults() {
+        // `with_idle_wake` after `event_driven(false)` switches back to `Idle::Block`: builder
+        // calls apply in order, so this is no longer the dead combination it used to be.
         let options = RunOptions::default()
             .with_target_fps(60)
             .event_driven(false)
             .with_idle_wake(Duration::from_millis(250));
         assert_eq!(options.target_fps(), Some(60));
-        assert!(!options.is_event_driven());
+        assert_eq!(
+            options.idle(),
+            Idle::Block {
+                wake: Some(Duration::from_millis(250))
+            }
+        );
+        assert!(options.is_event_driven());
         assert_eq!(options.idle_wake(), Some(Duration::from_millis(250)));
+    }
+
+    #[test]
+    fn run_options_event_driven_false_switches_to_spin() {
+        let options = RunOptions::default().event_driven(false);
+        assert_eq!(options.idle(), Idle::Spin);
+        assert!(!options.is_event_driven());
+        assert_eq!(options.idle_wake(), None);
     }
 
     /// An app that returns `Idle` for its first frame, then `Exit`. The queued key is only
@@ -760,8 +818,7 @@ mod tests {
         let app = IdleThenExit { frames: 0 };
         let options = RunOptions {
             target_fps: None,
-            event_driven: false,
-            idle_wake: None,
+            idle: Idle::Spin,
         };
         run_on_with(term, app, options).expect("run_on_with");
     }
