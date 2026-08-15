@@ -2935,7 +2935,7 @@ mod font_chain_tests {
     static QUADRANT_DATA: [u8; 16] = [
         0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0, 0, 0, 0, 0, 0, 0, 0,
     ];
-    const QUADRANT_CHARSET: [(char, u8); 1] = [('▘', 0)];
+    const QUADRANT_CHARSET: [char; 1] = ['▘'];
     const QUADRANT_FONT: BitmapFont =
         BitmapFont::with_charset(&QUADRANT_DATA, 8, 16, 1, &QUADRANT_CHARSET);
     static FALLBACKS: [BitmapFont; 1] = [QUADRANT_FONT];

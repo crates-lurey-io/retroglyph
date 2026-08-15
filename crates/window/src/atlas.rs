@@ -363,7 +363,7 @@ mod tests {
         static PRIMARY_DATA: [u8; 256 * 2] = [0; 256 * 2];
         const PRIMARY: BitmapFont = BitmapFont::new(&PRIMARY_DATA, 8, 2, 256);
         static FALLBACK_DATA: [u8; 2] = [0xFF, 0x00];
-        const CHARSET: [(char, u8); 1] = [('▘', 0)];
+        const CHARSET: [char; 1] = ['▘'];
         static FALLBACKS: [BitmapFont; 1] =
             [BitmapFont::with_charset(&FALLBACK_DATA, 8, 2, 1, &CHARSET)];
 
@@ -395,7 +395,7 @@ mod tests {
         const PRIMARY: BitmapFont = BitmapFont::new(&PRIMARY_DATA, 8, 16, 256);
 
         static QUADRANT_DATA: [u8; 2 * 16] = [0; 2 * 16];
-        const CHARSET: [(char, u8); 2] = [('▘', 0), ('▝', 1)];
+        const CHARSET: [char; 2] = ['▘', '▝'];
         static FALLBACKS: [BitmapFont; 1] =
             [BitmapFont::with_charset(&QUADRANT_DATA, 8, 16, 2, &CHARSET)];
 

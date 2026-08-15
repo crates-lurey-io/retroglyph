@@ -169,7 +169,7 @@ impl WgpuBackendBuilder {
     ///
     /// // A fallback font declaring the quadrant glyphs CP437 has no mapping for.
     /// static QUADRANTS: [u8; 3 * 16] = [0; 3 * 16];
-    /// const CHARSET: [(char, u8); 3] = [('▘', 0), ('▝', 1), ('▖', 2)];
+    /// const CHARSET: [char; 3] = ['▘', '▝', '▖'];
     /// static FALLBACKS: [BitmapFont; 1] =
     ///     [BitmapFont::with_charset(&QUADRANTS, 8, 16, 3, &CHARSET)];
     ///
@@ -370,7 +370,7 @@ mod tests {
 
         // A fallback whose glyphs are 8x8, against an 8x16 primary: a grid has one cell size.
         static SMALL: [u8; 8] = [0; 8];
-        const CHARSET: [(char, u8); 1] = [('▘', 0)];
+        const CHARSET: [char; 1] = ['▘'];
         static FALLBACKS: [BitmapFont; 1] = [BitmapFont::with_charset(&SMALL, 8, 8, 1, &CHARSET)];
 
         let result = WgpuBackendBuilder::new()

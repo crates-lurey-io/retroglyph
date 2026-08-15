@@ -277,7 +277,7 @@ impl SoftwareBackendBuilder {
     ///
     /// // A fallback font declaring the quadrant glyphs CP437 has no mapping for.
     /// static QUADRANTS: [u8; 3 * 16] = [0; 3 * 16];
-    /// const CHARSET: [(char, u8); 3] = [('▘', 0), ('▝', 1), ('▖', 2)];
+    /// const CHARSET: [char; 3] = ['▘', '▝', '▖'];
     /// static FALLBACKS: [BitmapFont; 1] =
     ///     [BitmapFont::with_charset(&QUADRANTS, 8, 16, 3, &CHARSET)];
     ///
