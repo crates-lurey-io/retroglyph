@@ -381,7 +381,10 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
         // `handle_event`/`interact` calls can move focus: see the field comment on `prev_focused`.
         self.prev_focused = self.focus.focused();
         self.resolved = self.pointer;
-        self.resolved_hover = self.resolved.pos().and_then(|pos| self.hits.topmost_at(pos));
+        self.resolved_hover = self
+            .resolved
+            .pos()
+            .and_then(|pos| self.hits.topmost_at(pos));
 
         if self.resolved.pressed(MouseButton::Left) {
             self.active = self.resolved_hover;
@@ -615,7 +618,10 @@ impl<Id: Copy + PartialEq> Interaction<Id> {
         let scrollable_here = !disabled
             && sense.wants_pointer()
             && sense.contains(Sense::SCROLL)
-            && self.resolved.pos().is_some_and(|pos| rect.contains_pos(pos));
+            && self
+                .resolved
+                .pos()
+                .is_some_and(|pos| rect.contains_pos(pos));
 
         // The secondary button gets a narrower resolution than the primary
         // one: no drag-threshold suppression (secondary-button drags aren't
