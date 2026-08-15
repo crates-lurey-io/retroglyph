@@ -757,7 +757,11 @@ pub mod wasm {
     /// Runs `f` against the [`TerminalWasm`] identified by `handle`, or logs `"{op}: unknown
     /// handle {handle}"` and returns `None` if `handle` doesn't (or no longer) identify a live
     /// instance. `op` is the caller's own function name, for the warning.
-    fn with_terminal<R>(handle: u32, op: &str, f: impl FnOnce(&mut TerminalWasm) -> R) -> Option<R> {
+    fn with_terminal<R>(
+        handle: u32,
+        op: &str,
+        f: impl FnOnce(&mut TerminalWasm) -> R,
+    ) -> Option<R> {
         INSTANCES.with_borrow_mut(|instances| {
             instances.get_mut(&handle).map_or_else(
                 || {
@@ -888,7 +892,12 @@ pub mod wasm {
     #[wasm_bindgen]
     #[must_use]
     pub fn wasm_terminal_take_output(handle: u32) -> String {
-        with_terminal(handle, "wasm_terminal_take_output", TerminalWasm::take_output).unwrap_or_default()
+        with_terminal(
+            handle,
+            "wasm_terminal_take_output",
+            TerminalWasm::take_output,
+        )
+        .unwrap_or_default()
     }
 }
 
