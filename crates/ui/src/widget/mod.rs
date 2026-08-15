@@ -49,6 +49,7 @@ mod progress_bar;
 mod scrollbar;
 mod sparkline;
 mod stat_bar;
+mod strip;
 mod table;
 mod tabs;
 mod text;

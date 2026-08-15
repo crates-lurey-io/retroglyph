@@ -1,11 +1,9 @@
 //! [`MenuBar`]: a horizontal row of labels, each anchoring a [`Menu`] popup.
-use alloc::vec::Vec;
-
 use retroglyph_core::color::Style;
 use retroglyph_core::event::{Event, KeyCode};
 use retroglyph_core::grid::{Pos, Rect, Size};
-use retroglyph_core::text::truncate_measured;
 
+use super::strip::Strip;
 use super::{Menu, MenuRow};
 use crate::Surface;
 use crate::align::Align;
@@ -151,31 +149,6 @@ impl<'a> MenuBar<'a> {
 }
 
 impl MenuBar<'_> {
-    /// Each drawn label's `(index, start_x, text_width)`, left to right, stopping once a title
-    /// would start past `area`'s right edge: the same layout [`draw`](Self::draw) paints and
-    /// [`label_at`](Self::label_at) hit-tests against. `x` values are absolute grid coordinates,
-    /// matching `area`'s own space (the same space [`Response::pointer_pos`](crate::interact::Response::pointer_pos)
-    /// reports in), the same convention [`Tabs::tab_columns`](super::Tabs) uses.
-    fn label_columns(&self, area: Rect) -> Vec<(usize, u16, u16)> {
-        let mut columns = Vec::with_capacity(self.titles.len());
-        let mut x = area.left();
-        for (index, &title) in self.titles.iter().enumerate() {
-            if x >= area.right() {
-                break;
-            }
-            // x < area.right() per the break check above, so this subtraction fits a u16.
-            let avail = area.right() - x;
-            let (_text, text_width) = truncate_measured(title, avail);
-            columns.push((index, x, text_width));
-            x = x.saturating_add(text_width);
-
-            if index + 1 < self.titles.len() {
-                x = x.saturating_add(self.column_spacing);
-            }
-        }
-        columns
-    }
-
     /// Draw this bar into `surface.area()`, highlighting `open` (if any) with
     /// [`MenuBar::open_style`].
     pub fn draw(&self, surface: &mut Surface<'_>, open: Option<usize>) {
@@ -184,8 +157,12 @@ impl MenuBar<'_> {
             return;
         }
 
-        let columns = self.label_columns(area);
-        for &(index, abs_x, text_width) in &columns {
+        // `Strip::columns` reports absolute `x`, matching `area`'s own space (needed so
+        // `Strip::index_at` can compare it directly against an absolute pointer position); `put`/
+        // `print`/`fill_rect` below address this surface's own local coordinates instead, so
+        // `area.left()` is subtracted back out at the point of drawing.
+        let strip = Strip::new(self.titles, self.column_spacing);
+        for (index, abs_x, text_width) in strip.columns(area) {
             let x = abs_x - area.left();
             let title = self.titles[index];
             let style = if Some(index) == open {
@@ -208,22 +185,16 @@ impl MenuBar<'_> {
     /// The index of the label whose column range contains `pos`, or `None` if `pos` falls in the
     /// spacing between labels, past the last drawn label, or outside `area` entirely.
     fn label_at(&self, area: Rect, pos: Pos) -> Option<usize> {
-        if !area.contains_pos(pos) {
-            return None;
-        }
-        self.label_columns(area)
-            .into_iter()
-            .find(|&(_, x, width)| pos.x >= x && pos.x < x + width)
-            .map(|(index, _, _)| index)
+        Strip::new(self.titles, self.column_spacing).index_at(area, pos)
     }
 
-    /// `label`'s own rect within `area`: `label_columns`' entry for it, or `area` unchanged if
+    /// `label`'s own rect within `area`: [`Strip::columns`]' entry for it, or `area` unchanged if
     /// `label` is out of range (defensive only; every caller here gets `label` from
     /// [`MenuBarState::open_label`](crate::state::MenuBarState::open_label), which never reports
     /// an index [`MenuBar::show`] didn't just draw).
     fn label_rect(&self, area: Rect, label: usize) -> Rect {
-        self.label_columns(area)
-            .into_iter()
+        Strip::new(self.titles, self.column_spacing)
+            .columns(area)
             .find(|&(index, ..)| index == label)
             .map_or(area, |(_, x, text_width)| {
                 Rect::new(x, area.top(), text_width.max(1), area.height())
@@ -512,6 +483,34 @@ mod tests {
         show(&bar, &mut interaction, &mut grid, screen, &mut state);
 
         assert_eq!(state.open_label(), Some(0));
+    }
+
+    /// Mirrors `Tabs`' `tabs_wide_title_does_not_overlap_the_next_tab`: a wide-glyph label must
+    /// not shadow the next label's own hit-test range.
+    #[test]
+    fn click_past_a_wide_glyph_label_opens_the_next_label() {
+        const WIDE_TITLES: [&str; 2] = ["設定", "次"];
+        const NEXT_ROWS: [MenuRow<'static>; 1] = [MenuRow::Item {
+            label: "Item",
+            marker: Marker::None,
+            enabled: true,
+        }];
+        let wide_rows: [&[MenuRow<'static>]; 2] = [&NEXT_ROWS, &NEXT_ROWS];
+        let bar = MenuBar::new(&WIDE_TITLES, &wide_rows);
+        let mut interaction = Interaction::<Id>::new();
+        let screen = Rect::new(0, 0, 20, 10);
+        let mut state = MenuBarState::new();
+
+        let mut grid = Grid::new(20, 10);
+        show(&bar, &mut interaction, &mut grid, screen, &mut state);
+
+        // "設定" occupies columns [0, 4); "次" starts at column 5 (4 + column_spacing 1).
+        click(&mut interaction, Pos::new(5, 0));
+
+        let mut grid = Grid::new(20, 10);
+        show(&bar, &mut interaction, &mut grid, screen, &mut state);
+
+        assert_eq!(state.open_label(), Some(1));
     }
 
     #[test]
