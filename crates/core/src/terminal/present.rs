@@ -12,6 +12,24 @@ use crate::backend::{Backend, Compositing, Output};
 use crate::grid::{Grid, HasSize};
 use crate::surface::Surface;
 
+/// Which of `present`'s three dispatch paths a call takes, decided once up front from the same
+/// `compositing()`/`max_layer()` inputs the branches below read, rather than discovered
+/// branch-by-branch. Only [`Flattened`](Self::Flattened) leaves the flatten buffers holding this
+/// frame's content; every other variant means the buffers were bypassed and are stale for next
+/// time, which `present` derives from `path` directly instead of each branch remembering to say
+/// so (see retroglyph#960, the shipped bug from that obligation being invisible).
+#[derive(Clone, Copy)]
+enum PresentPath {
+    /// Backend composites the raw layered stream itself; `present` never touches the flatten
+    /// buffers.
+    Composited { needs_full_frame: bool },
+    /// Only layer 0 is in play; diff the real grids directly rather than flatten an exact copy.
+    SingleLayer,
+    /// Multiple layers, non-compositing backend: flatten `current` into the scratch buffers and
+    /// diff those.
+    Flattened,
+}
+
 impl<B: Backend> Terminal<B> {
     /// Draws one frame: `f` gets a [`Surface`] scoped to the whole terminal on layer 0, then the
     /// frame is presented (see [`present`](Self::present)) once `f` returns.
@@ -124,7 +142,25 @@ impl<B: Backend> Terminal<B> {
                 self.pending_layer_ops[usize::from(id)] = LayerOp::None;
             }
         }
-        let mut swap_flattened = false;
+        // Decided once, up front, from the same `compositing()`/`max_layer()` inputs the three
+        // branches below read: see `PresentPath`'s docs for why this replaced each branch
+        // separately remembering to mark the flatten buffers stale.
+        let path = match self.backend.compositing() {
+            Compositing::PixelLayered { needs_full_frame } => {
+                PresentPath::Composited { needs_full_frame }
+            }
+            // Sticky-off, not sticky-on: layers are never deallocated on their own once written
+            // (see `Grid`'s layer storage), so `max_layer()` never drops back to 0 on its own. A
+            // terminal that ever draws to layer 1+, even for a single transient frame, stays on
+            // `Flattened` for the rest of the process, unless it explicitly calls `drop_layer` on
+            // every layer above 0 (retroglyph#1028).
+            Compositing::CellFlattened
+                if self.current.max_layer() == 0 && self.previous.max_layer() == 0 =>
+            {
+                PresentPath::SingleLayer
+            }
+            Compositing::CellFlattened => PresentPath::Flattened,
+        };
         // The fallible part is scoped to this closure so both the success and error paths
         // below can clear `current` before returning: `current` is presentation-buffer state
         // for the *next* frame, not part of what makes the resend-on-retry behavior work (that
@@ -132,57 +168,51 @@ impl<B: Backend> Terminal<B> {
         // it is safe unconditionally and keeps immediate mode's "next `draw` starts empty"
         // contract true even after a failed present.
         let result = (|| -> Result<(), <B as Output>::Error> {
-            if let Compositing::PixelLayered { needs_full_frame } = self.backend.compositing() {
-                // Pixel/GPU backends composite the raw layered stream themselves.
-                if needs_full_frame {
-                    let all = self.current.layers();
-                    self.backend.draw_layers(all)?;
-                } else {
+            match path {
+                PresentPath::Composited { needs_full_frame } => {
+                    // Pixel/GPU backends composite the raw layered stream themselves.
+                    if needs_full_frame {
+                        let all = self.current.layers();
+                        self.backend.draw_layers(all)?;
+                    } else {
+                        let diff = self.current.diff(&self.previous);
+                        self.backend.draw_layers(diff)?;
+                    }
+                }
+                PresentPath::SingleLayer => {
+                    // Fast path: only layer 0 is in play, so flattening would be an exact
+                    // copy of `current`. Diff the real grids directly and skip the
+                    // flatten buffers entirely.
                     let diff = self.current.diff(&self.previous);
                     self.backend.draw_layers(diff)?;
                 }
-                // Same reasoning as the fast path below: this branch bypasses the flatten buffers
-                // too, so the next present that lands in the flatten branch (e.g. a backend whose
-                // `compositing()` flips to `Compositing::CellFlattened`) must not diff against a
-                // `flattened_previous` that was never actually the last frame presented.
-                self.flattened_stale = true;
-            } else if self.current.max_layer() == 0 && self.previous.max_layer() == 0 {
-                // Fast path: only layer 0 is in play, so flattening would be an exact
-                // copy of `current`. Diff the real grids directly and skip the
-                // flatten buffers entirely.
-                //
-                // This is sticky-off, not sticky-on: layers are never deallocated on their own
-                // once written (see `Grid`'s layer storage), so `max_layer()` never drops back to
-                // 0 on its own. A terminal that ever draws to layer 1+, even for a single
-                // transient frame, stays on the flatten path in the `else` branch below for the
-                // rest of the process, unless it explicitly calls `drop_layer` on every layer
-                // above 0 (retroglyph#1028).
-                let diff = self.current.diff(&self.previous);
-                self.backend.draw_layers(diff)?;
-                self.flattened_stale = true;
-            } else {
-                // Cell backends receive a pre-flattened, single-layer diff so layers
-                // 1+ appear everywhere, not just on pixel backends.
-                let size = self.current.size();
-                let flattened_current = self
-                    .flattened_current
-                    .get_or_insert_with(|| Grid::new(size.width(), size.height()));
-                let flattened_previous = self
-                    .flattened_previous
-                    .get_or_insert_with(|| Grid::new(size.width(), size.height()));
-                if self.flattened_stale {
-                    // The previous frame used the fast path, so `flattened_previous`
-                    // is stale. Clear it to force a full redraw this frame.
-                    flattened_previous.clear_all();
-                    self.flattened_stale = false;
+                PresentPath::Flattened => {
+                    // Cell backends receive a pre-flattened, single-layer diff so layers
+                    // 1+ appear everywhere, not just on pixel backends.
+                    let size = self.current.size();
+                    let flattened_current = self
+                        .flattened_current
+                        .get_or_insert_with(|| Grid::new(size.width(), size.height()));
+                    let flattened_previous = self
+                        .flattened_previous
+                        .get_or_insert_with(|| Grid::new(size.width(), size.height()));
+                    if self.flattened_stale {
+                        // The previous frame took a different path, so `flattened_previous`
+                        // is stale. Clear it to force a full redraw this frame.
+                        flattened_previous.clear_all();
+                    }
+                    self.current.flatten_into(flattened_current);
+                    let diff = flattened_current.diff(flattened_previous);
+                    self.backend.draw_layers(diff)?;
                 }
-                self.current.flatten_into(flattened_current);
-                let diff = flattened_current.diff(flattened_previous);
-                self.backend.draw_layers(diff)?;
-                swap_flattened = true;
             }
             self.backend.flush()
         })();
+        // Written here, unconditionally, rather than only on success: this has to update even
+        // when draw/flush fails below, because a failed present still ran `path`'s branch (or
+        // didn't run the flatten branch at all), and the next present's flatten-branch decision
+        // must reflect that regardless of whether this frame's error propagates.
+        self.flattened_stale = !matches!(path, PresentPath::Flattened);
         if let Err(err) = result {
             // `current` is cleared even on failure so the next frame still starts from an
             // empty grid; only the swap below is skipped. `previous`/`flattened_previous`
@@ -209,7 +239,7 @@ impl<B: Backend> Terminal<B> {
             self.pending_layer_ops[usize::from(id)] = LayerOp::None;
         }
         // Both swaps happen only after `flush` succeeds, for the same reason described above.
-        if swap_flattened {
+        if matches!(path, PresentPath::Flattened) {
             core::mem::swap(&mut self.flattened_current, &mut self.flattened_previous);
         }
         core::mem::swap(&mut self.current, &mut self.previous);
@@ -697,6 +727,57 @@ mod tests {
         );
         assert_eq!(term.backend().inner.grid()[Pos::new(0, 0)].glyph(), 'a');
         assert_eq!(term.backend().inner.grid()[Pos::new(1, 0)].glyph(), 'b');
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn present_stale_flag_survives_a_failed_bypass_present() {
+        // Pins the ordering risk from retroglyph#1395: the `flattened_stale` assignment sits
+        // after the fallible closure but before the `if let Err` early return, so it updates even
+        // when the present that bypassed the flatten buffers fails. If it were only reachable on
+        // the success path instead, this test would fail: `flattened_stale` would stay `false`
+        // (left over from frame 1) into frame 3, which would then wrongly diff against
+        // `flattened_previous`'s frame-1 content instead of clearing it for a full redraw.
+        //
+        // Sequence: flatten (ok, establishes `flattened_previous`) -> compositing bypass (flush
+        // fails, but still must mark `flattened_stale`) -> flatten again, which must see the
+        // staleness and do a full redraw rather than diff against frame 1's stale data.
+        let mut term = Terminal::new(FlushOnceFailing::new(2, 1));
+
+        term.draw(|s| {
+            s.put((0, 0), 'a', Style::default());
+            s.on_layer(1).put((1, 0), '#', Style::default());
+        })
+        .expect("draw failed");
+        assert_eq!(term.backend().inner.grid()[Pos::new(0, 0)].glyph(), 'a');
+
+        // Compositing bypass path (`Compositing::PixelLayered`), and the flush fails.
+        term.backend_mut().composites_layers = true;
+        term.backend_mut().fail_next_flush = true;
+        let result = term.draw(|s| {
+            s.put((0, 0), 'a', Style::default());
+            s.on_layer(1).put((1, 0), '#', Style::default());
+        });
+        assert!(result.is_err(), "flush was expected to fail this frame");
+
+        // Back to the flatten path. Draws 'a' at (0, 0) again, matching what `flattened_previous`
+        // still holds from frame 1 (the compositing frame bypassed the flatten buffers entirely,
+        // whether or not it failed). Without `flattened_stale` surviving the failed present, this
+        // would wrongly look unchanged and skip sending (0, 0).
+        term.backend_mut().composites_layers = false;
+        term.draw(|s| {
+            s.put((0, 0), 'a', Style::default());
+            s.on_layer(1).put((1, 0), '@', Style::default());
+        })
+        .expect("draw failed");
+        assert_eq!(
+            term.backend().last_draw_len,
+            2,
+            "a full redraw is expected: (0, 0) resent despite matching flattened_previous's \
+             stale content, plus the changed (1, 0)"
+        );
+        assert_eq!(term.backend().inner.grid()[Pos::new(0, 0)].glyph(), 'a');
+        assert_eq!(term.backend().inner.grid()[Pos::new(1, 0)].glyph(), '@');
     }
 
     #[cfg(feature = "std")]
