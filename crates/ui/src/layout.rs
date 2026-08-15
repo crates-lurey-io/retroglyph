@@ -790,8 +790,12 @@ pub fn anchored_rect(anchor: Rect, size: Size, preferred: Side, bounds: Rect) ->
         Side::Left => (anchor.left().saturating_sub(width), anchor.top()),
         Side::Right => (anchor.right(), anchor.top()),
     };
-    let x = ax.min(bounds.right().saturating_sub(width)).max(bounds.left());
-    let y = ay.min(bounds.bottom().saturating_sub(height)).max(bounds.top());
+    let x = ax
+        .min(bounds.right().saturating_sub(width))
+        .max(bounds.left());
+    let y = ay
+        .min(bounds.bottom().saturating_sub(height))
+        .max(bounds.top());
 
     Rect::new(x, y, width, height)
 }
