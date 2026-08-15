@@ -1081,26 +1081,24 @@ impl<W: std::io::Write> Input for Crossterm<W> {
         }
 
         let start = std::time::Instant::now();
-        let mut remaining = timeout;
 
         loop {
             // Cap the polling timeout to 1 hour to prevent system-call overflow of massive durations (like Duration::MAX).
-            let poll_timeout = if remaining > Duration::from_secs(3600) {
-                Duration::from_secs(3600)
-            } else {
-                remaining
-            };
+            let poll_timeout = timeout
+                .saturating_sub(start.elapsed())
+                .min(Duration::from_secs(3600));
 
             match crossterm::event::poll(poll_timeout) {
                 Ok(true) => {
-                    if let Ok(event) = crossterm::event::read() {
-                        // Refresh the cached size in lockstep with the resize event the app
-                        // itself is about to receive, so `size()` (no syscall) stays consistent
-                        // with what already triggered this event. See retroglyph#279.
-                        self.refresh_cached_size_on_resize(&event);
-                        if let Some(mapped) = from_crossterm_event(event) {
-                            return Some(mapped);
-                        }
+                    let Ok(event) = crossterm::event::read() else {
+                        return None;
+                    };
+                    // Refresh the cached size in lockstep with the resize event the app
+                    // itself is about to receive, so `size()` (no syscall) stays consistent
+                    // with what already triggered this event. See retroglyph#279.
+                    self.refresh_cached_size_on_resize(&event);
+                    if let Some(mapped) = from_crossterm_event(event) {
+                        return Some(mapped);
                     }
                     // An unmappable event was consumed. In non-blocking mode
                     // (timeout zero, used by drain_events), retry immediately
@@ -1117,11 +1115,9 @@ impl<W: std::io::Write> Input for Crossterm<W> {
                 }
             }
 
-            let elapsed = start.elapsed();
-            if elapsed >= timeout {
+            if start.elapsed() >= timeout {
                 return None;
             }
-            remaining = timeout.checked_sub(elapsed).unwrap_or(Duration::ZERO);
         }
     }
 
