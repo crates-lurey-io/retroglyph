@@ -36,7 +36,7 @@ jobs:
         with:
           tool: just,cargo-llvm-cov
 
-      - uses: cargo-bins/cargo-binstall@v1.13.0
+      - uses: cargo-bins/cargo-binstall@v1.21.1
 
       - name: Install cargo-llms-txt
         run: cargo binstall cargo-llms-txt --no-confirm -q
@@ -78,7 +78,7 @@ jobs:
           tools/build-wasm-examples.sh
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: target/doc
 

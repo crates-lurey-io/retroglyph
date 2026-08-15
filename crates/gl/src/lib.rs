@@ -139,6 +139,7 @@ use retroglyph_core::grid::HasSize;
 use retroglyph_core::grid::Size;
 use retroglyph_core::tile::Tile;
 use retroglyph_window::atlas::GlyphAtlas;
+use retroglyph_window::diagnostics::DiagnosticLog;
 use retroglyph_window::geometry::CellGeometry;
 use retroglyph_window::palette::{DEFAULT_BG, DEFAULT_FG};
 use retroglyph_window::presenter::{Presenter, WindowHandle, cell_art_glyph};
@@ -228,18 +229,9 @@ pub struct GlRenderer {
     /// can be rebuilt after a WebGL2 context loss.
     #[cfg(feature = "tilesets")]
     sprite_set: Option<SpriteSet>,
-    /// Glyphs already reported as needing a span, so a redraw loop logs each one once instead of
-    /// every frame. See `retroglyph_window::sprite_cache::warn_sprite_needs_span`.
-    #[cfg(feature = "tilesets")]
-    warned_oversized: std::collections::BTreeSet<char>,
-    /// Glyphs already reported as having a dropped tint, so a redraw loop logs each one once
-    /// instead of every frame. See `retroglyph_window::sprite_cache::warn_tint_needs_sprite`.
-    #[cfg(feature = "tilesets")]
-    warned_dropped_tint: std::collections::BTreeSet<char>,
-    /// Characters already reported as resolving to the atlas's notdef fallback rather than their
-    /// own glyph, so a redraw loop logs each one once instead of every frame. See
-    /// `retroglyph_window::diagnostics::warn_notdef_glyph`.
-    warned_notdef: std::collections::BTreeSet<char>,
+    /// The oversized-sprite, dropped-tint, and notdef-glyph dedup state, so a redraw loop logs
+    /// each offending glyph once instead of every frame. See `retroglyph_window::diagnostics`.
+    diagnostics: DiagnosticLog,
     /// The current surface size in physical pixels (set by [`resize_surface`](Presenter::resize_surface)).
     surface_size: (u32, u32),
     /// GL context + resources. `None` until [`init_surface`](Presenter::init_surface).
@@ -276,11 +268,7 @@ impl GlRenderer {
             layers,
             #[cfg(feature = "tilesets")]
             sprite_set: None,
-            #[cfg(feature = "tilesets")]
-            warned_oversized: std::collections::BTreeSet::new(),
-            #[cfg(feature = "tilesets")]
-            warned_dropped_tint: std::collections::BTreeSet::new(),
-            warned_notdef: std::collections::BTreeSet::new(),
+            diagnostics: DiagnosticLog::default(),
             surface_size: geometry.surface_size(cols, rows),
             gpu: None,
         }
@@ -310,8 +298,7 @@ impl GlRenderer {
         if tile.is_span_anchor() {
             return;
         }
-        retroglyph_window::sprite_cache::warn_sprite_needs_span(
-            &mut self.warned_oversized,
+        self.diagnostics.sprite_needs_span(
             tile.glyph(),
             (u32::from(sprite.w), u32::from(sprite.h)),
             (
@@ -330,11 +317,42 @@ impl GlRenderer {
     /// nothing here.
     #[cfg(feature = "tilesets")]
     fn warn_if_tint_needs_sprite(&mut self, glyph: char, tint: retroglyph_core::color::Tint) {
-        retroglyph_window::sprite_cache::warn_tint_needs_sprite(
-            &mut self.warned_dropped_tint,
-            glyph,
-            tint,
-        );
+        self.diagnostics.tint_needs_sprite(glyph, tint);
+    }
+
+    /// Pushes one sprite instance for `tile` on layer `l` at cell `(cx, cy)`: aligns it within its
+    /// span box, warns once if it needed a span but didn't declare one, and resolves its tint
+    /// against `sprite`'s sheet color. Shared verbatim between the layer-0 and higher-layer sprite
+    /// dispatch branches in `draw_layers` (retroglyph#1374): the CPU/GPU parity contract (span
+    /// alignment, oversize warning, `SpriteTint::resolve` argument order) lives in exactly one
+    /// place, so a fix here reaches every layer instead of needing to land twice.
+    ///
+    /// The caller still owns which `Instance` is written and how `inherited_bg`/`sprite_bg` update;
+    /// this only appends to `self.layers[l].sprites`.
+    #[cfg(feature = "tilesets")]
+    fn emit_sprite(
+        &mut self,
+        l: usize,
+        cx: u16,
+        cy: u16,
+        tile: &Tile,
+        sprite: SpriteSlot,
+        tint: retroglyph_core::color::Tint,
+    ) {
+        let (span_w, span_h) = tile.span();
+        let align =
+            sprite.align_offset(span_w, span_h, self.geometry.glyph_w, self.geometry.glyph_h);
+        self.warn_if_sprite_needs_span(tile, sprite);
+        self.layers[l].sprites.push(SpriteInstance::new(
+            cx,
+            cy,
+            sprite.layer,
+            sprite.w,
+            sprite.h,
+            tile.dx() + align.0,
+            tile.dy() + align.1,
+            SpriteTint::resolve(sprite.color, tile.style().foreground(), tint, DEFAULT_FG),
+        ));
     }
 
     /// Reports a character that resolved to the atlas's substituted "not defined" glyph rather
@@ -350,7 +368,7 @@ impl GlRenderer {
     fn warn_if_notdef_glyph(&mut self, ch: char) {
         dev_only!({
             if self.glyphs.is_notdef(ch) {
-                retroglyph_window::diagnostics::warn_notdef_glyph(&mut self.warned_notdef, ch);
+                self.diagnostics.notdef_glyph(ch);
             }
         });
     }
@@ -592,29 +610,7 @@ impl Output for GlRenderer {
                         inherited_bg[idx] = sprite_inst.bg;
                         sprite_bg[idx] = true;
                         self.layers[0].cells[idx] = sprite_inst;
-                        let (span_w, span_h) = tile.span();
-                        let align = sprite.align_offset(
-                            span_w,
-                            span_h,
-                            self.geometry.glyph_w,
-                            self.geometry.glyph_h,
-                        );
-                        self.warn_if_sprite_needs_span(tile, sprite);
-                        self.layers[0].sprites.push(SpriteInstance::new(
-                            cx,
-                            cy,
-                            sprite.layer,
-                            sprite.w,
-                            sprite.h,
-                            tile.dx() + align.0,
-                            tile.dy() + align.1,
-                            SpriteTint::resolve(
-                                sprite.color,
-                                tile.style().foreground(),
-                                draw_cell.tint,
-                                DEFAULT_FG,
-                            ),
-                        ));
+                        self.emit_sprite(0, cx, cy, tile, sprite, draw_cell.tint);
                         continue;
                     }
                     if let Some(g) = art_glyph {
@@ -666,29 +662,7 @@ impl Output for GlRenderer {
                 };
                 sprite_bg[idx] = true;
                 self.layers[l].cells[idx] = Instance::new(glyph, fg, bg, 0, 0, has_bg);
-                let (span_w, span_h) = tile.span();
-                let align = sprite.align_offset(
-                    span_w,
-                    span_h,
-                    self.geometry.glyph_w,
-                    self.geometry.glyph_h,
-                );
-                self.warn_if_sprite_needs_span(tile, sprite);
-                self.layers[l].sprites.push(SpriteInstance::new(
-                    cx,
-                    cy,
-                    sprite.layer,
-                    sprite.w,
-                    sprite.h,
-                    tile.dx() + align.0,
-                    tile.dy() + align.1,
-                    SpriteTint::resolve(
-                        sprite.color,
-                        tile.style().foreground(),
-                        draw_cell.tint,
-                        DEFAULT_FG,
-                    ),
-                ));
+                self.emit_sprite(l, cx, cy, tile, sprite, draw_cell.tint);
                 continue;
             }
             #[cfg(feature = "tilesets")]
@@ -1172,7 +1146,10 @@ mod compositing_tests {
         )))
         .expect("draw_layers is infallible");
 
-        assert_eq!(r.warned_notdef.contains(&'あ'), retroglyph_core::dev::DEV);
+        assert_eq!(
+            r.diagnostics.has_reported_notdef('あ'),
+            retroglyph_core::dev::DEV
+        );
     }
 
     /// A character CP437 does cover must never be reported, dev build or not.
@@ -1190,7 +1167,7 @@ mod compositing_tests {
         )))
         .expect("draw_layers is infallible");
 
-        assert!(!r.warned_notdef.contains(&'A'));
+        assert!(!r.diagnostics.has_reported_notdef('A'));
     }
 
     /// The `layer_id != 0` branch is a separate code path from layer 0's; it must report the same
@@ -1212,14 +1189,17 @@ mod compositing_tests {
         )
         .expect("draw_layers is infallible");
 
-        assert_eq!(r.warned_notdef.contains(&'あ'), retroglyph_core::dev::DEV);
+        assert_eq!(
+            r.diagnostics.has_reported_notdef('あ'),
+            retroglyph_core::dev::DEV
+        );
     }
 }
 
 /// Dropped-tint diagnostic (retroglyph#564): a tint set on a cell whose glyph resolved to a
 /// bitmap font rather than a sprite is silently dropped, the same trap retroglyph#537 fell into.
 /// These exercise `GlRenderer::draw_layers` directly (no GL context needed: only the CPU-side
-/// `warned_dropped_tint` set and instance arrays are inspected).
+/// `diagnostics` dedup state and instance arrays are inspected).
 #[cfg(all(test, feature = "default-font", feature = "tilesets"))]
 mod dropped_tint_tests {
     use crate::config::GlBackendBuilder;
@@ -1273,7 +1253,7 @@ mod dropped_tint_tests {
         .expect("draw_layers is infallible");
 
         assert_eq!(
-            r.warned_dropped_tint.contains(&'X'),
+            r.diagnostics.has_reported_dropped_tint('X'),
             retroglyph_core::dev::DEV
         );
     }
@@ -1287,7 +1267,7 @@ mod dropped_tint_tests {
         ))
         .expect("draw_layers is infallible");
 
-        assert!(!r.warned_dropped_tint.contains(&'S'));
+        assert!(!r.diagnostics.has_reported_dropped_tint('S'));
     }
 
     #[test]
@@ -1307,7 +1287,7 @@ mod dropped_tint_tests {
         .expect("draw_layers is infallible");
 
         assert_eq!(
-            r.warned_dropped_tint.contains(&'X'),
+            r.diagnostics.has_reported_dropped_tint('X'),
             retroglyph_core::dev::DEV
         );
     }
@@ -1323,7 +1303,7 @@ mod dropped_tint_tests {
         )))
         .expect("draw_layers is infallible");
 
-        assert!(r.warned_dropped_tint.is_empty());
+        assert_eq!(r.diagnostics.dropped_tint_report_count(), 0);
     }
 
     /// Draws a sprite on two layers, so `layers` has more than the (always present) base layer's

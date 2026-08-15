@@ -254,8 +254,7 @@ pub struct TerminalRenderer<W> {
     buf: Vec<u8>,
     last_fg: Option<Color>,
     last_bg: Option<Color>,
-    cursor_x: Option<u16>,
-    cursor_y: Option<u16>,
+    cursor: Option<Pos>,
     plain: bool,
     color_support: ColorSupport,
 }
@@ -268,8 +267,7 @@ impl<W: Write> TerminalRenderer<W> {
             buf: Vec::new(),
             last_fg: None,
             last_bg: None,
-            cursor_x: None,
-            cursor_y: None,
+            cursor: None,
             plain: false,
             color_support: ColorSupport::Truecolor,
         }
@@ -286,8 +284,7 @@ impl<W: Write> TerminalRenderer<W> {
             buf: Vec::new(),
             last_fg: None,
             last_bg: None,
-            cursor_x: None,
-            cursor_y: None,
+            cursor: None,
             plain,
             color_support: ColorSupport::Truecolor,
         }
@@ -359,8 +356,7 @@ impl<W: Write> TerminalRenderer<W> {
     pub const fn reset_state(&mut self) {
         self.last_fg = None;
         self.last_bg = None;
-        self.cursor_x = None;
-        self.cursor_y = None;
+        self.cursor = None;
     }
 
     /// Resets only tracked cursor position, leaving tracked color/attribute state alone.
@@ -371,8 +367,7 @@ impl<W: Write> TerminalRenderer<W> {
     /// its color/attribute escapes stay conditional on an actual style change, since the pen
     /// itself never moved.
     const fn reset_cursor_tracking(&mut self) {
-        self.cursor_x = None;
-        self.cursor_y = None;
+        self.cursor = None;
     }
 
     /// Begins a synchronized update (`\x1b[?2026h`).
@@ -475,7 +470,7 @@ impl<W: Write> TerminalRenderer<W> {
 
             // Only emit a cursor move when the cursor isn't already at the
             // right position (adjacent cells advance the cursor by printing).
-            let needs_move = self.cursor_y != Some(pos.y) || self.cursor_x != Some(pos.x);
+            let needs_move = self.cursor != Some(pos);
             if needs_move {
                 // CSI row;col H is 1-indexed; saturate rather than wrap at u16::MAX.
                 write!(
@@ -514,8 +509,10 @@ impl<W: Write> TerminalRenderer<W> {
 
             // After printing, the terminal cursor advances by the cell's
             // display width. Track that so the next cell can skip the move.
-            self.cursor_x = Some(pos.x.saturating_add(cell_width));
-            self.cursor_y = Some(pos.y);
+            self.cursor = Some(Pos {
+                x: pos.x.saturating_add(cell_width),
+                y: pos.y,
+            });
         }
         Ok(())
     }
@@ -545,19 +542,17 @@ impl<W: Write> TerminalRenderer<W> {
 
             // Row change: newline(s) instead of a cursor-move escape. Advancing rows emits one
             // `\n` per skipped row so blank rows still show up as blank lines. A backward row, or
-            // (the `pos.x < cursor_x` guard below) a same-row cell arriving out of ascending-x
+            // (the `pos.x < cursor.x` guard below) a same-row cell arriving out of ascending-x
             // order, both just start a fresh line: plain mode has no cursor-addressing escape
             // codes to seek backward with, so there is no way to overwrite/insert at an
             // already-passed column without corrupting what was already written. Starting a new
             // line is the least-surprising degradation available: it reproduces the
             // already-established backward-row behavior instead of silently misplacing the cell
             // right after the previous one at the wrong column (see retroglyph#273).
-            let start_col = match self.cursor_y {
-                Some(y) if pos.y == y && pos.x >= self.cursor_x.unwrap_or(0) => {
-                    self.cursor_x.unwrap_or(0)
-                }
-                Some(y) if pos.y > y => {
-                    for _ in 0..(pos.y - y) {
+            let start_col = match self.cursor {
+                Some(c) if c.y == pos.y && pos.x >= c.x => c.x,
+                Some(c) if pos.y > c.y => {
+                    for _ in 0..(pos.y - c.y) {
                         writeln!(self.buf)?;
                     }
                     0
@@ -576,8 +571,10 @@ impl<W: Write> TerminalRenderer<W> {
 
             let cell_width = Self::write_glyph(&mut self.buf, cell, extra)?;
 
-            self.cursor_x = Some(pos.x.saturating_add(cell_width));
-            self.cursor_y = Some(pos.y);
+            self.cursor = Some(Pos {
+                x: pos.x.saturating_add(cell_width),
+                y: pos.y,
+            });
         }
         Ok(())
     }

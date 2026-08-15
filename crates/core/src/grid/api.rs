@@ -277,84 +277,30 @@ impl Grid {
             return None;
         }
 
-        if x >= self.width || y >= self.height {
-            return None;
-        }
-
-        // Capture dimensions as plain values to avoid borrow conflicts.
-        let w = usize::from(self.width);
-        let cap = w * usize::from(self.height);
-        let idx = usize::from(y) * w + usize::from(x);
-        if idx >= cap {
-            return None;
-        }
-
-        // A 2-column char needs a spacer at x+1. If that's out of bounds,
-        // silently refuse rather than leaving an orphaned primary cell.
-        if width == 2 && x.saturating_add(1) as usize >= w {
-            return None;
-        }
-
-        // Clear any wide-char cell, or any multi-cell span, that would be partially overwritten.
-        self.clear_span_overlap(layer, x, y, width);
-        self.clear_overlap(layer, x, y, width);
-
-        // Capture width before borrowing self mutably.
-        let grid_w = usize::from(self.width);
-        let idx = usize::from(y) * grid_w + usize::from(x);
-
-        let lb = self.layer_or_alloc(layer);
-        // Build cell content.
         let mut chars = grapheme.chars();
         let first = chars.next().unwrap_or(' ');
         let has_extra = chars.next().is_some();
-        let flags = if width == 2 {
-            TileFlags::WIDE_CHAR
-        } else {
-            TileFlags::empty()
-        };
-        let flags = if has_extra {
-            flags | TileFlags::HAS_EXTRA
-        } else {
-            flags
-        };
 
-        lb.buf.as_mut()[idx].glyph = first;
-        lb.buf.as_mut()[idx].style = style;
-        lb.buf.as_mut()[idx].flags = flags;
-        // `width` here is the full grapheme's display width (1 or 2), not just `first`'s: more
-        // accurate than recomputing from the primary codepoint alone, and exactly what the
-        // terminal renderer needs to advance the cursor after printing this cell.
+        let mut tile = Tile::new(first, style);
+        // The full grapheme cluster's display width (1 or 2), not just `first`'s: more accurate
+        // than the primary codepoint alone, and what `put_tile` needs to decide whether to
+        // synthesize a spacer.
         #[allow(clippy::cast_possible_truncation)]
         {
-            lb.buf.as_mut()[idx].width = width as u8;
+            tile.width = width as u8;
         }
-        // A fresh glyph write replaces the cell's out-of-line data outright rather than merging
-        // with it: a tint belongs to the artwork that was drawn here, not to the cell, so
-        // overwriting the glyph drops it. `Grid::set_tint` is the follow-up that puts one back.
+        self.put_tile(layer, Pos::new(x, y), tile)?;
+
         if has_extra {
-            lb.extras.insert(
-                idx,
+            self.set_extra(
+                layer,
+                x,
+                y,
                 TileExtra {
                     grapheme: Some(Arc::from(cap_grapheme(grapheme))),
                     tint: Tint::None,
                 },
             );
-        } else {
-            lb.extras.remove(&idx);
-        }
-
-        // Place spacer for wide characters.
-        if width == 2 {
-            let spacer_idx = usize::from(y) * grid_w + usize::from(x + 1);
-            if spacer_idx < cap {
-                let spacer = &mut lb.buf.as_mut()[spacer_idx];
-                spacer.glyph = ' ';
-                spacer.style = style;
-                spacer.width = 0;
-                spacer.flags = TileFlags::WIDE_CHAR_SPACER;
-                lb.extras.remove(&spacer_idx);
-            }
         }
 
         Some(())
@@ -562,6 +508,39 @@ mod tests {
                 .is_none()
         );
         assert_eq!(grid[Pos::new(3, 0)].glyph(), ' ');
+    }
+
+    /// retroglyph#1012, via delegation to `put_tile`: a refused write must not allocate the
+    /// layer just to find out it was going to be refused.
+    #[cfg(feature = "egc")]
+    #[test]
+    fn write_grapheme_refused_at_the_last_column_does_not_allocate_the_layer() {
+        let mut grid = Grid::new(4, 4);
+        assert!(
+            grid.write_grapheme(5, 3, 0, "\u{4e2d}", Style::default())
+                .is_none()
+        );
+        assert_eq!(grid.max_layer(), 0);
+        assert!(grid.layer(5).is_none());
+    }
+
+    /// `write_grapheme` writes a whole fresh `Tile` (via `put_tile`), so a prior sub-cell offset
+    /// on the overwritten cell does not survive, the same as any other `put_tile` write.
+    #[cfg(feature = "egc")]
+    #[test]
+    fn write_grapheme_overwrite_resets_a_prior_sub_cell_offset() {
+        let mut grid = Grid::new(4, 4);
+        grid.put_tile(
+            0,
+            (1, 1),
+            Tile::new('A', Style::default()).with_offset(3, -2),
+        );
+        assert_eq!(grid[Pos::new(1, 1)].dx(), 3);
+        assert_eq!(grid[Pos::new(1, 1)].dy(), -2);
+
+        grid.write_grapheme(0, 1, 1, "B", Style::default());
+        assert_eq!(grid[Pos::new(1, 1)].dx(), 0);
+        assert_eq!(grid[Pos::new(1, 1)].dy(), 0);
     }
 
     #[cfg(feature = "egc")]

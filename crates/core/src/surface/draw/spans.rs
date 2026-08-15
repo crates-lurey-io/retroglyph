@@ -2,10 +2,6 @@
 
 use crate::color::Style;
 use crate::grid::{HasSize, Offset, Pos, Size};
-#[cfg(not(feature = "egc"))]
-use crate::tile::Tile;
-#[cfg(not(feature = "egc"))]
-use unicode_width::UnicodeWidthChar;
 
 use super::Surface;
 
@@ -172,25 +168,7 @@ impl Surface<'_> {
             return;
         };
         let offset = offset.into();
-        #[cfg(feature = "egc")]
-        let wrote = {
-            let mut buf = [0u8; 4];
-            let s = ch.encode_utf8(&mut buf);
-            self.put_grapheme_at(x, y, s, style)
-        };
-        #[cfg(not(feature = "egc"))]
-        let wrote = {
-            if self.wide_spacer_fits(x, y, ch.width().unwrap_or(1)) {
-                let tile = Tile::new(ch, style);
-                let wrote = self.grid.put_tile(self.layer, (x, y), tile).is_some();
-                if wrote {
-                    self.apply_tint(x, y);
-                }
-                wrote
-            } else {
-                false
-            }
-        };
+        let wrote = self.put_char_at(x, y, ch, style);
         // A refused write (e.g. a wide glyph whose spacer falls outside the clip, or
         // `put_tile` declining an out-of-grid/unallocatable-layer write) leaves `(x, y)`
         // holding whatever tile a *different* draw call put there. Setting the offset on it

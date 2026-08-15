@@ -197,6 +197,7 @@ use retroglyph_core::grid::HasSize;
 use retroglyph_core::grid::Size;
 use retroglyph_core::tile::Tile;
 use retroglyph_window::atlas::GlyphAtlas;
+use retroglyph_window::diagnostics::DiagnosticLog;
 use retroglyph_window::geometry::CellGeometry;
 use retroglyph_window::palette::{DEFAULT_BG, DEFAULT_FG};
 use retroglyph_window::presenter::{Presenter, WindowHandle, cell_art_glyph};
@@ -295,14 +296,17 @@ pub struct WgpuRenderer {
     sprite_upload: Vec<SpriteInstance>,
     #[cfg(feature = "tilesets")]
     sprite_ranges: Vec<LayerRange>,
-    /// Glyphs already reported as needing a span, so a redraw loop logs each one once instead of
-    /// every frame. See `retroglyph_window::sprite_cache::warn_sprite_needs_span`.
-    #[cfg(feature = "tilesets")]
-    warned_oversized: std::collections::BTreeSet<char>,
-    /// Glyphs already reported as having a dropped tint, so a redraw loop logs each one once
-    /// instead of every frame. See `retroglyph_window::sprite_cache::warn_tint_needs_sprite`.
-    #[cfg(feature = "tilesets")]
-    warned_dropped_tint: std::collections::BTreeSet<char>,
+    /// The oversized-sprite and dropped-tint dedup state, so a redraw loop logs each offending
+    /// glyph once instead of every frame. See `retroglyph_window::diagnostics`.
+    ///
+    /// Unlike the software and gl backends, this one never calls
+    /// [`DiagnosticLog::notdef_glyph`](retroglyph_window::diagnostics::DiagnosticLog::notdef_glyph)
+    /// (a known gap, fixed separately), so without `tilesets` -- the only feature that reaches
+    /// this field's other two methods -- nothing here is ever read. `allow` rather than removing
+    /// the field: it exists unconditionally on every other backend, and calling `notdef_glyph`
+    /// here is the fix, not deleting the state that call would use.
+    #[cfg_attr(not(feature = "tilesets"), allow(dead_code))]
+    diagnostics: DiagnosticLog,
     /// The current surface size in physical pixels (set by
     /// [`resize_surface`](Presenter::resize_surface)).
     surface_size: (u32, u32),
@@ -368,10 +372,7 @@ impl WgpuRenderer {
             sprite_upload: Vec::new(),
             #[cfg(feature = "tilesets")]
             sprite_ranges: Vec::new(),
-            #[cfg(feature = "tilesets")]
-            warned_oversized: std::collections::BTreeSet::new(),
-            #[cfg(feature = "tilesets")]
-            warned_dropped_tint: std::collections::BTreeSet::new(),
+            diagnostics: DiagnosticLog::default(),
             surface_size: geometry.surface_size(cols, rows),
             gpu: None,
             pending: None,
@@ -407,8 +408,7 @@ impl WgpuRenderer {
         if tile.is_span_anchor() {
             return;
         }
-        retroglyph_window::sprite_cache::warn_sprite_needs_span(
-            &mut self.warned_oversized,
+        self.diagnostics.sprite_needs_span(
             tile.glyph(),
             (u32::from(sprite.w), u32::from(sprite.h)),
             (
@@ -422,11 +422,42 @@ impl WgpuRenderer {
     /// the tint was silently dropped (retroglyph#564).
     #[cfg(feature = "tilesets")]
     fn warn_if_tint_needs_sprite(&mut self, glyph: char, tint: retroglyph_core::color::Tint) {
-        retroglyph_window::sprite_cache::warn_tint_needs_sprite(
-            &mut self.warned_dropped_tint,
-            glyph,
-            tint,
-        );
+        self.diagnostics.tint_needs_sprite(glyph, tint);
+    }
+
+    /// Pushes one sprite instance for `tile` on layer `l` at cell `(cx, cy)`: aligns it within its
+    /// span box, warns once if it needed a span but didn't declare one, and resolves its tint
+    /// against `sprite`'s sheet color. Shared verbatim between the layer-0 and higher-layer sprite
+    /// dispatch branches in `draw_layers` (retroglyph#1374): the CPU/GPU parity contract (span
+    /// alignment, oversize warning, `SpriteTint::resolve` argument order) lives in exactly one
+    /// place, so a fix here reaches every layer instead of needing to land twice.
+    ///
+    /// The caller still owns which `Cell` is written and how `inherited_bg`/`sprite_bg` update;
+    /// this only appends to `self.layers[l].sprites`.
+    #[cfg(feature = "tilesets")]
+    fn emit_sprite(
+        &mut self,
+        l: usize,
+        cx: u16,
+        cy: u16,
+        tile: &Tile,
+        sprite: SpriteSlot,
+        tint: retroglyph_core::color::Tint,
+    ) {
+        let (span_w, span_h) = tile.span();
+        let align =
+            sprite.align_offset(span_w, span_h, self.geometry.glyph_w, self.geometry.glyph_h);
+        self.warn_if_sprite_needs_span(tile, sprite);
+        self.layers[l].sprites.push(SpriteInstance::new(
+            cx,
+            cy,
+            sprite.layer,
+            sprite.w,
+            sprite.h,
+            tile.dx() + align.0,
+            tile.dy() + align.1,
+            SpriteTint::resolve(sprite.color, tile.style().foreground(), tint, DEFAULT_FG),
+        ));
     }
 
     /// Builds the GPU resources for the current grid on an existing device: compiles the pipelines,
@@ -755,29 +786,7 @@ impl Output for WgpuRenderer {
                         inherited_bg[idx] = [inst.bg[0], inst.bg[1], inst.bg[2]];
                         sprite_bg[idx] = true;
                         self.layers[0].cells[idx] = sprite_inst;
-                        let (span_w, span_h) = tile.span();
-                        let align = sprite.align_offset(
-                            span_w,
-                            span_h,
-                            self.geometry.glyph_w,
-                            self.geometry.glyph_h,
-                        );
-                        self.warn_if_sprite_needs_span(tile, sprite);
-                        self.layers[0].sprites.push(SpriteInstance::new(
-                            cx,
-                            cy,
-                            sprite.layer,
-                            sprite.w,
-                            sprite.h,
-                            tile.dx() + align.0,
-                            tile.dy() + align.1,
-                            SpriteTint::resolve(
-                                sprite.color,
-                                tile.style().foreground(),
-                                draw_cell.tint,
-                                DEFAULT_FG,
-                            ),
-                        ));
+                        self.emit_sprite(0, cx, cy, tile, sprite, draw_cell.tint);
                         continue;
                     }
                     if let Some(g) = art_glyph {
@@ -827,29 +836,7 @@ impl Output for WgpuRenderer {
                 };
                 sprite_bg[idx] = true;
                 self.layers[l].cells[idx] = Cell::new(glyph, fg, bg, 0, 0, has_bg);
-                let (span_w, span_h) = tile.span();
-                let align = sprite.align_offset(
-                    span_w,
-                    span_h,
-                    self.geometry.glyph_w,
-                    self.geometry.glyph_h,
-                );
-                self.warn_if_sprite_needs_span(tile, sprite);
-                self.layers[l].sprites.push(SpriteInstance::new(
-                    cx,
-                    cy,
-                    sprite.layer,
-                    sprite.w,
-                    sprite.h,
-                    tile.dx() + align.0,
-                    tile.dy() + align.1,
-                    SpriteTint::resolve(
-                        sprite.color,
-                        tile.style().foreground(),
-                        draw_cell.tint,
-                        DEFAULT_FG,
-                    ),
-                ));
+                self.emit_sprite(l, cx, cy, tile, sprite, draw_cell.tint);
                 continue;
             }
             #[cfg(feature = "tilesets")]
@@ -1355,9 +1342,9 @@ mod sprite_layer_tests {
             ))
             .expect("draw_layers is infallible");
         }
-        assert!(r.warned_dropped_tint.contains(&'X'));
+        assert!(r.diagnostics.has_reported_dropped_tint('X'));
         assert_eq!(
-            r.warned_dropped_tint.len(),
+            r.diagnostics.dropped_tint_report_count(),
             1,
             "reported once, not per frame"
         );
@@ -1371,7 +1358,11 @@ mod sprite_layer_tests {
             DrawCell::on_layer(0, Pos::new(0, 0), &tile).with_tint(Tint::multiply(1, 2, 3)),
         ))
         .expect("draw_layers is infallible");
-        assert!(r.warned_dropped_tint.is_empty(), "the tint was applied");
+        assert_eq!(
+            r.diagnostics.dropped_tint_report_count(),
+            0,
+            "the tint was applied"
+        );
     }
 
     #[test]
@@ -1384,7 +1375,7 @@ mod sprite_layer_tests {
             &tile,
         )))
         .expect("draw_layers is infallible");
-        assert!(r.warned_dropped_tint.is_empty());
+        assert_eq!(r.diagnostics.dropped_tint_report_count(), 0);
     }
 }
 
