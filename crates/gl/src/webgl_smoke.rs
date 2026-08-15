@@ -144,14 +144,7 @@ fn render_to_frame(gl: &glow::Context, renderer: &GlRenderer) -> Frame {
         // back-to-front (upload + two instanced passes each), the same loop the windowed
         // `present` runs, so a single-layer frame and a multi-layer one both go through it.
         res.clear(gl);
-        for l in 0..renderer.layers.len() {
-            res.upload(gl, &renderer.layers[l]);
-            res.draw_layer(gl, renderer.cell_count() as i32);
-            #[cfg(feature = "tilesets")]
-            if let Some(sprites) = renderer.sprite_layers.get(l) {
-                res.draw_sprites(gl, sprites);
-            }
-        }
+        crate::draw_all_layers(&renderer.layers, gl, &mut res, renderer.cell_count() as i32);
         // Fail loudly on any GL error from the draw passes (e.g. an attribute type mismatch that
         // silently drops a draw) rather than only on the pixel assertions downstream.
         let err = gl.get_error();
@@ -436,7 +429,7 @@ fn sprite_cells_render_their_tileset_colors() {
 
     // draw_layers must have collected one sprite instance per cell on layer 0.
     assert_eq!(
-        r.sprite_layers.first().map(Vec::len),
+        r.layers.first().map(|l| l.sprites.len()),
         Some(2),
         "sprite dispatch did not collect instances"
     );

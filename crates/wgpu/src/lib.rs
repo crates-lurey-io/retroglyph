@@ -211,6 +211,45 @@ use std::sync::Arc;
 #[doc = include_str!("../README.md")]
 struct ReadmeDoctests;
 
+/// One grid layer's GPU-facing data: its cell instances and (with `tilesets`) its sprite
+/// instances, rebuilt together each frame by [`Output::draw_layers`] so the two can never drift
+/// out of lockstep the way two parallel `Vec`s could (a stale, longer sprite vector surviving a
+/// `clear`/`resize` and getting redrawn by `present`, retroglyph#727).
+#[derive(Clone)]
+struct Layer {
+    /// Row-major per-cell instances, `cols * rows` long.
+    cells: Vec<Cell>,
+    /// Sprite instances dispatched from this layer's cells. Empty for a layer with no sprite
+    /// cells, or when no tileset was loaded.
+    #[cfg(feature = "tilesets")]
+    sprites: Vec<SpriteInstance>,
+}
+
+impl Layer {
+    /// A new layer with every cell set to `fill`, and no sprites.
+    fn blank(fill: Cell, count: usize) -> Self {
+        Self {
+            cells: vec![fill; count],
+            #[cfg(feature = "tilesets")]
+            sprites: Vec::new(),
+        }
+    }
+
+    /// Resets this layer for reuse: `cells` becomes `count` copies of `fill` (rebuilt only if the
+    /// length changed, filled in place otherwise) and `sprites` is cleared. Used by
+    /// `draw_layers`/`clear`/`resize` so the sprite-lockstep reset (retroglyph#727) is one call
+    /// instead of a hand-copied `truncate`/`is_empty`/`push`/`clear` dance.
+    fn reset(&mut self, fill: Cell, count: usize) {
+        if self.cells.len() == count {
+            self.cells.fill(fill);
+        } else {
+            self.cells = vec![fill; count];
+        }
+        #[cfg(feature = "tilesets")]
+        self.sprites.clear();
+    }
+}
+
 /// The live wgpu renderer: a [`Presenter`], wrapped in
 /// [`WindowBackend`](retroglyph_window::backend::WindowBackend) to form a full
 /// [`Backend`](retroglyph_core::backend::Backend) for the windowing loop.
@@ -236,11 +275,12 @@ pub struct WgpuRenderer {
     geometry: CellGeometry,
     /// Atlas slot for the space glyph, used to initialize blank cells.
     space_glyph: u16,
-    /// Per-layer instance arrays (index = grid layer id), each `cols * rows` in row-major cell
-    /// order. `layers[0]` is the always-opaque base; higher layers composite over it back to front.
-    /// Rebuilt each frame by [`Output::draw_layers`], since this backend requests full frames.
-    /// There is always at least the base layer.
-    layers: Vec<Vec<Cell>>,
+    /// Per-layer state (index = grid layer id): each layer's cell instances (each `cols * rows`
+    /// in row-major order) and, with `tilesets`, its sprite instances. `layers[0]` is the
+    /// always-opaque base; higher layers composite over it back to front. Rebuilt each frame by
+    /// [`Output::draw_layers`], since this backend requests full frames. There is always at least
+    /// the base layer.
+    layers: Vec<Layer>,
     /// Scratch buffer holding every layer's cells back to back for the per-frame upload. Kept as a
     /// field so a steady-state frame reuses one allocation instead of building a new one.
     upload: Vec<Cell>,
@@ -250,10 +290,6 @@ pub struct WgpuRenderer {
     /// if the device is recreated.
     #[cfg(feature = "tilesets")]
     sprite_set: Option<SpriteSet>,
-    /// Per-layer sprite instances, parallel to `layers`, rebuilt each frame by
-    /// [`Output::draw_layers`].
-    #[cfg(feature = "tilesets")]
-    sprite_layers: Vec<Vec<SpriteInstance>>,
     /// Sprite equivalents of `upload`/`ranges`.
     #[cfg(feature = "tilesets")]
     sprite_upload: Vec<SpriteInstance>,
@@ -323,13 +359,11 @@ impl WgpuRenderer {
             rows,
             geometry,
             space_glyph,
-            layers: vec![vec![base_blank(space_glyph); count]],
+            layers: vec![Layer::blank(base_blank(space_glyph), count)],
             upload: Vec::new(),
             ranges: Vec::new(),
             #[cfg(feature = "tilesets")]
             sprite_set: None,
-            #[cfg(feature = "tilesets")]
-            sprite_layers: Vec::new(),
             #[cfg(feature = "tilesets")]
             sprite_upload: Vec::new(),
             #[cfg(feature = "tilesets")]
@@ -437,21 +471,22 @@ impl WgpuRenderer {
     fn flatten_layers(&mut self) {
         self.upload.clear();
         self.ranges.clear();
-        for layer in &self.layers {
-            let start = u32::try_from(self.upload.len()).unwrap_or(u32::MAX);
-            let count = u32::try_from(layer.len()).unwrap_or(u32::MAX);
-            self.upload.extend_from_slice(layer);
-            self.ranges.push(LayerRange { start, count });
-        }
-
         #[cfg(feature = "tilesets")]
         {
             self.sprite_upload.clear();
             self.sprite_ranges.clear();
-            for layer in &self.sprite_layers {
+        }
+        for layer in &self.layers {
+            let start = u32::try_from(self.upload.len()).unwrap_or(u32::MAX);
+            let count = u32::try_from(layer.cells.len()).unwrap_or(u32::MAX);
+            self.upload.extend_from_slice(&layer.cells);
+            self.ranges.push(LayerRange { start, count });
+
+            #[cfg(feature = "tilesets")]
+            {
                 let start = u32::try_from(self.sprite_upload.len()).unwrap_or(u32::MAX);
-                let count = u32::try_from(layer.len()).unwrap_or(u32::MAX);
-                self.sprite_upload.extend_from_slice(layer);
+                let count = u32::try_from(layer.sprites.len()).unwrap_or(u32::MAX);
+                self.sprite_upload.extend_from_slice(&layer.sprites);
                 self.sprite_ranges.push(LayerRange { start, count });
             }
         }
@@ -623,12 +658,7 @@ impl Output for WgpuRenderer {
         let base = self.base_blank();
         let cell_count = self.cell_count();
         self.layers.truncate(1);
-        let base_layer = &mut self.layers[0];
-        if base_layer.len() == cell_count {
-            base_layer.fill(base);
-        } else {
-            *base_layer = vec![base; cell_count];
-        }
+        self.layers[0].reset(base, cell_count);
 
         // Per-cell running background, updated bottom-up as layers are processed. An occupied
         // higher-layer tile with a `Color::Default` background inherits this instead of being
@@ -647,16 +677,6 @@ impl Output for WgpuRenderer {
         // because the anchor of any span is written before its covered cells (row-major stream).
         let mut sprite_bg = vec![false; cell_count];
 
-        // Sprite instances are collected per layer in lockstep with `self.layers`: reset to just
-        // the (empty) base layer; higher layers are grown alongside `self.layers`.
-        #[cfg(feature = "tilesets")]
-        {
-            self.sprite_layers.truncate(1);
-            if self.sprite_layers.is_empty() {
-                self.sprite_layers.push(Vec::new());
-            }
-            self.sprite_layers[0].clear();
-        }
         let cols = usize::from(self.cols);
         let rows = usize::from(self.rows);
         for draw_cell in content {
@@ -668,10 +688,10 @@ impl Output for WgpuRenderer {
             let l = usize::from(layer_id);
             while self.layers.len() <= l {
                 // Higher layers default to fully transparent cells (flags == 0).
-                self.layers
-                    .push(vec![Cell::transparent(self.space_glyph); cell_count]);
-                #[cfg(feature = "tilesets")]
-                self.sprite_layers.push(Vec::new());
+                self.layers.push(Layer::blank(
+                    Cell::transparent(self.space_glyph),
+                    cell_count,
+                ));
             }
             let idx = y * cols + x;
 
@@ -706,7 +726,7 @@ impl Output for WgpuRenderer {
                     if has_bg != 0 {
                         inherited_bg[idx] = bg;
                     }
-                    self.layers[l][idx] = Cell::new(self.space_glyph, fg, bg, 0, 0, has_bg);
+                    self.layers[l].cells[idx] = Cell::new(self.space_glyph, fg, bg, 0, 0, has_bg);
                     continue;
                 }
             }
@@ -734,7 +754,7 @@ impl Output for WgpuRenderer {
                         );
                         inherited_bg[idx] = [inst.bg[0], inst.bg[1], inst.bg[2]];
                         sprite_bg[idx] = true;
-                        self.layers[0][idx] = sprite_inst;
+                        self.layers[0].cells[idx] = sprite_inst;
                         let (span_w, span_h) = tile.span();
                         let align = sprite.align_offset(
                             span_w,
@@ -743,7 +763,7 @@ impl Output for WgpuRenderer {
                             self.geometry.glyph_h,
                         );
                         self.warn_if_sprite_needs_span(tile, sprite);
-                        self.sprite_layers[0].push(SpriteInstance::new(
+                        self.layers[0].sprites.push(SpriteInstance::new(
                             cx,
                             cy,
                             sprite.layer,
@@ -765,14 +785,14 @@ impl Output for WgpuRenderer {
                     }
                 }
                 inherited_bg[idx] = [inst.bg[0], inst.bg[1], inst.bg[2]];
-                self.layers[0][idx] = inst;
+                self.layers[0].cells[idx] = inst;
                 continue;
             }
             if cell_art_glyph(tile).is_none() {
                 // Transparent: nothing drawn, and the running background is unchanged. This branch
                 // runs after the span-covered `continue` above, so a `None` here always means
                 // blank, never span-covered.
-                self.layers[l][idx] = Cell::transparent(self.space_glyph);
+                self.layers[l].cells[idx] = Cell::transparent(self.space_glyph);
                 continue;
             }
             // Occupied higher-layer tile: opaque background (its own color, or the inherited one
@@ -806,7 +826,7 @@ impl Output for WgpuRenderer {
                     FLAG_HAS_BG
                 };
                 sprite_bg[idx] = true;
-                self.layers[l][idx] = Cell::new(glyph, fg, bg, 0, 0, has_bg);
+                self.layers[l].cells[idx] = Cell::new(glyph, fg, bg, 0, 0, has_bg);
                 let (span_w, span_h) = tile.span();
                 let align = sprite.align_offset(
                     span_w,
@@ -815,7 +835,7 @@ impl Output for WgpuRenderer {
                     self.geometry.glyph_h,
                 );
                 self.warn_if_sprite_needs_span(tile, sprite);
-                self.sprite_layers[l].push(SpriteInstance::new(
+                self.layers[l].sprites.push(SpriteInstance::new(
                     cx,
                     cy,
                     sprite.layer,
@@ -835,7 +855,7 @@ impl Output for WgpuRenderer {
             #[cfg(feature = "tilesets")]
             self.warn_if_tint_needs_sprite(tile.glyph(), draw_cell.tint);
             sprite_bg[idx] = false;
-            self.layers[l][idx] =
+            self.layers[l].cells[idx] =
                 Cell::new(glyph, fg, bg, tile.dx(), tile.dy(), FLAG_HAS_BG | has_glyph);
         }
         Ok(())
@@ -862,19 +882,12 @@ impl Output for WgpuRenderer {
 
     fn clear(&mut self) -> Result<(), Self::Error> {
         let base = self.base_blank();
+        let cell_count = self.cell_count();
+        // A `Layer` owns its cells and sprites together, so this one `reset` is what used to be a
+        // hand-copied `truncate`/`is_empty`/`push`/`clear` dance keeping a second, parallel sprite
+        // vector from surviving the clear and getting redrawn by `present` (retroglyph#727).
         self.layers.truncate(1);
-        self.layers[0].fill(base);
-        // Sprite instances are collected per layer in lockstep with `self.layers`; a stale, larger
-        // `sprite_layers` would otherwise survive the clear and get redrawn by `present`
-        // (retroglyph#727).
-        #[cfg(feature = "tilesets")]
-        {
-            self.sprite_layers.truncate(1);
-            if self.sprite_layers.is_empty() {
-                self.sprite_layers.push(Vec::new());
-            }
-            self.sprite_layers[0].clear();
-        }
+        self.layers[0].reset(base, cell_count);
         Ok(())
     }
 
@@ -882,13 +895,9 @@ impl Output for WgpuRenderer {
         self.cols = size.width();
         self.rows = size.height();
         let base = self.base_blank();
-        self.layers = vec![vec![base; self.cell_count()]];
-        // See the comment in `clear`: `sprite_layers` must stay in lockstep with `layers` so
-        // `present` doesn't redraw sprites left over from before the resize (retroglyph#727).
-        #[cfg(feature = "tilesets")]
-        {
-            self.sprite_layers = vec![Vec::new()];
-        }
+        // See the comment in `clear`: rebuilding as a single blank `Layer` can't leave a stale,
+        // larger sprite vector behind for `present` to redraw after the resize (retroglyph#727).
+        self.layers = vec![Layer::blank(base, self.cell_count())];
     }
 }
 
@@ -1002,7 +1011,7 @@ mod compositing_tests {
         r.draw(core::iter::once(DrawCell::new(Pos::new(1, 0), &tile)))
             .expect("draw is infallible");
 
-        let inst = r.layers[0][1];
+        let inst = r.layers[0].cells[1];
         assert_eq!((inst.dx, inst.dy), (-3, 5));
         let a_slot = r.glyphs.resolve('A').expect("'A' is in CP437");
         assert_eq!(inst.glyph, a_slot);
@@ -1018,6 +1027,7 @@ mod compositing_tests {
             .expect("default-font builds");
         assert!(
             r.layers[0]
+                .cells
                 .iter()
                 .all(|i| i.dx == 0 && i.dy == 0 && i.flags == FLAG_HAS_BG)
         );
@@ -1061,18 +1071,18 @@ mod compositing_tests {
             .expect("draw_layers is infallible");
 
         // Base layer cell 0 draws both.
-        assert_eq!(r.layers[0][0].flags, FLAG_HAS_BG | FLAG_HAS_GLYPH);
+        assert_eq!(r.layers[0].cells[0].flags, FLAG_HAS_BG | FLAG_HAS_GLYPH);
         // A second layer was allocated.
         assert_eq!(r.layers.len(), 2);
         // Higher-layer empty cell: fully transparent, so the lower layer shows.
-        assert_eq!(r.layers[1][0].flags, 0);
+        assert_eq!(r.layers[1].cells[0].flags, 0);
         // Higher-layer occupied cell with a Default background is opaque (it erases the glyph
         // beneath), inheriting the background from below: here the untouched base cell.
-        assert_eq!(r.layers[1][1].flags, FLAG_HAS_BG | FLAG_HAS_GLYPH);
-        assert_eq!(r.layers[1][1].bg, r.layers[0][1].bg);
+        assert_eq!(r.layers[1].cells[1].flags, FLAG_HAS_BG | FLAG_HAS_GLYPH);
+        assert_eq!(r.layers[1].cells[1].bg, r.layers[0].cells[1].bg);
         // Higher-layer glyph with a real background: both, with its own color.
-        assert_eq!(r.layers[1][2].flags, FLAG_HAS_BG | FLAG_HAS_GLYPH);
-        assert_eq!(r.layers[1][2].bg, [255, 0, 0, 0]);
+        assert_eq!(r.layers[1].cells[2].flags, FLAG_HAS_BG | FLAG_HAS_GLYPH);
+        assert_eq!(r.layers[1].cells[2].bg, [255, 0, 0, 0]);
     }
 
     #[test]
@@ -1127,8 +1137,8 @@ mod compositing_tests {
         .expect("draw_layers");
 
         // The covered cell paints the span's background and no glyph of its own.
-        assert_eq!(r.layers[0][1].flags, FLAG_HAS_BG);
-        assert_eq!(r.layers[0][1].bg, [255, 0, 0, 0]);
+        assert_eq!(r.layers[0].cells[1].flags, FLAG_HAS_BG);
+        assert_eq!(r.layers[0].cells[1].bg, [255, 0, 0, 0]);
     }
 
     #[test]
@@ -1151,8 +1161,8 @@ mod compositing_tests {
         assert_eq!((r.ranges[0].start, r.ranges[0].count), (0, 4));
         assert_eq!((r.ranges[1].start, r.ranges[1].count), (4, 4));
         // Each layer's slice must hold that layer's own cells, in order.
-        assert_eq!(&r.upload[0..4], r.layers[0].as_slice());
-        assert_eq!(&r.upload[4..8], r.layers[1].as_slice());
+        assert_eq!(&r.upload[0..4], r.layers[0].cells.as_slice());
+        assert_eq!(&r.upload[4..8], r.layers[1].cells.as_slice());
     }
 
     #[test]
@@ -1165,7 +1175,7 @@ mod compositing_tests {
         r.resize(Size::new(10, 3));
         assert_eq!(r.size(), Size::new(10, 3));
         assert_eq!(r.layers.len(), 1);
-        assert_eq!(r.layers[0].len(), 30);
+        assert_eq!(r.layers[0].cells.len(), 30);
     }
 
     #[test]
@@ -1211,7 +1221,7 @@ mod compositing_tests {
         )
         .expect("draw_layers is infallible");
 
-        let covered = r.layers[1][1];
+        let covered = r.layers[1].cells[1];
         assert_eq!(covered.flags, FLAG_HAS_BG, "covered cell draws no glyph");
         assert_eq!(
             covered.bg,
@@ -1243,8 +1253,8 @@ mod compositing_tests {
         )
         .expect("draw_layers is infallible");
 
-        assert_eq!(r.layers[0][0].flags & FLAG_HAS_GLYPH, FLAG_HAS_GLYPH);
-        assert_eq!(r.layers[0][1].flags & FLAG_HAS_GLYPH, 0);
+        assert_eq!(r.layers[0].cells[0].flags & FLAG_HAS_GLYPH, FLAG_HAS_GLYPH);
+        assert_eq!(r.layers[0].cells[1].flags & FLAG_HAS_GLYPH, 0);
     }
 }
 
@@ -1283,8 +1293,8 @@ mod sprite_layer_tests {
             .expect("tileset builds")
     }
 
-    /// Draws a sprite on two layers, so `sprite_layers` has more than the (always present) base
-    /// layer entry to be reset.
+    /// Draws a sprite on two layers, so `layers` has more than the (always present) base layer's
+    /// sprites to be reset.
     fn renderer_with_a_sprite_on_two_layers() -> WgpuRenderer {
         let mut r = renderer_with_sprite(1, 1);
         let sprite = Tile::new('S', Style::new());
@@ -1302,25 +1312,25 @@ mod sprite_layer_tests {
     #[test]
     fn clear_resets_sprite_layers_to_a_single_empty_layer() {
         let mut r = renderer_with_a_sprite_on_two_layers();
-        assert_eq!(r.sprite_layers.len(), 2);
-        assert!(!r.sprite_layers[0].is_empty());
+        assert_eq!(r.layers.len(), 2);
+        assert!(!r.layers[0].sprites.is_empty());
 
         r.clear().expect("clear is infallible");
 
-        assert_eq!(r.sprite_layers.len(), 1);
-        assert!(r.sprite_layers[0].is_empty());
+        assert_eq!(r.layers.len(), 1);
+        assert!(r.layers[0].sprites.is_empty());
     }
 
     #[test]
     fn resize_resets_sprite_layers_to_a_single_empty_layer() {
         let mut r = renderer_with_a_sprite_on_two_layers();
-        assert_eq!(r.sprite_layers.len(), 2);
-        assert!(!r.sprite_layers[0].is_empty());
+        assert_eq!(r.layers.len(), 2);
+        assert!(!r.layers[0].sprites.is_empty());
 
         r.resize(Size::new(2, 2));
 
-        assert_eq!(r.sprite_layers.len(), 1);
-        assert!(r.sprite_layers[0].is_empty());
+        assert_eq!(r.layers.len(), 1);
+        assert!(r.layers[0].sprites.is_empty());
     }
 
     #[test]
@@ -1411,9 +1421,16 @@ mod conformance {
                 .grid_size(size.width().max(1), size.height().max(1))
                 .build()
                 .expect("default-font builds");
-            let previous = renderer.layers.clone();
+            let previous = layer_cells(&renderer);
             Self { renderer, previous }
         }
+    }
+
+    /// Each layer's cell instances, as a plain `Vec<Vec<Cell>>` snapshot: `Layer` is private to
+    /// the crate root and also carries a `sprites` field this hash doesn't need, so the
+    /// conformance snapshot copies out just the part it hashes.
+    fn layer_cells(renderer: &WgpuRenderer) -> Vec<Vec<Cell>> {
+        renderer.layers.iter().map(|l| l.cells.clone()).collect()
     }
 
     impl Output for WgpuObserver {
@@ -1449,7 +1466,7 @@ mod conformance {
 
     impl Observable for WgpuObserver {
         fn snapshot(&mut self) -> u64 {
-            let current = &self.renderer.layers;
+            let current = layer_cells(&self.renderer);
             let mut hash = fnv1a(b"wgpu-diff");
             for (layer, (was, now)) in self.previous.iter().zip(current.iter()).enumerate() {
                 for (index, (was, now)) in was.iter().zip(now.iter()).enumerate() {
@@ -1464,10 +1481,10 @@ mod conformance {
             // shrink-then-grow back to the same per-cell content would hash identically to no
             // change at all.
             hash ^= fnv1a(&(current.len() as u64).to_ne_bytes());
-            for layer in current {
+            for layer in &current {
                 hash ^= fnv1a(&(layer.len() as u64).to_ne_bytes());
             }
-            self.previous = current.clone();
+            self.previous = current;
             hash
         }
     }

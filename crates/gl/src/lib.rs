@@ -154,6 +154,45 @@ use std::sync::Arc;
 #[doc = include_str!("../README.md")]
 struct ReadmeDoctests;
 
+/// One grid layer's GPU-facing data: its cell instances and (with `tilesets`) its sprite
+/// instances, rebuilt together each frame by [`Output::draw_layers`] so the two can never drift
+/// out of lockstep the way two parallel `Vec`s could (issue #727: a stale, longer sprite vector
+/// surviving a `clear`/`resize` and getting redrawn).
+#[derive(Clone)]
+struct Layer {
+    /// Row-major per-cell instances, `cols * rows` long.
+    cells: Vec<Instance>,
+    /// Sprite instances dispatched from this layer's cells (issue #366). Empty for a layer with
+    /// no sprite cells, or when no tileset was loaded.
+    #[cfg(feature = "tilesets")]
+    sprites: Vec<SpriteInstance>,
+}
+
+impl Layer {
+    /// A new layer with every cell set to `fill`, and no sprites.
+    fn blank(fill: Instance, count: usize) -> Self {
+        Self {
+            cells: vec![fill; count],
+            #[cfg(feature = "tilesets")]
+            sprites: Vec::new(),
+        }
+    }
+
+    /// Resets this layer for reuse: `cells` becomes `count` copies of `fill` (rebuilt only if the
+    /// length changed, filled in place otherwise) and `sprites` is cleared. Used by
+    /// `draw_layers`/`clear`/`resize` so the sprite-lockstep reset (issue #727) is one call
+    /// instead of a hand-copied `truncate`/`is_empty`/`push`/`clear` dance.
+    fn reset(&mut self, fill: Instance, count: usize) {
+        if self.cells.len() == count {
+            self.cells.fill(fill);
+        } else {
+            self.cells = vec![fill; count];
+        }
+        #[cfg(feature = "tilesets")]
+        self.sprites.clear();
+    }
+}
+
 /// The live GL renderer: a [`Presenter`], wrapped in
 /// [`WindowBackend`](retroglyph_window::backend::WindowBackend) to form a full
 /// [`Backend`](retroglyph_core::backend::Backend) for the windowing loop.
@@ -179,19 +218,16 @@ pub struct GlRenderer {
     geometry: CellGeometry,
     /// Atlas slot for the space glyph, used to initialize blank cells.
     space_glyph: u16,
-    /// Per-layer instance arrays (index = grid layer id), each `cols * rows` in row-major cell
-    /// order. `layers[0]` is the always-opaque base; higher layers composite over it back-to-front
-    /// (see [`present`](Presenter::present)). Rebuilt each frame by [`Output::draw_layers`], since
-    /// this backend requests full frames. There is always at least the base layer.
-    layers: Vec<Vec<Instance>>,
+    /// Per-layer state (index = grid layer id): each layer's cell instances (each `cols * rows`
+    /// in row-major order) and, with `tilesets`, its sprite instances. `layers[0]` is the
+    /// always-opaque base; higher layers composite over it back-to-front (see
+    /// [`present`](Presenter::present)). Rebuilt each frame by [`Output::draw_layers`], since this
+    /// backend requests full frames. There is always at least the base layer.
+    layers: Vec<Layer>,
     /// The decoded sprite atlas (issue #366), if a tileset was loaded. Retained so the GPU atlas
     /// can be rebuilt after a WebGL2 context loss.
     #[cfg(feature = "tilesets")]
     sprite_set: Option<SpriteSet>,
-    /// Per-layer sprite instances, parallel to `layers`, rebuilt each frame by
-    /// [`Output::draw_layers`]. Empty layers (or a renderer with no tileset) carry no sprites.
-    #[cfg(feature = "tilesets")]
-    sprite_layers: Vec<Vec<SpriteInstance>>,
     /// Glyphs already reported as needing a span, so a redraw loop logs each one once instead of
     /// every frame. See `retroglyph_window::sprite_cache::warn_sprite_needs_span`.
     #[cfg(feature = "tilesets")]
@@ -230,7 +266,7 @@ impl GlRenderer {
         let space_glyph = glyphs.space_slot();
         let count = usize::from(cols) * usize::from(rows);
         let base = base_blank(space_glyph);
-        let layers = vec![vec![base; count]];
+        let layers = vec![Layer::blank(base, count)];
         Self {
             glyphs,
             cols,
@@ -240,8 +276,6 @@ impl GlRenderer {
             layers,
             #[cfg(feature = "tilesets")]
             sprite_set: None,
-            #[cfg(feature = "tilesets")]
-            sprite_layers: Vec::new(),
             #[cfg(feature = "tilesets")]
             warned_oversized: std::collections::BTreeSet::new(),
             #[cfg(feature = "tilesets")]
@@ -348,7 +382,7 @@ impl GlRenderer {
         let atlas = self.glyphs.data();
         #[cfg_attr(not(feature = "tilesets"), allow(unused_mut))]
         let mut res = GlResources::new(gl, flavor, &atlas, self.cell_count())?;
-        res.upload(gl, &self.layers[0]);
+        res.upload(gl, &self.layers[0].cells);
         let (cw, ch) = self.glyphs.cell_size();
         #[allow(clippy::cast_precision_loss)]
         res.set_glyph_size(gl, cw as f32, ch as f32);
@@ -369,6 +403,25 @@ impl GlRenderer {
             i32::from(self.cols),
         );
         Ok(res)
+    }
+}
+
+/// Composites every layer back-to-front into `res`: uploads each layer's cell instances and
+/// issues its draw call, then (with `tilesets`) its sprite pass over the top (issue #366) --
+/// source-over blended, so a layer with no sprite cells draws nothing extra.
+///
+/// A free function over `&[Layer]` rather than a `GlRenderer` method: [`Presenter::present`] holds
+/// a split borrow of `self.gpu` (see its own comment) while still needing `self.layers`, and a
+/// `&self` method here would re-borrow the whole renderer and conflict with that. The headless
+/// (`headless.rs`) and WebGL2 smoke (`webgl_smoke.rs`) render tests share this too, so the loop
+/// they exercise is exactly the one `present` runs.
+#[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+fn draw_all_layers(layers: &[Layer], gl: &glow::Context, res: &mut GlResources, cell_count: i32) {
+    for layer in layers {
+        res.upload(gl, &layer.cells);
+        res.draw_layer(gl, cell_count);
+        #[cfg(feature = "tilesets")]
+        res.draw_sprites(gl, &layer.sprites);
     }
 }
 
@@ -437,12 +490,7 @@ impl Output for GlRenderer {
         let base = self.base_blank();
         let cell_count = self.cell_count();
         self.layers.truncate(1);
-        let base_layer = &mut self.layers[0];
-        if base_layer.len() == cell_count {
-            base_layer.fill(base);
-        } else {
-            *base_layer = vec![base; cell_count];
-        }
+        self.layers[0].reset(base, cell_count);
 
         // Per-cell running background, updated bottom-up as layers are processed. An occupied
         // higher-layer tile with a `Color::Default` background inherits this instead of being
@@ -461,17 +509,6 @@ impl Output for GlRenderer {
         // it, because the anchor of any span is written before its covered cells (row-major stream).
         let mut sprite_bg = vec![false; cell_count];
 
-        // Sprite instances are collected per layer in lockstep with `self.layers` (issue #366):
-        // reset to just the (empty) base layer; higher layers are grown alongside `self.layers`.
-        #[cfg(feature = "tilesets")]
-        {
-            self.sprite_layers.truncate(1);
-            if self.sprite_layers.is_empty() {
-                self.sprite_layers.push(Vec::new());
-            }
-            self.sprite_layers[0].clear();
-        }
-
         let cols = usize::from(self.cols);
         let rows = usize::from(self.rows);
         for draw_cell in content {
@@ -483,12 +520,10 @@ impl Output for GlRenderer {
             let l = usize::from(layer_id);
             while self.layers.len() <= l {
                 // Higher layers default to fully transparent cells (flags == 0).
-                self.layers.push(vec![
-                    Instance::new(self.space_glyph, [0; 3], [0; 3], 0, 0, 0);
-                    cell_count
-                ]);
-                #[cfg(feature = "tilesets")]
-                self.sprite_layers.push(Vec::new());
+                self.layers.push(Layer::blank(
+                    Instance::new(self.space_glyph, [0; 3], [0; 3], 0, 0, 0),
+                    cell_count,
+                ));
             }
             let idx = y * cols + x;
 
@@ -526,7 +561,8 @@ impl Output for GlRenderer {
                     if has_bg != 0 {
                         inherited_bg[idx] = bg;
                     }
-                    self.layers[l][idx] = Instance::new(self.space_glyph, fg, bg, 0, 0, has_bg);
+                    self.layers[l].cells[idx] =
+                        Instance::new(self.space_glyph, fg, bg, 0, 0, has_bg);
                     continue;
                 }
             }
@@ -555,7 +591,7 @@ impl Output for GlRenderer {
                         );
                         inherited_bg[idx] = sprite_inst.bg;
                         sprite_bg[idx] = true;
-                        self.layers[0][idx] = sprite_inst;
+                        self.layers[0].cells[idx] = sprite_inst;
                         let (span_w, span_h) = tile.span();
                         let align = sprite.align_offset(
                             span_w,
@@ -564,7 +600,7 @@ impl Output for GlRenderer {
                             self.geometry.glyph_h,
                         );
                         self.warn_if_sprite_needs_span(tile, sprite);
-                        self.sprite_layers[0].push(SpriteInstance::new(
+                        self.layers[0].sprites.push(SpriteInstance::new(
                             cx,
                             cy,
                             sprite.layer,
@@ -586,14 +622,15 @@ impl Output for GlRenderer {
                     }
                 }
                 inherited_bg[idx] = inst.bg;
-                self.layers[0][idx] = inst;
+                self.layers[0].cells[idx] = inst;
                 continue;
             }
             if cell_art_glyph(tile).is_none() {
                 // Transparent: nothing drawn, and the running background is unchanged. This
                 // branch runs after the span-covered `continue` above, so a `None` here always
                 // means blank, never span-covered.
-                self.layers[l][idx] = Instance::new(self.space_glyph, [0; 3], [0; 3], 0, 0, 0);
+                self.layers[l].cells[idx] =
+                    Instance::new(self.space_glyph, [0; 3], [0; 3], 0, 0, 0);
                 continue;
             }
             // Occupied higher-layer tile: opaque background (own colour, or the inherited one when
@@ -628,7 +665,7 @@ impl Output for GlRenderer {
                     FLAG_HAS_BG
                 };
                 sprite_bg[idx] = true;
-                self.layers[l][idx] = Instance::new(glyph, fg, bg, 0, 0, has_bg);
+                self.layers[l].cells[idx] = Instance::new(glyph, fg, bg, 0, 0, has_bg);
                 let (span_w, span_h) = tile.span();
                 let align = sprite.align_offset(
                     span_w,
@@ -637,7 +674,7 @@ impl Output for GlRenderer {
                     self.geometry.glyph_h,
                 );
                 self.warn_if_sprite_needs_span(tile, sprite);
-                self.sprite_layers[l].push(SpriteInstance::new(
+                self.layers[l].sprites.push(SpriteInstance::new(
                     cx,
                     cy,
                     sprite.layer,
@@ -657,7 +694,7 @@ impl Output for GlRenderer {
             #[cfg(feature = "tilesets")]
             self.warn_if_tint_needs_sprite(tile.glyph(), draw_cell.tint);
             sprite_bg[idx] = false;
-            self.layers[l][idx] =
+            self.layers[l].cells[idx] =
                 Instance::new(glyph, fg, bg, tile.dx(), tile.dy(), FLAG_HAS_BG | has_glyph);
         }
         Ok(())
@@ -684,21 +721,12 @@ impl Output for GlRenderer {
 
     fn clear(&mut self) -> Result<(), Self::Error> {
         let base = self.base_blank();
+        let cell_count = self.cell_count();
+        // A `Layer` owns its cells and sprites together, so this one `reset` is what used to be a
+        // hand-copied `truncate`/`is_empty`/`push`/`clear` dance keeping a second, parallel sprite
+        // vector from surviving the clear and getting redrawn by `present` (issue #727).
         self.layers.truncate(1);
-        for cell in &mut self.layers[0] {
-            *cell = base;
-        }
-        // Sprite instances are collected per layer in lockstep with `self.layers` (issue #366);
-        // a stale, larger `sprite_layers` would otherwise survive the clear and get redrawn by
-        // `present` (issue #727).
-        #[cfg(feature = "tilesets")]
-        {
-            self.sprite_layers.truncate(1);
-            if self.sprite_layers.is_empty() {
-                self.sprite_layers.push(Vec::new());
-            }
-            self.sprite_layers[0].clear();
-        }
+        self.layers[0].reset(base, cell_count);
         Ok(())
     }
 
@@ -706,13 +734,9 @@ impl Output for GlRenderer {
         self.cols = size.width();
         self.rows = size.height();
         let base = self.base_blank();
-        self.layers = vec![vec![base; self.cell_count()]];
-        // See the comment in `clear`: `sprite_layers` must stay in lockstep with `layers` so
-        // `present` doesn't redraw sprites left over from before the resize (issue #727).
-        #[cfg(feature = "tilesets")]
-        {
-            self.sprite_layers = vec![Vec::new()];
-        }
+        // See the comment in `clear`: rebuilding as a single blank `Layer` can't leave a stale,
+        // larger sprite vector behind for `present` to redraw after the resize (issue #727).
+        self.layers = vec![Layer::blank(base, self.cell_count())];
     }
 }
 
@@ -798,16 +822,7 @@ impl Presenter for GlRenderer {
         // already holds the whole current frame.
         gpu.res.clear(&gpu.ctx.gl);
         #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-        for l in 0..self.layers.len() {
-            gpu.res.upload(&gpu.ctx.gl, &self.layers[l]);
-            gpu.res.draw_layer(&gpu.ctx.gl, cell_count as i32);
-            // Sprite pass for this layer, over its glyph passes and source-over blended (issue
-            // #366). Parallel to `self.layers`; a layer with no sprite cells draws nothing.
-            #[cfg(feature = "tilesets")]
-            if let Some(sprites) = self.sprite_layers.get(l) {
-                gpu.res.draw_sprites(&gpu.ctx.gl, sprites);
-            }
-        }
+        draw_all_layers(&self.layers, &gpu.ctx.gl, &mut gpu.res, cell_count as i32);
         gpu.ctx.present()
     }
 
@@ -854,7 +869,7 @@ mod compositing_tests {
         r.draw(core::iter::once(DrawCell::new(Pos::new(1, 0), &tile)))
             .expect("draw is infallible");
 
-        let inst = r.layers[0][1];
+        let inst = r.layers[0].cells[1];
         assert_eq!(inst.dx, -3);
         assert_eq!(inst.dy, 5);
         let a_slot = r.glyphs.resolve('A').expect("'A' is in CP437");
@@ -886,6 +901,7 @@ mod compositing_tests {
         // Untouched base cells: opaque default background, no glyph, no offset.
         assert!(
             r.layers[0]
+                .cells
                 .iter()
                 .all(|i| i.dx == 0 && i.dy == 0 && i.flags == FLAG_HAS_BG)
         );
@@ -929,18 +945,18 @@ mod compositing_tests {
             .expect("draw_layers is infallible");
 
         // Base layer cell 0 draws both.
-        assert_eq!(r.layers[0][0].flags, FLAG_HAS_BG | FLAG_HAS_GLYPH);
+        assert_eq!(r.layers[0].cells[0].flags, FLAG_HAS_BG | FLAG_HAS_GLYPH);
         // A second layer was allocated.
         assert_eq!(r.layers.len(), 2);
         // Higher-layer empty cell: fully transparent (nothing drawn -> lower layer shows).
-        assert_eq!(r.layers[1][0].flags, 0);
+        assert_eq!(r.layers[1].cells[0].flags, 0);
         // Higher-layer occupied cell with a Default background is opaque (it erases the glyph
         // beneath), inheriting the background from below: here the untouched base cell.
-        assert_eq!(r.layers[1][1].flags, FLAG_HAS_BG | FLAG_HAS_GLYPH);
-        assert_eq!(r.layers[1][1].bg, r.layers[0][1].bg);
+        assert_eq!(r.layers[1].cells[1].flags, FLAG_HAS_BG | FLAG_HAS_GLYPH);
+        assert_eq!(r.layers[1].cells[1].bg, r.layers[0].cells[1].bg);
         // Higher-layer glyph with a real background: both, with its own colour.
-        assert_eq!(r.layers[1][2].flags, FLAG_HAS_BG | FLAG_HAS_GLYPH);
-        assert_eq!(r.layers[1][2].bg, [255, 0, 0]);
+        assert_eq!(r.layers[1].cells[2].flags, FLAG_HAS_BG | FLAG_HAS_GLYPH);
+        assert_eq!(r.layers[1].cells[2].bg, [255, 0, 0]);
     }
 
     #[test]
@@ -992,7 +1008,11 @@ mod compositing_tests {
         )
         .expect("draw_layers is infallible");
 
-        let (anchor, covered, free) = (r.layers[0][0], r.layers[0][1], r.layers[0][2]);
+        let (anchor, covered, free) = (
+            r.layers[0].cells[0],
+            r.layers[0].cells[1],
+            r.layers[0].cells[2],
+        );
         assert_eq!(anchor.flags, FLAG_HAS_BG | FLAG_HAS_GLYPH, "anchor draws");
         assert_eq!(covered.flags, FLAG_HAS_BG, "covered cell draws no glyph");
         assert_eq!(
@@ -1038,7 +1058,7 @@ mod compositing_tests {
         )
         .expect("draw_layers is infallible");
 
-        let covered = r.layers[1][1];
+        let covered = r.layers[1].cells[1];
         assert_eq!(covered.flags, FLAG_HAS_BG, "covered cell draws no glyph");
         assert_eq!(
             covered.bg,
@@ -1070,8 +1090,8 @@ mod compositing_tests {
         )
         .expect("draw_layers is infallible");
 
-        assert_eq!(r.layers[0][0].flags & FLAG_HAS_GLYPH, FLAG_HAS_GLYPH);
-        assert_eq!(r.layers[0][1].flags & FLAG_HAS_GLYPH, 0);
+        assert_eq!(r.layers[0].cells[0].flags & FLAG_HAS_GLYPH, FLAG_HAS_GLYPH);
+        assert_eq!(r.layers[0].cells[1].flags & FLAG_HAS_GLYPH, 0);
     }
 
     /// A single 8x16 opaque tile mapped to `'S'`. See `dropped_tint_tests::one_tile_png`'s doc
@@ -1124,7 +1144,7 @@ mod compositing_tests {
         )
         .expect("draw_layers is infallible");
 
-        let covered = r.layers[1][1];
+        let covered = r.layers[1].cells[1];
         assert_eq!(
             covered.flags & FLAG_HAS_BG,
             0,
@@ -1306,8 +1326,8 @@ mod dropped_tint_tests {
         assert!(r.warned_dropped_tint.is_empty());
     }
 
-    /// Draws a sprite on two layers, so `sprite_layers` has more than the (always present) base
-    /// layer entry to be reset (issue #727).
+    /// Draws a sprite on two layers, so `layers` has more than the (always present) base layer's
+    /// sprites to be reset (issue #727).
     fn renderer_with_a_sprite_on_two_layers() -> crate::GlRenderer {
         let mut r = renderer_with_sprite(1, 1);
         let sprite = Tile::new('S', Style::new());
@@ -1325,13 +1345,13 @@ mod dropped_tint_tests {
     #[test]
     fn clear_resets_sprite_layers_to_a_single_empty_layer() {
         let mut r = renderer_with_a_sprite_on_two_layers();
-        assert_eq!(r.sprite_layers.len(), 2);
-        assert!(!r.sprite_layers[0].is_empty());
+        assert_eq!(r.layers.len(), 2);
+        assert!(!r.layers[0].sprites.is_empty());
 
         r.clear().expect("clear is infallible");
 
-        assert_eq!(r.sprite_layers.len(), 1);
-        assert!(r.sprite_layers[0].is_empty());
+        assert_eq!(r.layers.len(), 1);
+        assert!(r.layers[0].sprites.is_empty());
     }
 
     #[test]
@@ -1339,13 +1359,13 @@ mod dropped_tint_tests {
         use retroglyph_core::grid::Size;
 
         let mut r = renderer_with_a_sprite_on_two_layers();
-        assert_eq!(r.sprite_layers.len(), 2);
-        assert!(!r.sprite_layers[0].is_empty());
+        assert_eq!(r.layers.len(), 2);
+        assert!(!r.layers[0].sprites.is_empty());
 
         r.resize(Size::new(2, 2));
 
-        assert_eq!(r.sprite_layers.len(), 1);
-        assert!(r.sprite_layers[0].is_empty());
+        assert_eq!(r.layers.len(), 1);
+        assert!(r.layers[0].sprites.is_empty());
     }
 }
 
@@ -1395,9 +1415,16 @@ mod output_conformance_tests {
     impl GlObserver {
         fn new(size: Size) -> Self {
             let renderer = conformance_renderer(size);
-            let previous = renderer.layers.clone();
+            let previous = layer_cells(&renderer);
             Self { renderer, previous }
         }
+    }
+
+    /// Each layer's cell instances, as a plain `Vec<Vec<Instance>>` snapshot: `Layer` is private
+    /// to the crate root and also carries a `sprites` field this hash doesn't need, so the
+    /// conformance snapshot copies out just the part it hashes.
+    fn layer_cells(renderer: &GlRenderer) -> Vec<Vec<crate::renderer::Instance>> {
+        renderer.layers.iter().map(|l| l.cells.clone()).collect()
     }
 
     impl Output for GlObserver {
@@ -1429,7 +1456,7 @@ mod output_conformance_tests {
 
     impl Observable for GlObserver {
         fn snapshot(&mut self) -> u64 {
-            let current = &self.renderer.layers;
+            let current = layer_cells(&self.renderer);
             let mut hash = fnv1a(b"gl-diff");
             for (layer, (was, now)) in self.previous.iter().zip(current.iter()).enumerate() {
                 for (index, (was, now)) in was.iter().zip(now.iter()).enumerate() {
@@ -1449,10 +1476,10 @@ mod output_conformance_tests {
             // shrink-then-grow back to the same per-cell content would hash identically to no
             // change at all.
             hash ^= fnv1a(&(current.len() as u64).to_ne_bytes());
-            for layer in current {
+            for layer in &current {
                 hash ^= fnv1a(&(layer.len() as u64).to_ne_bytes());
             }
-            self.previous = current.clone();
+            self.previous = current;
             hash
         }
     }
