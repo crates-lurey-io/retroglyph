@@ -143,9 +143,6 @@ impl PtySession {
     /// The shared output buffer, appended to by the background reader thread as bytes arrive.
     /// Lock it directly (rather than calling this repeatedly and cloning the whole capture) to
     /// scan or parse only the bytes that arrived since a caller's own last poll.
-    ///
-    /// Drop every handle returned from this before calling [`finish`](Self::finish), which needs
-    /// to be the buffer's sole owner.
     #[must_use]
     pub fn output(&self) -> Arc<Mutex<Vec<u8>>> {
         Arc::clone(&self.output)
@@ -210,8 +207,8 @@ impl PtySession {
     ///
     /// # Panics
     ///
-    /// Panics if a handle from [`output`](Self::output) is still held elsewhere when this is
-    /// called -- see that method's docs.
+    /// Panics if `reader_handle` is already `None`, which can't happen through the public API --
+    /// [`spawn`](Self::spawn) always sets it, and `finish` is the only place that takes it.
     pub fn finish(mut self) -> std::io::Result<Vec<u8>> {
         self.close_writer();
         self.reader_handle
@@ -219,10 +216,12 @@ impl PtySession {
             .expect("PtySession::spawn always sets reader_handle")
             .join()
             .map_err(|_| std::io::Error::other("PTY reader thread panicked"))?;
-        Ok(Arc::try_unwrap(self.output)
-            .expect("PtySession::finish called while an output() handle is still held")
-            .into_inner()
-            .unwrap())
+        Ok(std::mem::take(
+            &mut *self
+                .output
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        ))
     }
 }
 
@@ -258,33 +257,28 @@ pub fn capture_pty(
     let mut previous: Option<Vec<Vec<(String, Style)>>> = None;
     let mut frames = Vec::new();
 
-    {
-        let output = session.output();
-        loop {
-            std::thread::sleep(POLL_INTERVAL);
-            {
-                let raw = output.lock().unwrap();
-                parser.process(&raw[parsed..]);
-                parsed = raw.len();
-            }
-
-            let screen = parser.screen();
-            let current = snapshot(screen, cols, rows);
-            if let Some(cells) = diff(previous.as_ref(), &current) {
-                frames.push(CapturedFrame {
-                    at: started.elapsed(),
-                    cells,
-                });
-            }
-            previous = Some(current);
-
-            if matches!(session.try_wait(), Ok(Some(_))) || started.elapsed() > timeout {
-                break;
-            }
+    let output = session.output();
+    loop {
+        std::thread::sleep(POLL_INTERVAL);
+        {
+            let raw = output.lock().unwrap();
+            parser.process(&raw[parsed..]);
+            parsed = raw.len();
         }
-        // Drops `output`, this block's only handle on it, before `finish` below needs to be its
-        // sole owner -- an explicit block rather than relying on the loop's own end, since a
-        // local's drop runs at its enclosing block's close, not at its last use.
+
+        let screen = parser.screen();
+        let current = snapshot(screen, cols, rows);
+        if let Some(cells) = diff(previous.as_ref(), &current) {
+            frames.push(CapturedFrame {
+                at: started.elapsed(),
+                cells,
+            });
+        }
+        previous = Some(current);
+
+        if matches!(session.try_wait(), Ok(Some(_))) || started.elapsed() > timeout {
+            break;
+        }
     }
 
     session.kill();
