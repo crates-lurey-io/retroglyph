@@ -199,24 +199,29 @@ pub(super) const fn indexed_to_rgb(index: u8) -> (u8, u8, u8) {
     }
 }
 
+/// Picks the candidate with the smallest `D`, preferring the lower index on ties (strict `<`
+/// only). Index candidates with an inclusive range (`data.zip(start..=u8::MAX)`), not
+/// `start..`: an open `RangeFrom<u8>` computes one-past-the-end on the call that yields 255
+/// itself and overflows, since `u8` has no representable "256" to stop at.
+fn nearest<D: PartialOrd>(candidates: impl IntoIterator<Item = (u8, D)>) -> u8 {
+    candidates
+        .into_iter()
+        .reduce(|a, b| if b.1 < a.1 { b } else { a })
+        .map_or(0, |(i, _)| i)
+}
+
 /// Rounds `value` to the nearest of the 6 [`CUBE_STEPS`], returning the step's index
 /// (0–5).
 ///
-/// Ties (exactly halfway between two steps) round to the lower step: steps are
-/// scanned in ascending order and only a strictly closer step replaces the
-/// current best, so an equal-distance higher step never wins.
+/// Ties (exactly halfway between two steps) round to the lower step: see [`nearest`].
 fn nearest_cube_step(value: u8) -> u8 {
     let value = i32::from(value);
-    let mut best_index = 0u8;
-    let mut best_distance = i32::MAX;
-    for (i, &step) in CUBE_STEPS.iter().enumerate() {
-        let distance = (value - i32::from(step)).abs();
-        if distance < best_distance {
-            best_distance = distance;
-            best_index = u8::try_from(i).unwrap_or(0);
-        }
-    }
-    best_index
+    nearest(
+        CUBE_STEPS
+            .iter()
+            .zip(0u8..)
+            .map(|(&step, i)| (i, (value - i32::from(step)).abs())),
+    )
 }
 
 /// Quantizes `(r, g, b)` to the nearest 256-color palette index using the 6×6×6 RGB
@@ -229,22 +234,10 @@ fn nearest_cube_step(value: u8) -> u8 {
 /// channel independently), and the grayscale ramp's single nearest point, rather than
 /// scanning all 256 entries individually: rounding each channel independently already
 /// finds the cube's closest point, and likewise for the single-channel grayscale ramp.
-/// Candidates are checked in ascending index order and only replace the current best
-/// on strictly smaller distance, so ties naturally resolve to the lower index.
+/// Candidates are passed to [`nearest`] in ascending index order (ANSI, cube, ramp), so
+/// ties naturally resolve to the lower index.
 fn cube_map_to_indexed(r: u8, g: u8, b: u8) -> u8 {
-    let mut best_index = 0u8;
-    let mut best_distance = u32::MAX;
-
-    // Candidate group 1: the 16 ANSI colors (indices 0-15), lowest indices first.
-    for (i, ansi) in ANSI_COLORS.iter().enumerate() {
-        let distance = gem::rgb::distance_sq((r, g, b), ansi.to_rgb());
-        if distance < best_distance {
-            best_distance = distance;
-            best_index = u8::try_from(i).unwrap_or(0);
-        }
-    }
-
-    // Candidate group 2: nearest point in the 6x6x6 cube (indices 16-231).
+    // Nearest point in the 6x6x6 cube (candidate group 2, indices 16-231).
     let cube_r = nearest_cube_step(r);
     let cube_g = nearest_cube_step(g);
     let cube_b = nearest_cube_step(b);
@@ -254,22 +247,25 @@ fn cube_map_to_indexed(r: u8, g: u8, b: u8) -> u8 {
         CUBE_STEPS[cube_g as usize],
         CUBE_STEPS[cube_b as usize],
     );
-    let cube_distance = gem::rgb::distance_sq((r, g, b), cube_rgb);
-    if cube_distance < best_distance {
-        best_distance = cube_distance;
-        best_index = cube_index;
-    }
 
-    // Candidate group 3: nearest grayscale ramp entry (indices 232-255).
-    for (i, &gray) in GRAYSCALE_RAMP.iter().enumerate() {
-        let distance = gem::rgb::distance_sq((r, g, b), (gray, gray, gray));
-        if distance < best_distance {
-            best_distance = distance;
-            best_index = 232 + u8::try_from(i).unwrap_or(0);
-        }
-    }
-
-    best_index
+    nearest(
+        // Candidate group 1: the 16 ANSI colors (indices 0-15), lowest indices first.
+        ANSI_COLORS
+            .iter()
+            .zip(0u8..)
+            .map(|(ansi, i)| (i, gem::rgb::distance_sq((r, g, b), ansi.to_rgb())))
+            .chain(core::iter::once((
+                cube_index,
+                gem::rgb::distance_sq((r, g, b), cube_rgb),
+            )))
+            // Candidate group 3: nearest grayscale ramp entry (indices 232-255).
+            .chain(
+                GRAYSCALE_RAMP
+                    .iter()
+                    .zip(232u8..=u8::MAX)
+                    .map(|(&gray, i)| (i, gem::rgb::distance_sq((r, g, b), (gray, gray, gray)))),
+            ),
+    )
 }
 
 /// Quantizes `(r, g, b)` to the nearest of the 16 standard ANSI colors, using
@@ -277,16 +273,13 @@ fn cube_map_to_indexed(r: u8, g: u8, b: u8) -> u8 {
 ///
 /// Backs [`Quantize::Euclidean`] for [`Color::to_ansi_with`](super::Color::to_ansi_with).
 fn cube_map_to_ansi(r: u8, g: u8, b: u8) -> AnsiColor {
-    let mut best = AnsiColor::Black;
-    let mut best_distance = u32::MAX;
-    for ansi in ANSI_COLORS {
-        let distance = gem::rgb::distance_sq((r, g, b), ansi.to_rgb());
-        if distance < best_distance {
-            best_distance = distance;
-            best = ansi;
-        }
-    }
-    best
+    let i = nearest(
+        ANSI_COLORS
+            .iter()
+            .zip(0u8..)
+            .map(|(ansi, i)| (i, gem::rgb::distance_sq((r, g, b), ansi.to_rgb()))),
+    );
+    ANSI_COLORS[i as usize]
 }
 
 /// Converts an 8-bit RGB channel triplet to `gem::space::Srgb`, the shared conversion behind
@@ -308,16 +301,12 @@ fn rgb_to_oklab(r: u8, g: u8, b: u8) -> gem::space::Oklab {
 /// (Oklab) distance, breaking ties by preferring the lower index.
 fn perceptual_to_indexed(r: u8, g: u8, b: u8) -> u8 {
     let target = rgb_to_oklab(r, g, b);
-    let mut best_index = 0u8;
-    let mut best_distance = f32::MAX;
-    for (index, &entry) in PALETTE_OKLAB.iter().enumerate() {
-        let distance = target.distance_sq(entry);
-        if distance < best_distance {
-            best_distance = distance;
-            best_index = u8::try_from(index).unwrap_or(u8::MAX);
-        }
-    }
-    best_index
+    nearest(
+        PALETTE_OKLAB
+            .iter()
+            .zip(0u8..=u8::MAX)
+            .map(|(&entry, i)| (i, target.distance_sq(entry))),
+    )
 }
 
 /// Quantizes `(r, g, b)` to the nearest of the 16 standard ANSI colors using
@@ -328,16 +317,14 @@ fn perceptual_to_indexed(r: u8, g: u8, b: u8) -> u8 {
 /// the ANSI palette's Oklab values.
 fn perceptual_to_ansi(r: u8, g: u8, b: u8) -> AnsiColor {
     let target = rgb_to_oklab(r, g, b);
-    let mut best = AnsiColor::Black;
-    let mut best_distance = f32::MAX;
-    for (ansi, &entry) in ANSI_COLORS.iter().zip(&PALETTE_OKLAB) {
-        let distance = target.distance_sq(entry);
-        if distance < best_distance {
-            best_distance = distance;
-            best = *ansi;
-        }
-    }
-    best
+    let i = nearest(
+        PALETTE_OKLAB
+            .iter()
+            .zip(0u8..)
+            .take(ANSI_COLORS.len())
+            .map(|(&entry, i)| (i, target.distance_sq(entry))),
+    );
+    ANSI_COLORS[i as usize]
 }
 
 /// Quantizes `(r, g, b)` to the nearest 256-color palette index under `metric`, breaking ties by
