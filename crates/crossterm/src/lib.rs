@@ -1432,6 +1432,34 @@ mod tests {
     // state) keeps those tests deterministic without disabling parallelism for the whole file.
     static TEST_GUARD_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+    /// The [`CrosstermOptions`] every headless test builds against: every TTY-only feature
+    /// (raw mode, alt screen, mouse/focus/paste/kitty) disabled, so construction succeeds
+    /// against a plain `Vec<u8>` writer without a real controlling terminal.
+    fn headless_options() -> CrosstermOptions {
+        Crossterm::builder()
+            .raw_mode(false)
+            .alt_screen(false)
+            .mouse_capture(false)
+            .focus_change(false)
+            .bracketed_paste(false)
+            .kitty_protocol(false)
+    }
+
+    /// Pairs a held `TEST_GUARD_LOCK` guard with a [`headless_options`] instance built against a
+    /// `Vec<u8>` writer, so the lock can never be acquired without the instance (or dropped
+    /// early by binding the guard to `_`): see [`InstanceGuard`] for why only one live
+    /// `Crossterm` may exist at a time, and `TEST_GUARD_LOCK` for why these headless tests
+    /// serialize on top of that.
+    fn headless_term() -> (std::sync::MutexGuard<'static, ()>, Crossterm<Vec<u8>>) {
+        let lock = TEST_GUARD_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let term = headless_options()
+            .build_with_writer(Vec::new())
+            .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
+        (lock, term)
+    }
+
     fn key_code_of(ct_event: crossterm::event::Event) -> retroglyph_core::event::KeyCode {
         match from_crossterm_event(ct_event) {
             Some(Event::Key(key)) => key.code,
@@ -1628,18 +1656,7 @@ mod tests {
         // touch process stdout via always-safe commands (cursor show/hide, disabling features
         // that were never enabled) when raw mode/the alternate screen are off, so this succeeds
         // under `cargo test`'s non-TTY stdout.
-        let _lock = TEST_GUARD_LOCK
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let mut term = Crossterm::builder()
-            .raw_mode(false)
-            .alt_screen(false)
-            .mouse_capture(false)
-            .focus_change(false)
-            .bracketed_paste(false)
-            .kitty_protocol(false)
-            .build_with_writer(Vec::new())
-            .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
+        let (_lock, mut term) = headless_term();
 
         let tile = Tile::new('X', retroglyph_core::color::Style::default());
 
@@ -1676,18 +1693,7 @@ mod tests {
         // at. A subsequent `draw()` whose first changed cell happened to match that stale tracked
         // position then skipped its own `MoveTo` entirely, painting wherever the real cursor was
         // actually left (by `set_cursor_position`) instead of the intended cell.
-        let _lock = TEST_GUARD_LOCK
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let mut term = Crossterm::builder()
-            .raw_mode(false)
-            .alt_screen(false)
-            .mouse_capture(false)
-            .focus_change(false)
-            .bracketed_paste(false)
-            .kitty_protocol(false)
-            .build_with_writer(Vec::new())
-            .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
+        let (_lock, mut term) = headless_term();
 
         let tile_a = Tile::new('A', retroglyph_core::color::Style::default());
         let tile_b = Tile::new('B', retroglyph_core::color::Style::default());
@@ -1725,18 +1731,7 @@ mod tests {
 
     #[test]
     fn suspend_resume_is_idempotent_when_resume_is_called_explicitly() {
-        let _lock = TEST_GUARD_LOCK
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let mut term = Crossterm::builder()
-            .raw_mode(false)
-            .alt_screen(false)
-            .mouse_capture(false)
-            .focus_change(false)
-            .bracketed_paste(false)
-            .kitty_protocol(false)
-            .build_with_writer(Vec::new())
-            .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
+        let (_lock, mut term) = headless_term();
 
         let guard = term.suspend().expect(
             "suspend must succeed without a real terminal once all TTY-only features are disabled",
@@ -1753,18 +1748,7 @@ mod tests {
         // Regression test for retroglyph#716: `suspend` (and `Crossterm::drop`, exercised the
         // same way here since both share `restore_terminal`) must flush whatever `draw` left
         // buffered in the renderer before handing control back, not after.
-        let _lock = TEST_GUARD_LOCK
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let mut term = Crossterm::builder()
-            .raw_mode(false)
-            .alt_screen(false)
-            .mouse_capture(false)
-            .focus_change(false)
-            .bracketed_paste(false)
-            .kitty_protocol(false)
-            .build_with_writer(Vec::new())
-            .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
+        let (_lock, mut term) = headless_term();
 
         let tile = Tile::new('X', retroglyph_core::color::Style::default());
         // Drawn but deliberately *not* flushed: this is the buffered content `suspend` must not
@@ -1792,15 +1776,7 @@ mod tests {
         let _lock = TEST_GUARD_LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let Ok(mut term) = CrosstermOptions::new()
-            .raw_mode(false)
-            .alt_screen(false)
-            .mouse_capture(false)
-            .focus_change(false)
-            .bracketed_paste(false)
-            .kitty_protocol(false)
-            .build_with_writer(Vec::new())
-        else {
+        let Ok(mut term) = headless_options().build_with_writer(Vec::new()) else {
             return;
         };
 
@@ -1822,18 +1798,7 @@ mod tests {
         // real-terminal-only features (raw mode, alt screen, mouse/focus/paste/kitty) are
         // disabled, exactly the combination `CrosstermOptions::build_with_writer`'s docs
         // recommend for a non-TTY sink.
-        let _lock = TEST_GUARD_LOCK
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let mut term = Crossterm::builder()
-            .raw_mode(false)
-            .alt_screen(false)
-            .mouse_capture(false)
-            .focus_change(false)
-            .bracketed_paste(false)
-            .kitty_protocol(false)
-            .build_with_writer(Vec::new())
-            .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
+        let (_lock, mut term) = headless_term();
 
         let tile = Tile::new('X', retroglyph_core::color::Style::default());
         term.draw(core::iter::once(DrawCell::new(Pos { x: 0, y: 0 }, &tile)))
@@ -1862,18 +1827,7 @@ mod tests {
         // `previous` grid to default tiles, nothing ever draws over that tint again in areas
         // that stay at their default value. `clear` must emit a full SGR reset ahead of the
         // erase so BCE always paints with the terminal's real default background.
-        let _lock = TEST_GUARD_LOCK
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let mut term = Crossterm::builder()
-            .raw_mode(false)
-            .alt_screen(false)
-            .mouse_capture(false)
-            .focus_change(false)
-            .bracketed_paste(false)
-            .kitty_protocol(false)
-            .build_with_writer(Vec::new())
-            .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
+        let (_lock, mut term) = headless_term();
 
         // Draw a colored cell first so the SGR pen is left non-default, mirroring the last
         // frame drawn before a real resize.
@@ -2110,18 +2064,7 @@ mod tests {
         // cached field with a sentinel value no real terminal query would plausibly produce,
         // then confirm `size()` echoes that sentinel back instead of re-querying and returning
         // whatever the actual (non-TTY, under `cargo test`) terminal size happens to be.
-        let _lock = TEST_GUARD_LOCK
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let mut term = Crossterm::builder()
-            .raw_mode(false)
-            .alt_screen(false)
-            .mouse_capture(false)
-            .focus_change(false)
-            .bracketed_paste(false)
-            .kitty_protocol(false)
-            .build_with_writer(Vec::new())
-            .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
+        let (_lock, mut term) = headless_term();
 
         let sentinel = Size::new(4321, 1234);
         term.cached_size = sentinel;
@@ -2139,18 +2082,7 @@ mod tests {
         // (retroglyph#279). `refresh_cached_size_on_resize` is the extracted helper it
         // calls; exercising it directly avoids needing a real terminal event source to prove
         // the cache-update behavior.
-        let _lock = TEST_GUARD_LOCK
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let mut term = Crossterm::builder()
-            .raw_mode(false)
-            .alt_screen(false)
-            .mouse_capture(false)
-            .focus_change(false)
-            .bracketed_paste(false)
-            .kitty_protocol(false)
-            .build_with_writer(Vec::new())
-            .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
+        let (_lock, mut term) = headless_term();
 
         term.refresh_cached_size_on_resize(&crossterm::event::Event::Resize(120, 40));
         assert_eq!(term.size(), Size::new(120, 40));
@@ -2326,13 +2258,7 @@ mod tests {
         let _lock = TEST_GUARD_LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let term = Crossterm::builder()
-            .raw_mode(false)
-            .alt_screen(false)
-            .mouse_capture(false)
-            .focus_change(false)
-            .bracketed_paste(false)
-            .kitty_protocol(false)
+        let term = headless_options()
             .color_support(ColorSupport::Indexed256)
             .build_with_writer(Vec::new())
             .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
@@ -2342,18 +2268,7 @@ mod tests {
 
     #[test]
     fn set_title_writes_the_osc_title_escape() {
-        let _lock = TEST_GUARD_LOCK
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let mut term = Crossterm::builder()
-            .raw_mode(false)
-            .alt_screen(false)
-            .mouse_capture(false)
-            .focus_change(false)
-            .bracketed_paste(false)
-            .kitty_protocol(false)
-            .build_with_writer(Vec::new())
-            .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
+        let (_lock, mut term) = headless_term();
 
         term.set_title("my title").unwrap();
 
@@ -2363,18 +2278,7 @@ mod tests {
 
     #[test]
     fn ring_bell_writes_the_bel_byte() {
-        let _lock = TEST_GUARD_LOCK
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let mut term = Crossterm::builder()
-            .raw_mode(false)
-            .alt_screen(false)
-            .mouse_capture(false)
-            .focus_change(false)
-            .bracketed_paste(false)
-            .kitty_protocol(false)
-            .build_with_writer(Vec::new())
-            .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
+        let (_lock, mut term) = headless_term();
 
         term.ring_bell().unwrap();
 
@@ -2385,18 +2289,7 @@ mod tests {
     fn set_cursor_style_queues_the_matching_decscusr_escape() {
         use retroglyph_core::backend::CursorStyle;
 
-        let _lock = TEST_GUARD_LOCK
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let mut term = Crossterm::builder()
-            .raw_mode(false)
-            .alt_screen(false)
-            .mouse_capture(false)
-            .focus_change(false)
-            .bracketed_paste(false)
-            .kitty_protocol(false)
-            .build_with_writer(Vec::new())
-            .expect("building against a Vec<u8> writer with all TTY features disabled must not require a real terminal");
+        let (_lock, mut term) = headless_term();
 
         term.set_cursor_style(CursorStyle::BlinkingBar);
 
@@ -2414,13 +2307,7 @@ mod tests {
 
     impl CrosstermObserver {
         fn new(size: Size) -> Self {
-            let mut term = Crossterm::builder()
-                .raw_mode(false)
-                .alt_screen(false)
-                .mouse_capture(false)
-                .focus_change(false)
-                .bracketed_paste(false)
-                .kitty_protocol(false)
+            let mut term = headless_options()
                 .build_with_writer(Vec::new())
                 .expect(
                     "building against a Vec<u8> writer with all TTY features disabled must not require a real terminal",
