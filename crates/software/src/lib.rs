@@ -682,7 +682,7 @@ impl SoftwareBackend {
             return Err(SoftwareBackendError::ZeroGrid);
         }
 
-        let geometry = CellGeometry::new(glyph_w, glyph_h, self.scale);
+        let geometry = CellGeometry::new(u16::from(glyph_w), u16::from(glyph_h), self.scale);
         let (buf_w, buf_h) = geometry.surface_size(self.cols, self.rows);
         // u32 always fits in usize (all targets: 32- and 64-bit).
         let buf_w = usize::try_from(buf_w).expect("surface width fits usize");
@@ -1001,10 +1001,6 @@ impl retroglyph_window::presenter::Presenter for SoftwareRenderer {
 
     fn present(&mut self) -> Result<(), SurfaceError> {
         Self::present(self)
-    }
-
-    fn cell_size(&self) -> (u32, u32) {
-        self.ctx.geometry.cell_size()
     }
 
     fn geometry(&self) -> CellGeometry {
@@ -1444,16 +1440,6 @@ mod tests {
             .unwrap()
             .into_renderer()
             .unwrap()
-    }
-
-    #[test]
-    fn presenter_geometry_and_cell_size_match_the_internal_geometry() {
-        use retroglyph_window::presenter::Presenter as _;
-
-        // `test_renderer` builds an 8x16 unscii16 font at scale 1.
-        let renderer = test_renderer();
-        assert_eq!(renderer.cell_size(), (8, 16));
-        assert_eq!(renderer.geometry(), CellGeometry::new(8, 16, 1));
     }
 
     #[test]

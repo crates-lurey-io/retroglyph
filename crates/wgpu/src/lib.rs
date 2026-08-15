@@ -313,12 +313,13 @@ impl WgpuRenderer {
     /// Builds a renderer for the given glyph atlas, grid size, and scale. Called by
     /// [`WgpuBackendBuilder::build`](config::WgpuBackendBuilder::build).
     ///
-    /// Glyph cells wider or taller than 255 unscaled pixels are clamped to 255 (the
-    /// [`CellGeometry`] limit).
-    #[allow(clippy::cast_possible_truncation)]
     pub(crate) fn new(glyphs: GlyphAtlas, cols: u16, rows: u16, scale: u16) -> Self {
         let (cell_w, cell_h) = glyphs.cell_size();
-        let geometry = CellGeometry::new(cell_w.min(255) as u8, cell_h.min(255) as u8, scale);
+        let geometry = CellGeometry::new(
+            u16::try_from(cell_w).unwrap_or(u16::MAX),
+            u16::try_from(cell_h).unwrap_or(u16::MAX),
+            scale,
+        );
         let space_glyph = glyphs.space_slot();
         let count = usize::from(cols) * usize::from(rows);
         Self {
@@ -955,10 +956,6 @@ impl Presenter for WgpuRenderer {
         let gpu = self.gpu.as_ref().expect("context installed above");
         frame.present(&gpu.context);
         Ok(())
-    }
-
-    fn cell_size(&self) -> (u32, u32) {
-        self.geometry.cell_size()
     }
 
     fn geometry(&self) -> CellGeometry {

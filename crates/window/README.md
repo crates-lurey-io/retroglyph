@@ -104,6 +104,7 @@ cell geometry via [`WindowConfig::fit`]:
 use retroglyph_core::backend::DrawCell;
 use retroglyph_core::backend::Output;
 use retroglyph_core::grid::Size;
+use retroglyph_window::geometry::CellGeometry;
 use retroglyph_window::presenter::{Presenter, WindowHandle};
 use retroglyph_window::winit::WindowConfig;
 use std::sync::Arc;
@@ -155,8 +156,8 @@ impl Presenter for NullPresenter {
         Ok(())
     }
 
-    fn cell_size(&self) -> (u32, u32) {
-        (8, 16)
+    fn geometry(&self) -> CellGeometry {
+        CellGeometry::new(8, 16, 1)
     }
 }
 

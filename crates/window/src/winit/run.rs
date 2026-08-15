@@ -1912,6 +1912,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::geometry::CellGeometry;
     use retroglyph_core::backend::DrawCell;
     use retroglyph_core::backend::Output;
     use retroglyph_core::event::{MouseButton, MouseEvent, MouseEventKind};
@@ -2172,8 +2173,8 @@ mod tests {
             Ok(())
         }
 
-        fn cell_size(&self) -> (u32, u32) {
-            (8, 16)
+        fn geometry(&self) -> CellGeometry {
+            CellGeometry::new(8, 16, 1)
         }
 
         fn scale_factor_changed(&mut self, scale_factor: f64) {
@@ -2238,8 +2239,8 @@ mod tests {
             Ok(())
         }
 
-        fn cell_size(&self) -> (u32, u32) {
-            (8, 16)
+        fn geometry(&self) -> CellGeometry {
+            CellGeometry::new(8, 16, 1)
         }
     }
 
@@ -2308,8 +2309,8 @@ mod tests {
             }
         }
 
-        fn cell_size(&self) -> (u32, u32) {
-            (8, 16)
+        fn geometry(&self) -> CellGeometry {
+            CellGeometry::new(8, 16, 1)
         }
     }
 
@@ -2404,8 +2405,8 @@ mod tests {
             }
         }
 
-        fn cell_size(&self) -> (u32, u32) {
-            (8, 16)
+        fn geometry(&self) -> CellGeometry {
+            CellGeometry::new(8, 16, 1)
         }
     }
 
@@ -3821,8 +3822,8 @@ mod tests {
             Ok(())
         }
 
-        fn cell_size(&self) -> (u32, u32) {
-            (8, 16)
+        fn geometry(&self) -> CellGeometry {
+            CellGeometry::new(8, 16, 1)
         }
     }
 

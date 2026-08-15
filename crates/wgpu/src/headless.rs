@@ -311,17 +311,6 @@ fn sample_layered(cols: u16, rows: u16) -> Vec<(u8, Pos, Tile)> {
     cells
 }
 
-/// `Presenter::geometry`/`cell_size` delegate to the renderer's internal `CellGeometry` with no
-/// device required, so unlike the render tests below this always runs.
-#[test]
-fn presenter_geometry_and_cell_size_match_the_internal_geometry() {
-    use retroglyph_window::presenter::Presenter as _;
-
-    let r = renderer(2, 1, 3);
-    assert_eq!(r.geometry(), r.geometry);
-    assert_eq!(r.cell_size(), r.geometry.cell_size());
-}
-
 #[test]
 fn full_block_cell_is_all_foreground_blank_cell_is_all_background() {
     let Some(device) = device_or_skip("full_block_cell_is_all_foreground") else {

@@ -4,18 +4,18 @@ use retroglyph_core::grid::Pos;
 
 /// The pixel geometry of a fixed cell grid: a glyph size and an integer scale.
 ///
-/// The single code embodiment of [`Presenter::cell_size`](crate::presenter::Presenter::cell_size)'s
+/// The single code embodiment of [`Presenter::geometry`](crate::presenter::Presenter::geometry)'s
 /// contract: physical pixels, `glyph x scale`, never DPI-auto-scaled.
 ///
-/// Every graphical backend stores one of these and returns [`cell_size`](Self::cell_size) from
-/// `Presenter::cell_size`, rather than re-deriving `glyph_w * scale` (and `cols * cell_w` for the
-/// surface) per backend in its own integer types, which lets the shared rule drift.
+/// Every graphical backend stores one of these and returns it from `Presenter::geometry`, rather
+/// than re-deriving `glyph_w * scale` (and `cols * cell_w` for the surface) per backend in its own
+/// integer types, which lets the shared rule drift.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CellGeometry {
     /// Glyph width in unscaled font pixels.
-    pub glyph_w: u8,
+    pub glyph_w: u16,
     /// Glyph height in unscaled font pixels.
-    pub glyph_h: u8,
+    pub glyph_h: u16,
     /// Integer pixel scale: each glyph pixel becomes a `scale x scale` block of physical pixels.
     pub scale: u16,
 }
@@ -23,7 +23,7 @@ pub struct CellGeometry {
 impl CellGeometry {
     /// A geometry for `glyph_w x glyph_h` glyphs drawn at integer `scale`.
     #[must_use]
-    pub const fn new(glyph_w: u8, glyph_h: u8, scale: u16) -> Self {
+    pub const fn new(glyph_w: u16, glyph_h: u16, scale: u16) -> Self {
         Self {
             glyph_w,
             glyph_h,
@@ -37,7 +37,7 @@ impl CellGeometry {
     #[must_use]
     pub const fn cell_size(&self) -> (u32, u32) {
         // `as` (not `u32::from`) because this is a `const fn` and `From` isn't const-callable; both
-        // casts are lossless widenings (u8/u16 -> u32).
+        // casts are lossless widenings (u16 -> u32).
         (
             self.glyph_w as u32 * self.scale as u32,
             self.glyph_h as u32 * self.scale as u32,

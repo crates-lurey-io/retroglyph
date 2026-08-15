@@ -33,6 +33,7 @@ use std::time::Duration;
 /// use retroglyph_core::terminal::Terminal;
 /// use retroglyph_core::tile::Tile;
 /// use retroglyph_window::backend::WindowBackend;
+/// use retroglyph_window::geometry::CellGeometry;
 /// use retroglyph_window::presenter::{Presenter, WindowHandle};
 /// use std::sync::Arc;
 /// use std::time::Duration;
@@ -84,8 +85,8 @@ use std::time::Duration;
 ///         Ok(())
 ///     }
 ///
-///     fn cell_size(&self) -> (u32, u32) {
-///         (8, 16)
+///     fn geometry(&self) -> CellGeometry {
+///         CellGeometry::new(8, 16, 1)
 ///     }
 /// }
 ///
@@ -214,6 +215,7 @@ impl<P: Presenter> Cursor for WindowBackend<P> {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::geometry::CellGeometry;
     use crate::presenter::WindowHandle;
     use retroglyph_core::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
     use retroglyph_core::grid::Pos;
@@ -269,8 +271,8 @@ mod tests {
             Ok(())
         }
 
-        fn cell_size(&self) -> (u32, u32) {
-            (8, 16)
+        fn geometry(&self) -> CellGeometry {
+            CellGeometry::new(8, 16, 1)
         }
     }
 
