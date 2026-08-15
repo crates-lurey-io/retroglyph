@@ -119,46 +119,45 @@ impl AnsiColor {
     /// terminal's actual theme may render these colors differently still.
     #[must_use]
     pub const fn to_rgb(self) -> (u8, u8, u8) {
-        match self {
-            Self::Black => (0, 0, 0),
-            Self::Red => (205, 0, 0),
-            Self::Green => (0, 205, 0),
-            Self::Yellow => (205, 205, 0),
-            Self::Blue => (0, 0, 238),
-            Self::Magenta => (205, 0, 205),
-            Self::Cyan => (0, 205, 205),
-            Self::White => (229, 229, 229),
-            Self::BrightBlack => (127, 127, 127),
-            Self::BrightRed => (255, 0, 0),
-            Self::BrightGreen => (0, 255, 0),
-            Self::BrightYellow => (255, 255, 0),
-            Self::BrightBlue => (92, 92, 255),
-            Self::BrightMagenta => (255, 0, 255),
-            Self::BrightCyan => (0, 255, 255),
-            Self::BrightWhite => (255, 255, 255),
-        }
+        ANSI_TABLE[self as usize].2
     }
 }
 
-/// All 16 [`AnsiColor`](crate::color::AnsiColor) variants in index order (0–15), for iterating the palette.
-pub(super) const ANSI_COLORS: [AnsiColor; 16] = [
-    AnsiColor::Black,
-    AnsiColor::Red,
-    AnsiColor::Green,
-    AnsiColor::Yellow,
-    AnsiColor::Blue,
-    AnsiColor::Magenta,
-    AnsiColor::Cyan,
-    AnsiColor::White,
-    AnsiColor::BrightBlack,
-    AnsiColor::BrightRed,
-    AnsiColor::BrightGreen,
-    AnsiColor::BrightYellow,
-    AnsiColor::BrightBlue,
-    AnsiColor::BrightMagenta,
-    AnsiColor::BrightCyan,
-    AnsiColor::BrightWhite,
+/// Every [`AnsiColor`] variant's canonical [`Display`](core::fmt::Display) name and xterm
+/// reference RGB, in discriminant order (0-15).
+///
+/// The single source of truth [`AnsiColor::to_rgb`], [`TryFrom<u8>`](AnsiColor), and the ANSI
+/// name/parse pair in `parse.rs` all derive from, so a name or RGB value only ever needs
+/// transcribing once.
+pub(super) const ANSI_TABLE: [(AnsiColor, &str, (u8, u8, u8)); 16] = [
+    (AnsiColor::Black, "black", (0, 0, 0)),
+    (AnsiColor::Red, "red", (205, 0, 0)),
+    (AnsiColor::Green, "green", (0, 205, 0)),
+    (AnsiColor::Yellow, "yellow", (205, 205, 0)),
+    (AnsiColor::Blue, "blue", (0, 0, 238)),
+    (AnsiColor::Magenta, "magenta", (205, 0, 205)),
+    (AnsiColor::Cyan, "cyan", (0, 205, 205)),
+    (AnsiColor::White, "white", (229, 229, 229)),
+    (AnsiColor::BrightBlack, "bright-black", (127, 127, 127)),
+    (AnsiColor::BrightRed, "bright-red", (255, 0, 0)),
+    (AnsiColor::BrightGreen, "bright-green", (0, 255, 0)),
+    (AnsiColor::BrightYellow, "bright-yellow", (255, 255, 0)),
+    (AnsiColor::BrightBlue, "bright-blue", (92, 92, 255)),
+    (AnsiColor::BrightMagenta, "bright-magenta", (255, 0, 255)),
+    (AnsiColor::BrightCyan, "bright-cyan", (0, 255, 255)),
+    (AnsiColor::BrightWhite, "bright-white", (255, 255, 255)),
 ];
+
+/// All 16 [`AnsiColor`](crate::color::AnsiColor) variants in index order (0–15), for iterating the palette.
+pub(super) const ANSI_COLORS: [AnsiColor; 16] = {
+    let mut colors = [AnsiColor::Black; 16];
+    let mut i = 0;
+    while i < ANSI_TABLE.len() {
+        colors[i] = ANSI_TABLE[i].0;
+        i += 1;
+    }
+    colors
+};
 
 /// The 6 steps used for each channel of the 256-color palette's 6x6x6 RGB cube
 /// (indices 16-231).
@@ -378,25 +377,10 @@ impl TryFrom<u8> for AnsiColor {
     type Error = InvalidAnsiIndex;
 
     fn try_from(v: u8) -> Result<Self, Self::Error> {
-        match v {
-            0 => Ok(Self::Black),
-            1 => Ok(Self::Red),
-            2 => Ok(Self::Green),
-            3 => Ok(Self::Yellow),
-            4 => Ok(Self::Blue),
-            5 => Ok(Self::Magenta),
-            6 => Ok(Self::Cyan),
-            7 => Ok(Self::White),
-            8 => Ok(Self::BrightBlack),
-            9 => Ok(Self::BrightRed),
-            10 => Ok(Self::BrightGreen),
-            11 => Ok(Self::BrightYellow),
-            12 => Ok(Self::BrightBlue),
-            13 => Ok(Self::BrightMagenta),
-            14 => Ok(Self::BrightCyan),
-            15 => Ok(Self::BrightWhite),
-            _ => Err(InvalidAnsiIndex(v)),
-        }
+        ANSI_TABLE
+            .get(v as usize)
+            .map(|entry| entry.0)
+            .ok_or(InvalidAnsiIndex(v))
     }
 }
 
