@@ -93,6 +93,21 @@ macro_rules! app_entry {
                     ::std::cell::RefCell::new(::std::option::Option::None);
             }
 
+            /// Runs `f` against the live `__RgWasmAppState`, or does nothing and returns `None` if
+            /// called before `wasm_app_init`.
+            fn with_state<R>(
+                f: impl ::std::ops::FnOnce(&mut __RgWasmAppState) -> R,
+            ) -> ::std::option::Option<R> {
+                __RG_WASM_APP.with(|cell| cell.borrow_mut().as_mut().map(f))
+            }
+
+            /// Queues `event` on the live state's backend. A no-op before `wasm_app_init`.
+            fn push(event: ::retroglyph_core::event::Event) {
+                with_state(|s| {
+                    ::retroglyph_core::backend::Input::push_event(s.term.backend_mut(), event);
+                });
+            }
+
             /// Build the `Terminal<TerminalWasm>` and `$A::default()`. Call before the first
             /// `wasm_app_tick`.
             #[::wasm_bindgen::prelude::wasm_bindgen]
@@ -118,11 +133,7 @@ macro_rules! app_entry {
             #[::wasm_bindgen::prelude::wasm_bindgen]
             #[allow(missing_docs)]
             pub fn wasm_app_resize(width: u16, height: u16) {
-                __RG_WASM_APP.with(|cell| {
-                    if let ::std::option::Option::Some(s) = cell.borrow_mut().as_mut() {
-                        $crate::resize_terminal(&mut s.term, width, height);
-                    }
-                });
+                with_state(|s| $crate::resize_terminal(&mut s.term, width, height));
             }
 
             /// Decode and queue a key event via [`decode_key_event`](crate::decode_key_event).
@@ -132,14 +143,7 @@ macro_rules! app_entry {
                 let Some(event) = $crate::decode_key_event(code, mods) else {
                     return;
                 };
-                __RG_WASM_APP.with(|cell| {
-                    if let ::std::option::Option::Some(s) = cell.borrow_mut().as_mut() {
-                        ::retroglyph_core::backend::Input::push_event(
-                            s.term.backend_mut(),
-                            ::retroglyph_core::event::Event::Key(event),
-                        );
-                    }
-                });
+                push(::retroglyph_core::event::Event::Key(event));
             }
 
             /// Decode and queue a pointer (mouse/touch) event via
@@ -150,28 +154,14 @@ macro_rules! app_entry {
                 let Some(event) = $crate::decode_mouse_event(x, y, action, button, mods) else {
                     return;
                 };
-                __RG_WASM_APP.with(|cell| {
-                    if let ::std::option::Option::Some(s) = cell.borrow_mut().as_mut() {
-                        ::retroglyph_core::backend::Input::push_event(
-                            s.term.backend_mut(),
-                            ::retroglyph_core::event::Event::Mouse(event),
-                        );
-                    }
-                });
+                push(::retroglyph_core::event::Event::Mouse(event));
             }
 
             /// Queue pasted text as a single `Event::Paste`, not one `Event::Key` per character.
             #[::wasm_bindgen::prelude::wasm_bindgen]
             #[allow(missing_docs)]
             pub fn wasm_app_push_paste(text: ::std::string::String) {
-                __RG_WASM_APP.with(|cell| {
-                    if let ::std::option::Option::Some(s) = cell.borrow_mut().as_mut() {
-                        ::retroglyph_core::backend::Input::push_event(
-                            s.term.backend_mut(),
-                            ::retroglyph_core::event::Event::Paste(text),
-                        );
-                    }
-                });
+                push(::retroglyph_core::event::Event::Paste(text));
             }
 
             /// Queue a focus-change event: `true` for `Event::FocusGained`, `false` for
@@ -184,11 +174,7 @@ macro_rules! app_entry {
                 } else {
                     ::retroglyph_core::event::Event::FocusLost
                 };
-                __RG_WASM_APP.with(|cell| {
-                    if let ::std::option::Option::Some(s) = cell.borrow_mut().as_mut() {
-                        ::retroglyph_core::backend::Input::push_event(s.term.backend_mut(), event);
-                    }
-                });
+                push(event);
             }
 
             /// Run one `App::update`, present unless it returned `Flow::Idle` (or already

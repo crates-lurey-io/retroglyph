@@ -20,8 +20,9 @@
 #![cfg(target_arch = "wasm32")]
 
 use retroglyph_terminal_wasm::wasm::{
-    wasm_terminal_free, wasm_terminal_new, wasm_terminal_push_key, wasm_terminal_push_mouse,
-    wasm_terminal_push_paste, wasm_terminal_resize, wasm_terminal_take_output,
+    wasm_terminal_free, wasm_terminal_new, wasm_terminal_push_focus, wasm_terminal_push_key,
+    wasm_terminal_push_mouse, wasm_terminal_push_paste, wasm_terminal_resize,
+    wasm_terminal_take_output,
 };
 use retroglyph_terminal_wasm::{mouse_actions, mouse_buttons};
 use wasm_bindgen_test::wasm_bindgen_test;
@@ -79,6 +80,7 @@ fn operations_on_a_freed_handle_are_safe_no_ops() {
     wasm_terminal_push_key(handle, u32::from('z'), 0);
     wasm_terminal_push_mouse(handle, 0, 0, mouse_actions::MOVED, mouse_buttons::LEFT, 0);
     wasm_terminal_push_paste(handle, "ignored".to_string());
+    wasm_terminal_push_focus(handle, true);
     assert_eq!(wasm_terminal_take_output(handle), "");
     wasm_terminal_free(handle);
 }

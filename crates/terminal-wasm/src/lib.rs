@@ -754,6 +754,25 @@ pub mod wasm {
         static NEXT_HANDLE: RefCell<u32> = const { RefCell::new(1) };
     }
 
+    /// Runs `f` against the [`TerminalWasm`] identified by `handle`, or logs `"{op}: unknown
+    /// handle {handle}"` and returns `None` if `handle` doesn't (or no longer) identify a live
+    /// instance. `op` is the caller's own function name, for the warning.
+    fn with_terminal<R>(
+        handle: u32,
+        op: &str,
+        f: impl FnOnce(&mut TerminalWasm) -> R,
+    ) -> Option<R> {
+        INSTANCES.with_borrow_mut(|instances| {
+            instances.get_mut(&handle).map_or_else(
+                || {
+                    log::warn!("{op}: unknown handle {handle}");
+                    None
+                },
+                |term| Some(f(term)),
+            )
+        })
+    }
+
     /// Creates a new [`TerminalWasm`] of the given size and returns an opaque
     /// handle for use with the other `wasm_terminal_*` functions.
     #[wasm_bindgen]
@@ -785,12 +804,8 @@ pub mod wasm {
     pub fn wasm_terminal_resize(handle: u32, width: u16, height: u16) {
         use retroglyph_core::backend::Output;
         use retroglyph_core::grid::Size;
-        INSTANCES.with_borrow_mut(|instances| {
-            if let Some(term) = instances.get_mut(&handle) {
-                term.resize(Size::new(width, height));
-            } else {
-                log::warn!("wasm_terminal_resize: unknown handle {handle}");
-            }
+        with_terminal(handle, "wasm_terminal_resize", |term| {
+            term.resize(Size::new(width, height));
         });
     }
 
@@ -805,12 +820,8 @@ pub mod wasm {
         let Some(key_event) = decode_key_event(code, mods) else {
             return;
         };
-        INSTANCES.with_borrow_mut(|instances| {
-            if let Some(term) = instances.get_mut(&handle) {
-                term.push_event(Event::Key(key_event));
-            } else {
-                log::warn!("wasm_terminal_push_key: unknown handle {handle}");
-            }
+        with_terminal(handle, "wasm_terminal_push_key", |term| {
+            term.push_event(Event::Key(key_event));
         });
     }
 
@@ -826,12 +837,8 @@ pub mod wasm {
         let Some(mouse_event) = decode_mouse_event(x, y, action, button, mods) else {
             return;
         };
-        INSTANCES.with_borrow_mut(|instances| {
-            if let Some(term) = instances.get_mut(&handle) {
-                term.push_event(Event::Mouse(mouse_event));
-            } else {
-                log::warn!("wasm_terminal_push_mouse: unknown handle {handle}");
-            }
+        with_terminal(handle, "wasm_terminal_push_mouse", |term| {
+            term.push_event(Event::Mouse(mouse_event));
         });
     }
 
@@ -854,12 +861,8 @@ pub mod wasm {
     #[wasm_bindgen]
     pub fn wasm_terminal_push_paste(handle: u32, text: String) {
         use retroglyph_core::event::Event;
-        INSTANCES.with_borrow_mut(|instances| {
-            if let Some(term) = instances.get_mut(&handle) {
-                term.push_event(Event::Paste(text));
-            } else {
-                log::warn!("wasm_terminal_push_paste: unknown handle {handle}");
-            }
+        with_terminal(handle, "wasm_terminal_push_paste", |term| {
+            term.push_event(Event::Paste(text));
         });
     }
 
@@ -878,12 +881,8 @@ pub mod wasm {
         } else {
             Event::FocusLost
         };
-        INSTANCES.with_borrow_mut(|instances| {
-            if let Some(term) = instances.get_mut(&handle) {
-                term.push_event(event);
-            } else {
-                log::warn!("wasm_terminal_push_focus: unknown handle {handle}");
-            }
+        with_terminal(handle, "wasm_terminal_push_focus", |term| {
+            term.push_event(event);
         });
     }
 
@@ -893,13 +892,12 @@ pub mod wasm {
     #[wasm_bindgen]
     #[must_use]
     pub fn wasm_terminal_take_output(handle: u32) -> String {
-        INSTANCES.with_borrow_mut(|instances| {
-            let Some(term) = instances.get_mut(&handle) else {
-                log::warn!("wasm_terminal_take_output: unknown handle {handle}");
-                return String::new();
-            };
-            term.take_output()
-        })
+        with_terminal(
+            handle,
+            "wasm_terminal_take_output",
+            TerminalWasm::take_output,
+        )
+        .unwrap_or_default()
     }
 }
 
