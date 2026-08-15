@@ -1,10 +1,9 @@
 //! [`Tabs`]: a horizontal strip of tab labels with a highlighted selected index.
-use alloc::vec::Vec;
-
 use retroglyph_core::color::{Color, Style};
 use retroglyph_core::grid::{Rect, Size};
-use retroglyph_core::text::{truncate_measured, width};
+use retroglyph_core::text::width;
 
+use super::strip::Strip;
 use super::{InteractiveWidget, MinSize, Widget};
 use crate::Surface;
 use crate::align::Align;
@@ -148,31 +147,6 @@ impl<'a> Tabs<'a> {
 }
 
 impl Tabs<'_> {
-    /// Each drawn tab's `(index, start_x, text_width)`, left to right, stopping once a title
-    /// would start past `area`'s right edge: the same layout [`Tabs::draw`] paints and
-    /// [`Tabs::tab_at`] hit-tests against, computed once here so the two can't diverge. `x`
-    /// values are absolute grid coordinates (matching `area`'s own space), the same space
-    /// [`Response::pointer_pos`] reports in, since [`Tabs::tab_at`] compares them directly.
-    fn tab_columns(&self, area: Rect) -> Vec<(usize, u16, u16)> {
-        let mut columns = Vec::with_capacity(self.titles.len());
-        let mut x = area.left();
-        for (index, &title) in self.titles.iter().enumerate() {
-            if x >= area.right() {
-                break;
-            }
-            // x < area.right() per the break check above, so this subtraction fits a u16.
-            let avail = area.right() - x;
-            let (_text, text_width) = truncate_measured(title, avail);
-            columns.push((index, x, text_width));
-            x = x.saturating_add(text_width);
-
-            if index + 1 < self.titles.len() {
-                x = x.saturating_add(self.column_spacing);
-            }
-        }
-        columns
-    }
-
     /// The shared drawing routine both [`Widget::render`] and [`InteractiveWidget::render`] use,
     /// parameterized on which tab (if any) is highlighted as selected.
     fn draw(&self, surface: &mut Surface<'_>, selected: Option<usize>) {
@@ -181,12 +155,12 @@ impl Tabs<'_> {
             return;
         }
 
-        // `tab_columns` reports absolute `x`, matching `area`'s own space (needed so
-        // `Tabs::tab_at` can compare it directly against an absolute pointer position); `put`/
+        // `Strip::columns` reports absolute `x`, matching `area`'s own space (needed so
+        // `Strip::index_at` can compare it directly against an absolute pointer position); `put`/
         // `print`/`fill_rect` below address this surface's own local coordinates instead, so
         // `area.left()` is subtracted back out at the point of drawing.
-        let columns = self.tab_columns(area);
-        for &(index, abs_x, text_width) in &columns {
+        let strip = Strip::new(self.titles, self.column_spacing);
+        for (index, abs_x, text_width) in strip.columns(area) {
             let x = abs_x - area.left();
             let title = self.titles[index];
             let style = if Some(index) == selected {
@@ -221,13 +195,7 @@ impl Tabs<'_> {
     /// spacing between tabs, past the last drawn tab, or outside `area` entirely: a click there
     /// selects nothing rather than clamping to the nearest tab.
     fn tab_at(&self, area: Rect, pos: retroglyph_core::grid::Pos) -> Option<usize> {
-        if !area.contains_pos(pos) {
-            return None;
-        }
-        self.tab_columns(area)
-            .into_iter()
-            .find(|&(_, x, width)| pos.x >= x && pos.x < x + width)
-            .map(|(index, _, _)| index)
+        Strip::new(self.titles, self.column_spacing).index_at(area, pos)
     }
 }
 
@@ -281,6 +249,8 @@ impl<Id> InteractiveWidget<Id> for Tabs<'_> {
 
 #[cfg(test)]
 mod tests {
+    use alloc::vec::Vec;
+
     use retroglyph_core::grid::{Grid, HasSize as _, Pos};
 
     use super::*;
@@ -522,7 +492,9 @@ mod tests {
         let area = Rect::new(0, 0, 20, 1);
         let titles = ["設定", "次"];
         let tabs = Tabs::new(&titles);
-        let columns = tabs.tab_columns(area);
+        let columns: Vec<_> = Strip::new(&titles, tabs.column_spacing)
+            .columns(area)
+            .collect();
 
         // "設定" occupies 4 columns starting at 0; "次" must start no earlier than column 5
         // (4 + column_spacing 1), never inside "設定"'s own span.
