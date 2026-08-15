@@ -197,6 +197,7 @@ use retroglyph_core::grid::HasSize;
 use retroglyph_core::grid::Size;
 use retroglyph_core::tile::Tile;
 use retroglyph_window::atlas::GlyphAtlas;
+use retroglyph_window::diagnostics::DiagnosticLog;
 use retroglyph_window::geometry::CellGeometry;
 use retroglyph_window::palette::{DEFAULT_BG, DEFAULT_FG};
 use retroglyph_window::presenter::{Presenter, WindowHandle, cell_art_glyph};
@@ -259,14 +260,17 @@ pub struct WgpuRenderer {
     sprite_upload: Vec<SpriteInstance>,
     #[cfg(feature = "tilesets")]
     sprite_ranges: Vec<LayerRange>,
-    /// Glyphs already reported as needing a span, so a redraw loop logs each one once instead of
-    /// every frame. See `retroglyph_window::sprite_cache::warn_sprite_needs_span`.
-    #[cfg(feature = "tilesets")]
-    warned_oversized: std::collections::BTreeSet<char>,
-    /// Glyphs already reported as having a dropped tint, so a redraw loop logs each one once
-    /// instead of every frame. See `retroglyph_window::sprite_cache::warn_tint_needs_sprite`.
-    #[cfg(feature = "tilesets")]
-    warned_dropped_tint: std::collections::BTreeSet<char>,
+    /// The oversized-sprite and dropped-tint dedup state, so a redraw loop logs each offending
+    /// glyph once instead of every frame. See `retroglyph_window::diagnostics`.
+    ///
+    /// Unlike the software and gl backends, this one never calls
+    /// [`DiagnosticLog::notdef_glyph`](retroglyph_window::diagnostics::DiagnosticLog::notdef_glyph)
+    /// (a known gap, fixed separately), so without `tilesets` -- the only feature that reaches
+    /// this field's other two methods -- nothing here is ever read. `allow` rather than removing
+    /// the field: it exists unconditionally on every other backend, and calling `notdef_glyph`
+    /// here is the fix, not deleting the state that call would use.
+    #[cfg_attr(not(feature = "tilesets"), allow(dead_code))]
+    diagnostics: DiagnosticLog,
     /// The current surface size in physical pixels (set by
     /// [`resize_surface`](Presenter::resize_surface)).
     surface_size: (u32, u32),
@@ -334,10 +338,7 @@ impl WgpuRenderer {
             sprite_upload: Vec::new(),
             #[cfg(feature = "tilesets")]
             sprite_ranges: Vec::new(),
-            #[cfg(feature = "tilesets")]
-            warned_oversized: std::collections::BTreeSet::new(),
-            #[cfg(feature = "tilesets")]
-            warned_dropped_tint: std::collections::BTreeSet::new(),
+            diagnostics: DiagnosticLog::default(),
             surface_size: geometry.surface_size(cols, rows),
             gpu: None,
             pending: None,
@@ -373,8 +374,7 @@ impl WgpuRenderer {
         if tile.is_span_anchor() {
             return;
         }
-        retroglyph_window::sprite_cache::warn_sprite_needs_span(
-            &mut self.warned_oversized,
+        self.diagnostics.sprite_needs_span(
             tile.glyph(),
             (u32::from(sprite.w), u32::from(sprite.h)),
             (
@@ -388,11 +388,7 @@ impl WgpuRenderer {
     /// the tint was silently dropped (retroglyph#564).
     #[cfg(feature = "tilesets")]
     fn warn_if_tint_needs_sprite(&mut self, glyph: char, tint: retroglyph_core::color::Tint) {
-        retroglyph_window::sprite_cache::warn_tint_needs_sprite(
-            &mut self.warned_dropped_tint,
-            glyph,
-            tint,
-        );
+        self.diagnostics.tint_needs_sprite(glyph, tint);
     }
 
     /// Builds the GPU resources for the current grid on an existing device: compiles the pipelines,
@@ -1345,9 +1341,9 @@ mod sprite_layer_tests {
             ))
             .expect("draw_layers is infallible");
         }
-        assert!(r.warned_dropped_tint.contains(&'X'));
+        assert!(r.diagnostics.has_reported_dropped_tint('X'));
         assert_eq!(
-            r.warned_dropped_tint.len(),
+            r.diagnostics.dropped_tint_report_count(),
             1,
             "reported once, not per frame"
         );
@@ -1361,7 +1357,11 @@ mod sprite_layer_tests {
             DrawCell::on_layer(0, Pos::new(0, 0), &tile).with_tint(Tint::multiply(1, 2, 3)),
         ))
         .expect("draw_layers is infallible");
-        assert!(r.warned_dropped_tint.is_empty(), "the tint was applied");
+        assert_eq!(
+            r.diagnostics.dropped_tint_report_count(),
+            0,
+            "the tint was applied"
+        );
     }
 
     #[test]
@@ -1374,7 +1374,7 @@ mod sprite_layer_tests {
             &tile,
         )))
         .expect("draw_layers is infallible");
-        assert!(r.warned_dropped_tint.is_empty());
+        assert_eq!(r.diagnostics.dropped_tint_report_count(), 0);
     }
 }
 

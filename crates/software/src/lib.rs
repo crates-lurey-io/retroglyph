@@ -135,16 +135,13 @@ use retroglyph_core::event::{Event, coalesces_with};
 use retroglyph_core::grid::HasSize;
 use retroglyph_core::grid::{Pos, Size};
 use retroglyph_core::tile::Tile;
-use retroglyph_window::diagnostics::warn_notdef_glyph;
+use retroglyph_window::diagnostics::DiagnosticLog;
 use retroglyph_window::geometry::CellGeometry;
 use retroglyph_window::palette::{DEFAULT_BG, DEFAULT_FG};
 use retroglyph_window::presenter::WindowHandle;
 use retroglyph_window::presenter::cell_art_glyph;
 #[cfg(feature = "tilesets")]
-use retroglyph_window::sprite_cache::{
-    Sprite, SpriteCache, SpriteTint, warn_sprite_needs_span, warn_tint_needs_sprite,
-};
-use std::collections::BTreeSet;
+use retroglyph_window::sprite_cache::{Sprite, SpriteCache, SpriteTint};
 use std::collections::VecDeque;
 use std::sync::Arc;
 use std::time::Duration;
@@ -231,17 +228,9 @@ struct RenderContext {
     /// revisited by the dirty-cell path and the stale spill survives unless this frame's
     /// `full_repaint` also accounts for what the *previous* frame offset.
     prev_offset: bool,
-    /// Glyphs already reported by [`warn_oversized_sprite`] as needing a span, so a 60fps redraw
-    /// loop logs each one once instead of every frame.
-    #[cfg(feature = "tilesets")]
-    warned_oversized: BTreeSet<char>,
-    /// Glyphs already reported by [`warn_tint_needs_sprite`] as having a dropped tint, so a 60fps
-    /// redraw loop logs each one once instead of every frame.
-    #[cfg(feature = "tilesets")]
-    warned_dropped_tint: BTreeSet<char>,
-    /// Characters already reported by [`warn_notdef_glyph`] as resolving to the fallback rather
-    /// than their own glyph, so a 60fps redraw loop logs each one once instead of every frame.
-    warned_notdef: BTreeSet<char>,
+    /// The oversized-sprite, dropped-tint, and notdef-glyph dedup state, so a 60fps redraw loop
+    /// logs each offending glyph once instead of every frame.
+    diagnostics: DiagnosticLog,
 }
 
 impl SoftwareRenderer {
@@ -272,11 +261,7 @@ impl SoftwareRenderer {
                 // the full-repaint path once, seeding `prev_tiles` for every subsequent frame.
                 prev_layer_count: usize::MAX,
                 prev_offset: false,
-                #[cfg(feature = "tilesets")]
-                warned_oversized: BTreeSet::new(),
-                #[cfg(feature = "tilesets")]
-                warned_dropped_tint: BTreeSet::new(),
-                warned_notdef: BTreeSet::new(),
+                diagnostics: DiagnosticLog::default(),
             },
             #[cfg(feature = "tilesets")]
             sprite_cache,
@@ -600,8 +585,7 @@ impl SoftwareRenderer {
                     recolor,
                 );
                 if !tile.is_span_anchor() {
-                    warn_sprite_needs_span(
-                        &mut self.ctx.warned_oversized,
+                    self.ctx.diagnostics.sprite_needs_span(
                         art_glyph,
                         (sprite.pixel_width, sprite.pixel_height),
                         (u32::from(glyph_w), u32::from(glyph_h)),
@@ -612,7 +596,7 @@ impl SoftwareRenderer {
             // No sprite for this glyph: it falls back to the bitmap font below, which is
             // `fg`-colored, so a tint that would otherwise recolor a sprite silently has no
             // effect here (retroglyph#564, #537's exact trap).
-            warn_tint_needs_sprite(&mut self.ctx.warned_dropped_tint, art_glyph, tint);
+            self.ctx.diagnostics.tint_needs_sprite(art_glyph, tint);
         }
 
         blit_glyph(
@@ -624,7 +608,7 @@ impl SoftwareRenderer {
             art_glyph,
             &self.fonts,
             scale,
-            &mut self.ctx.warned_notdef,
+            &mut self.ctx.diagnostics,
         );
     }
 }
@@ -1136,7 +1120,7 @@ fn blit_glyph(
     art_glyph: char,
     fonts: &FontChain<'static>,
     scale: usize,
-    warned_notdef: &mut BTreeSet<char>,
+    diagnostics: &mut DiagnosticLog,
 ) {
     let fg = resolve_color(tile.style().foreground(), DEFAULT_FG);
 
@@ -1154,7 +1138,7 @@ fn blit_glyph(
     // legitimate cell on its own (a solid block can be drawn on purpose), so this is the only
     // place a caller finds out it happened at all (retroglyph#1292).
     if glyph.is_notdef() {
-        warn_notdef_glyph(warned_notdef, art_glyph);
+        diagnostics.notdef_glyph(art_glyph);
     }
     let buf_h = buffer.len() / buf_w;
 
@@ -2883,7 +2867,7 @@ mod span_tests {
         paint_tinted(&mut r, &grid, Tint::multiply(128, 128, 128));
 
         assert_eq!(
-            r.ctx.warned_dropped_tint.contains(&'X'),
+            r.ctx.diagnostics.has_reported_dropped_tint('X'),
             retroglyph_core::dev::DEV
         );
     }
@@ -2897,7 +2881,7 @@ mod span_tests {
         grid.write_span(0, 0, 0, &["S"], Style::new()).unwrap();
         paint_tinted(&mut r, &grid, Tint::multiply(128, 128, 128));
 
-        assert!(!r.ctx.warned_dropped_tint.contains(&'S'));
+        assert!(!r.ctx.diagnostics.has_reported_dropped_tint('S'));
     }
 
     #[test]
@@ -2907,7 +2891,7 @@ mod span_tests {
         grid.write_span(0, 0, 0, &["X"], Style::new()).unwrap();
         paint(&mut r, &grid);
 
-        assert!(r.ctx.warned_dropped_tint.is_empty());
+        assert_eq!(r.ctx.diagnostics.dropped_tint_report_count(), 0);
     }
 
     #[test]
@@ -2922,7 +2906,7 @@ mod span_tests {
         .unwrap();
 
         assert_eq!(
-            r.ctx.warned_dropped_tint.contains(&'X'),
+            r.ctx.diagnostics.has_reported_dropped_tint('X'),
             retroglyph_core::dev::DEV
         );
     }
@@ -3040,7 +3024,7 @@ mod font_chain_tests {
             .unwrap();
 
         assert_eq!(
-            renderer.ctx.warned_notdef.contains(&'あ'),
+            renderer.ctx.diagnostics.has_reported_notdef('あ'),
             retroglyph_core::dev::DEV
         );
     }
@@ -3065,7 +3049,7 @@ mod font_chain_tests {
             )))
             .unwrap();
 
-        assert!(!renderer.ctx.warned_notdef.contains(&'A'));
+        assert!(!renderer.ctx.diagnostics.has_reported_notdef('A'));
     }
 
     /// The panic reported in #539 (`glyph index 219 out of range (2)`): the CP437 solid block is
