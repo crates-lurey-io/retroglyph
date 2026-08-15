@@ -33,6 +33,8 @@ use crate::grid::Pos;
 use crate::terminal::Terminal;
 use alloc::collections::VecDeque;
 use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
 use core::fmt;
 use core::time::Duration;
 
@@ -119,7 +121,7 @@ pub const DEFAULT_MAX_STEPS: u32 = 64;
 pub struct TestHarness {
     term: Terminal<Headless>,
     frame: u64,
-    queued: VecDeque<Event>,
+    queued: VecDeque<Vec<Event>>,
     step_delta: Duration,
 }
 
@@ -155,7 +157,25 @@ impl TestHarness {
     /// ([`click`](Self::click), [`key`](Self::key), [`mouse_move`](Self::mouse_move)) unless the
     /// [`Event`](crate::event::Event) variant needed isn't one of them.
     pub fn push_event(&mut self, event: Event) {
-        self.queued.push_back(event);
+        self.queued.push_back(vec![event]);
+    }
+
+    /// Queues every event in `events` to land together in a single [`step`](Self::step) call,
+    /// rather than one per frame.
+    ///
+    /// For a gesture whose events a real backend delivers within one poll (a drag's coalesced
+    /// moves, a paste, a multi-key chord) and that the app under test expects to see in the same
+    /// [`App::update`](crate::app::App::update) call: [`push_event`](Self::push_event) queuing
+    /// each one separately would spread them across frames instead, which is what a real backend
+    /// never does and what [`Terminal::drain_events`](crate::terminal::Terminal::drain_events)
+    /// callers written against real input don't expect.
+    ///
+    /// [`Headless`](crate::backend::Headless) coalesces consecutive
+    /// [`Event::Mouse`](crate::event::Event::Mouse) [`Moved`](crate::event::MouseEventKind::Moved)
+    /// events into just the last one, matching a real backend's own polling behavior: a
+    /// `push_frame` of several successive moves is seen by the app as only the final position.
+    pub fn push_frame(&mut self, events: impl IntoIterator<Item = Event>) {
+        self.queued.push_back(events.into_iter().collect());
     }
 
     /// Queues a left-button click (press then release) at `(x, y)`, with no modifiers.
@@ -225,8 +245,10 @@ impl TestHarness {
         if self.frame == 0 {
             app.init(&mut self.term);
         }
-        if let Some(event) = self.queued.pop_front() {
-            self.term.backend_mut().push_event(event);
+        if let Some(events) = self.queued.pop_front() {
+            for event in events {
+                self.term.backend_mut().push_event(event);
+            }
         }
         let frame = Frame::new(self.step_delta, self.frame);
         self.frame = self.frame.wrapping_add(1);
@@ -241,52 +263,42 @@ impl TestHarness {
         flow
     }
 
-    /// Runs [`step`](Self::step) until the event queue is empty *and* one further event-free
-    /// frame has run past that (with at least one frame run total), stopping early on
-    /// [`Flow::Exit`](crate::app::Flow::Exit), bounded by `max_steps`.
+    /// Runs [`step`](Self::step) once per currently-queued frame, plus one further event-free
+    /// frame past that, stopping early on [`Flow::Exit`](crate::app::Flow::Exit), bounded by
+    /// `max_steps`.
     ///
     /// This is the "run until settled" primitive: queuing input only stages it, `settle` resolves
     /// the two-frame rule (see [`TestHarness`](crate::testing::TestHarness)) instead of requiring
     /// manual `step` calls per gesture. The trailing event-free frame matters because hit-testing
     /// (e.g. `retroglyph-ui`'s `Interaction`) reads a one-shot flag latched by the *previous*
-    /// frame's input: stopping the instant the queue empties (right after the last queued event's
-    /// own frame) would return before that flag is ever observed, leaving a queued click's
-    /// `clicked()` structurally unreachable through this API.
+    /// frame's input: stopping right after the last queued frame's own `step` would return before
+    /// that flag is ever observed, leaving a queued click's `clicked()` structurally unreachable
+    /// through this API. The budget `settle` needs is therefore fixed up front, as the queue's
+    /// length (at least one, for the empty-queue case) plus that trailing frame, rather than
+    /// discovered by looping on the queue's state as it drains.
     ///
     /// # Errors
     ///
-    /// Returns [`RunError::ExceededMaxSteps`](crate::testing::RunError::ExceededMaxSteps) if the queue is still non-empty after `max_steps`
-    /// steps: an app that never drains its input is a bug in the test or the app, not a case to
-    /// loop on forever.
+    /// Returns [`RunError::ExceededMaxSteps`](crate::testing::RunError::ExceededMaxSteps) if that
+    /// budget exceeds `max_steps`: a queue with more staged frames than `max_steps` allows is a
+    /// bug in the test, not a case to loop on forever.
     pub fn settle<A: App<Headless>>(
         &mut self,
         app: &mut A,
         max_steps: u32,
     ) -> Result<u32, RunError> {
-        let mut steps = 0;
-        let mut ran_trailing_frame = false;
-        loop {
-            let flow = self.step(app);
-            steps += 1;
-            if flow == Flow::Exit {
+        let needed = u32::try_from(self.queued.len().max(1))
+            .unwrap_or(u32::MAX)
+            .saturating_add(1);
+        for steps in 1..=needed {
+            if self.step(app) == Flow::Exit {
                 return Ok(steps);
             }
-            if self.queued.is_empty() {
-                // The queue draining doesn't mean the app has resolved everything it saw: one
-                // more event-free frame is what lets a one-shot flag latched by the last queued
-                // event's own frame (e.g. `resolved_release`) finally be observed. Run exactly one
-                // before stopping, rather than stopping the instant the queue empties.
-                if ran_trailing_frame {
-                    return Ok(steps);
-                }
-                ran_trailing_frame = true;
-            } else {
-                ran_trailing_frame = false;
-            }
-            if steps >= max_steps {
+            if steps >= max_steps && steps < needed {
                 return Err(RunError::ExceededMaxSteps { max_steps });
             }
         }
+        Ok(needed)
     }
 
     /// [`settle`](Self::settle) with [`DEFAULT_MAX_STEPS`], panicking instead of returning an
@@ -445,11 +457,11 @@ impl TestHarness {
     }
 }
 
-/// Error returned by [`TestHarness::settle`](crate::testing::TestHarness::settle) when the queue never drained within the step budget.
+/// Error returned by [`TestHarness::settle`](crate::testing::TestHarness::settle) when the queue held more staged frames than the step budget.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum RunError {
-    /// The queue still had pending events after `max_steps` [`TestHarness::step`](crate::testing::TestHarness::step) calls.
+    /// The queue needed more than `max_steps` [`TestHarness::step`](crate::testing::TestHarness::step) calls to drain, plus the trailing event-free frame.
     ExceededMaxSteps {
         /// The budget that was exceeded.
         max_steps: u32,
