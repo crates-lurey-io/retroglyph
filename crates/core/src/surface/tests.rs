@@ -458,6 +458,49 @@ fn translated_fill_rect_and_clear_region_clip_a_rect_much_larger_than_the_area()
     }
 }
 
+/// A translated surface's `clear_region` now reaches the batch `Grid::fill_rect` fast path
+/// (retroglyph#1381) instead of falling back to a per-cell loop: a `rect` that starts left of/
+/// above the translated origin must crop to what lands, the same near-edge behavior `blit`
+/// already had, not drop the call entirely and not panic on the u16 arithmetic.
+#[test]
+fn translated_clear_region_crops_a_rect_that_starts_before_the_translated_origin() {
+    let mut grid = Grid::new(5, 5);
+    {
+        let mut surface = screen(&mut grid);
+        surface.fill_rect(Rect::new(0, 0, 5, 5), '#', Style::default());
+        let mut view = surface.translate((2, 2));
+        // Local (0, 0) shifts to (-2, -2): only the rect's bottom-right 2x2 corner (local
+        // (2, 2)..(4, 4)) survives the crop, landing at absolute (0, 0)..(2, 2).
+        view.clear_region(Rect::new(0, 0, 4, 4));
+    }
+
+    for (x, y) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+        assert_eq!(grid[Pos::new(x, y)].glyph(), ' ', "cell ({x}, {y})");
+    }
+    // Outside the cropped footprint: untouched.
+    assert_eq!(grid[Pos::new(2, 0)].glyph(), '#');
+    assert_eq!(grid[Pos::new(0, 2)].glyph(), '#');
+}
+
+/// Same crop as `translated_clear_region_crops_a_rect_that_starts_before_the_translated_origin`,
+/// for `fill_rect`'s untinted/single-width fast path, which now shares `clear_region`'s mapper
+/// (retroglyph#1381).
+#[test]
+fn translated_fill_rect_crops_a_rect_that_starts_before_the_translated_origin() {
+    let mut grid = Grid::new(5, 5);
+    {
+        let mut surface = screen(&mut grid);
+        let mut view = surface.translate((2, 2));
+        view.fill_rect(Rect::new(0, 0, 4, 4), '#', Style::default());
+    }
+
+    for (x, y) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+        assert_eq!(grid[Pos::new(x, y)].glyph(), '#', "cell ({x}, {y})");
+    }
+    // Cropped off before the translated origin: never written.
+    assert_eq!(grid[Pos::new(2, 2)].glyph(), ' ');
+}
+
 /// A tinted surface's `fill_rect` fallback loop must clip to this surface's own bounds before
 /// iterating, not iterate the caller's full `rect`. See retroglyph#1000.
 #[test]
