@@ -395,6 +395,41 @@ impl WgpuRenderer {
         );
     }
 
+    /// Pushes one sprite instance for `tile` on layer `l` at cell `(cx, cy)`: aligns it within its
+    /// span box, warns once if it needed a span but didn't declare one, and resolves its tint
+    /// against `sprite`'s sheet color. Shared verbatim between the layer-0 and higher-layer sprite
+    /// dispatch branches in `draw_layers` (retroglyph#1374): the CPU/GPU parity contract (span
+    /// alignment, oversize warning, `SpriteTint::resolve` argument order) lives in exactly one
+    /// place, so a fix here reaches every layer instead of needing to land twice.
+    ///
+    /// The caller still owns which `Cell` is written and how `inherited_bg`/`sprite_bg` update;
+    /// this only appends to `self.sprite_layers[l]`.
+    #[cfg(feature = "tilesets")]
+    fn emit_sprite(
+        &mut self,
+        l: usize,
+        cx: u16,
+        cy: u16,
+        tile: &Tile,
+        sprite: SpriteSlot,
+        tint: retroglyph_core::color::Tint,
+    ) {
+        let (span_w, span_h) = tile.span();
+        let align =
+            sprite.align_offset(span_w, span_h, self.geometry.glyph_w, self.geometry.glyph_h);
+        self.warn_if_sprite_needs_span(tile, sprite);
+        self.sprite_layers[l].push(SpriteInstance::new(
+            cx,
+            cy,
+            sprite.layer,
+            sprite.w,
+            sprite.h,
+            tile.dx() + align.0,
+            tile.dy() + align.1,
+            SpriteTint::resolve(sprite.color, tile.style().foreground(), tint, DEFAULT_FG),
+        ));
+    }
+
     /// Builds the GPU resources for the current grid on an existing device: compiles the pipelines,
     /// uploads the glyph and sprite atlases, and allocates the instance buffers.
     ///
@@ -735,29 +770,7 @@ impl Output for WgpuRenderer {
                         inherited_bg[idx] = [inst.bg[0], inst.bg[1], inst.bg[2]];
                         sprite_bg[idx] = true;
                         self.layers[0][idx] = sprite_inst;
-                        let (span_w, span_h) = tile.span();
-                        let align = sprite.align_offset(
-                            span_w,
-                            span_h,
-                            self.geometry.glyph_w,
-                            self.geometry.glyph_h,
-                        );
-                        self.warn_if_sprite_needs_span(tile, sprite);
-                        self.sprite_layers[0].push(SpriteInstance::new(
-                            cx,
-                            cy,
-                            sprite.layer,
-                            sprite.w,
-                            sprite.h,
-                            tile.dx() + align.0,
-                            tile.dy() + align.1,
-                            SpriteTint::resolve(
-                                sprite.color,
-                                tile.style().foreground(),
-                                draw_cell.tint,
-                                DEFAULT_FG,
-                            ),
-                        ));
+                        self.emit_sprite(0, cx, cy, tile, sprite, draw_cell.tint);
                         continue;
                     }
                     if let Some(g) = art_glyph {
@@ -807,29 +820,7 @@ impl Output for WgpuRenderer {
                 };
                 sprite_bg[idx] = true;
                 self.layers[l][idx] = Cell::new(glyph, fg, bg, 0, 0, has_bg);
-                let (span_w, span_h) = tile.span();
-                let align = sprite.align_offset(
-                    span_w,
-                    span_h,
-                    self.geometry.glyph_w,
-                    self.geometry.glyph_h,
-                );
-                self.warn_if_sprite_needs_span(tile, sprite);
-                self.sprite_layers[l].push(SpriteInstance::new(
-                    cx,
-                    cy,
-                    sprite.layer,
-                    sprite.w,
-                    sprite.h,
-                    tile.dx() + align.0,
-                    tile.dy() + align.1,
-                    SpriteTint::resolve(
-                        sprite.color,
-                        tile.style().foreground(),
-                        draw_cell.tint,
-                        DEFAULT_FG,
-                    ),
-                ));
+                self.emit_sprite(l, cx, cy, tile, sprite, draw_cell.tint);
                 continue;
             }
             #[cfg(feature = "tilesets")]
