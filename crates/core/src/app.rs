@@ -194,9 +194,9 @@ impl RunOptions {
     /// [`FrameClock`](crate::frames::FrameClock) from [`Frame::delta`](crate::app::Frame::delta) and need `update`
     /// called every tick regardless of input.
     ///
-    /// `target_fps` becomes [`RunOptions::target_fps`](crate::app::RunOptions::target_fps) verbatim, including `0`: passing `0` here
-    /// builds without panicking, but [`run_on_with`](crate::app::run_on_with) panics once it derives
-    /// a frame budget from it (see that function's `# Panics` section).
+    /// `target_fps` becomes [`RunOptions::target_fps`](crate::app::RunOptions::target_fps) verbatim, including `0`:
+    /// [`run_on_with`](crate::app::run_on_with) treats `Some(0)` as uncapped, the same as `None`,
+    /// rather than deriving a zero-length frame budget from it.
     #[must_use]
     pub const fn animated(target_fps: u32) -> Self {
         Self {
@@ -309,11 +309,6 @@ impl Default for RunOptions {
 ///
 /// Returns the backend's error if the automatic `present()` call fails. The loop stops and the
 /// terminal is dropped (running backend teardown) before the error is returned.
-///
-/// # Panics
-///
-/// Panics if `options.target_fps` is `Some(0)`: the frame budget it derives requires a
-/// non-zero rate.
 #[cfg(feature = "std")]
 pub fn run_on_with<B, A>(
     mut term: Terminal<B>,
@@ -325,10 +320,13 @@ where
     A: App<B>,
 {
     app.init(&mut term);
-    let frame_budget = options.target_fps().map(|fps| {
-        assert!(fps > 0, "RunOptions::target_fps must be non-zero");
-        Duration::from_secs_f64(1.0 / f64::from(fps))
-    });
+    // `Some(0)` has no finite pacing interval to express, so it falls back to uncapped rather
+    // than computing `Duration::from_secs_f64(f64::INFINITY)` (which panics); see
+    // `WindowConfig`'s windowed driver for the same fallback.
+    let frame_budget = options
+        .target_fps()
+        .filter(|&fps| fps != 0)
+        .map(|fps| Duration::from_secs_f64(1.0 / f64::from(fps)));
     let mut frame_count = 0u64;
     let mut last = std::time::Instant::now();
     loop {
@@ -530,10 +528,6 @@ pub trait Launch {
 /// Returns `backend`'s error if it fails to build a [`Terminal`](crate::terminal::Terminal) over
 /// itself, or if the automatic `present()` call fails while `app` is running. See
 /// [`run_on_with`](crate::app::run_on_with) for the exact loop behavior.
-///
-/// # Panics
-///
-/// Panics if `options.target_fps` is `Some(0)`; see [`run_on_with`](crate::app::run_on_with).
 #[cfg(feature = "std")]
 pub fn run_with<B, A>(backend: B, app: A, options: RunOptions) -> Result<(), B::Error>
 where
@@ -727,6 +721,19 @@ mod tests {
         // 50 fps = 20ms/frame; 5 updates (0..=4) means 4 sleeps between them.
         run_on_with(term, app, RunOptions::animated(50)).expect("run_on_with");
         assert!(start.elapsed() >= Duration::from_millis(4 * 20));
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn run_on_with_target_fps_zero_runs_uncapped_instead_of_panicking() {
+        // Regression guard for retroglyph#1448: `Some(0)` used to panic deriving a frame budget
+        // from it; it now falls back to uncapped, matching the windowed driver.
+        let term = Terminal::new(Headless::new(2, 1));
+        let app = DrawsAndExits {
+            frames: 0,
+            exit_at: 2,
+        };
+        run_on_with(term, app, RunOptions::animated(0)).expect("run_on_with");
     }
 
     #[cfg(feature = "std")]
