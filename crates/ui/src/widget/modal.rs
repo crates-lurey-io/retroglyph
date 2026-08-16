@@ -269,7 +269,11 @@ mod tests {
         let screen = Rect::new(0, 0, 12, 8);
         let mut grid = Grid::new(12, 8);
         Modal::new(12, 4)
-            .titles(&[PanelTitle::new("hint", TitlePosition::Bottom, Align::Center)])
+            .titles(&[PanelTitle::new(
+                "hint",
+                TitlePosition::Bottom,
+                Align::Center,
+            )])
             .render(screen, &mut Surface::new(&mut grid, screen, 0));
 
         // Box is centered_rect(screen, 12, 4) = Rect::new(0, 2, 12, 4); bottom border row is y=5.
@@ -283,7 +287,11 @@ mod tests {
         let mut grid = Grid::new(20, 8);
         Modal::new(20, 4)
             .title("Confirm")
-            .titles(&[PanelTitle::new("3 / 10", TitlePosition::Bottom, Align::Right)])
+            .titles(&[PanelTitle::new(
+                "3 / 10",
+                TitlePosition::Bottom,
+                Align::Right,
+            )])
             .render(screen, &mut Surface::new(&mut grid, screen, 0));
 
         // Box is centered_rect(screen, 20, 4) = Rect::new(0, 2, 20, 4); rows 2 (top) and 5 (bottom).
@@ -301,8 +309,16 @@ mod tests {
         let screen = Rect::new(0, 0, 12, 8);
         let mut grid = Grid::new(12, 8);
         Modal::new(12, 4)
-            .titles(&[PanelTitle::new("first", TitlePosition::Bottom, Align::Center)])
-            .titles(&[PanelTitle::new("second", TitlePosition::Bottom, Align::Center)])
+            .titles(&[PanelTitle::new(
+                "first",
+                TitlePosition::Bottom,
+                Align::Center,
+            )])
+            .titles(&[PanelTitle::new(
+                "second",
+                TitlePosition::Bottom,
+                Align::Center,
+            )])
             .render(screen, &mut Surface::new(&mut grid, screen, 0));
 
         let bottom_row: String = (0..12).map(|x| grid[Pos::new(x, 5)].glyph()).collect();
