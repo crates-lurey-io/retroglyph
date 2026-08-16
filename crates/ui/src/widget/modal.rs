@@ -3,7 +3,7 @@ use retroglyph_core::color::{Color, Style};
 use retroglyph_core::grid::Rect;
 
 use super::panel::PanelChrome;
-use super::{BorderType, Panel, Widget};
+use super::{BorderType, Panel, PanelTitle, Widget};
 use crate::Surface;
 use crate::align::Align;
 use crate::layout::centered_rect;
@@ -56,6 +56,7 @@ pub struct Modal<'a> {
     width: u16,
     height: u16,
     chrome: PanelChrome<'a>,
+    titles: &'a [PanelTitle<'a>],
 }
 
 impl<'a> Modal<'a> {
@@ -67,6 +68,7 @@ impl<'a> Modal<'a> {
             width,
             height,
             chrome: PanelChrome::default().title_align(Align::Center),
+            titles: &[],
         }
         .theme(Theme::DARK)
     }
@@ -83,6 +85,21 @@ impl<'a> Modal<'a> {
     #[must_use]
     pub const fn title_align(mut self, align: Align) -> Self {
         self.chrome = self.chrome.title_align(align);
+        self
+    }
+
+    /// Add titles beyond [`Modal::title`]'s single top one -- a bottom title, more than one on
+    /// an edge, or one aligned other than via [`Modal::title_align`] -- the [`Modal`] equivalent
+    /// of [`Panel::add_title`]. Additive: never disturbs `title`/`title_align`.
+    ///
+    /// Takes the whole set at once as a borrowed slice, built from [`PanelTitle::new`], rather
+    /// than accumulating one at a time like [`Panel::add_title`]: an owned `Vec` growing across
+    /// repeated calls is exactly what would cost [`Modal`] its [`Copy`] (see this struct's own
+    /// doc comment), so a later call here replaces the slice instead of appending to it. Drawn in
+    /// the same order and with the same per-edge truncation rules as [`Panel::add_title`].
+    #[must_use]
+    pub const fn titles(mut self, titles: &'a [PanelTitle<'a>]) -> Self {
+        self.titles = titles;
         self
     }
 
@@ -142,7 +159,11 @@ impl<'a> Modal<'a> {
     /// [`Rect`].
     pub fn render(self, screen: Rect, surface: &mut Surface<'_>) -> Rect {
         let rect = centered_rect(screen, self.width, self.height);
-        let panel = Panel::from_chrome(self.chrome);
+        let mut panel = Panel::from_chrome(self.chrome);
+        for title in self.titles {
+            let (text, position, align) = title.parts();
+            panel = panel.add_title(text, position, align);
+        }
         panel.render(&mut surface.scope(rect));
         panel.inner(rect)
     }
@@ -153,6 +174,7 @@ mod tests {
     use retroglyph_core::grid::{Grid, Pos};
 
     use super::*;
+    use crate::widget::TitlePosition;
 
     /// PanelChrome-sharing with `Panel` (retroglyph#1385) must not cost `Modal` its `Copy`: it's
     /// the reason `Modal` embeds `PanelChrome` by value instead of a `Panel` (not `Copy`, owns a
@@ -240,6 +262,52 @@ mod tests {
             Theme::DARK.title_bg
         );
         assert_eq!(grid[Pos::new(6, 4)].style().background(), Color::Default);
+    }
+
+    #[test]
+    fn titles_draws_into_the_bottom_border_row() {
+        let screen = Rect::new(0, 0, 12, 8);
+        let mut grid = Grid::new(12, 8);
+        Modal::new(12, 4)
+            .titles(&[PanelTitle::new("hint", TitlePosition::Bottom, Align::Center)])
+            .render(screen, &mut Surface::new(&mut grid, screen, 0));
+
+        // Box is centered_rect(screen, 12, 4) = Rect::new(0, 2, 12, 4); bottom border row is y=5.
+        let bottom_row: String = (0..12).map(|x| grid[Pos::new(x, 5)].glyph()).collect();
+        assert!(bottom_row.contains("hint"));
+    }
+
+    #[test]
+    fn title_and_titles_coexist_on_different_edges() {
+        let screen = Rect::new(0, 0, 20, 8);
+        let mut grid = Grid::new(20, 8);
+        Modal::new(20, 4)
+            .title("Confirm")
+            .titles(&[PanelTitle::new("3 / 10", TitlePosition::Bottom, Align::Right)])
+            .render(screen, &mut Surface::new(&mut grid, screen, 0));
+
+        // Box is centered_rect(screen, 20, 4) = Rect::new(0, 2, 20, 4); rows 2 (top) and 5 (bottom).
+        let top_row: String = (0..20).map(|x| grid[Pos::new(x, 2)].glyph()).collect();
+        let bottom_row: String = (0..20).map(|x| grid[Pos::new(x, 5)].glyph()).collect();
+        assert!(top_row.contains("Confirm"));
+        assert!(bottom_row.contains("3 / 10"));
+    }
+
+    /// A later `.titles(...)` call replaces the slice rather than appending to it (see the
+    /// method's own doc comment): this is what keeps [`Modal`] [`Copy`] instead of growing a
+    /// `Vec` like [`Panel::add_title`].
+    #[test]
+    fn a_later_titles_call_replaces_the_earlier_one() {
+        let screen = Rect::new(0, 0, 12, 8);
+        let mut grid = Grid::new(12, 8);
+        Modal::new(12, 4)
+            .titles(&[PanelTitle::new("first", TitlePosition::Bottom, Align::Center)])
+            .titles(&[PanelTitle::new("second", TitlePosition::Bottom, Align::Center)])
+            .render(screen, &mut Surface::new(&mut grid, screen, 0));
+
+        let bottom_row: String = (0..12).map(|x| grid[Pos::new(x, 5)].glyph()).collect();
+        assert!(bottom_row.contains("second"));
+        assert!(!bottom_row.contains("first"));
     }
 
     #[test]
