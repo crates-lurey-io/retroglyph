@@ -171,6 +171,8 @@ impl<'a> Modal<'a> {
 
 #[cfg(test)]
 mod tests {
+    use alloc::string::String;
+
     use retroglyph_core::grid::{Grid, Pos};
 
     use super::*;
