@@ -7,85 +7,49 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
-
 ## [0.6.0+retroglyph-window](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-window-v0.5.2...retroglyph-window-v0.6.0) - 2026-08-16
 
 ### Features
 
-- [255e4df](
-https://github.com/crates-lurey-io/retroglyph/commit/255e4df03d25a759d585ddaf3480ef6fb5bc5182) *(core)* Add event::push_coalesced and use it in all four backend queues by `@crates-lurey-io-agent[bot]` in [#1415](
-https://github.com/crates-lurey-io/retroglyph/pull/1415)
+- [255e4df](https://github.com/crates-lurey-io/retroglyph/commit/255e4df03d25a759d585ddaf3480ef6fb5bc5182) _(core)_ Add event::push_coalesced and use it in all four backend queues by `@crates-lurey-io-agent[bot]` in [#1415](https://github.com/crates-lurey-io/retroglyph/pull/1415)
 
-- [a1e3da0](
-https://github.com/crates-lurey-io/retroglyph/commit/a1e3da0923cc5396b5ac8dbde76068cedc1e9793) *(core)* Add `App::init` first-frame hook by `@crates-lurey-io-agent[bot]` in [#1328](
-https://github.com/crates-lurey-io/retroglyph/pull/1328)
+- [a1e3da0](https://github.com/crates-lurey-io/retroglyph/commit/a1e3da0923cc5396b5ac8dbde76068cedc1e9793) _(core)_ Add `App::init` first-frame hook by `@crates-lurey-io-agent[bot]` in [#1328](https://github.com/crates-lurey-io/retroglyph/pull/1328)
 
-- [08f22c0](
-https://github.com/crates-lurey-io/retroglyph/commit/08f22c0b2dbbe2712c8a93783c92d2821e79cf11) *(core)* Add Color::rgb and Color::hex const constructors by `@crates-lurey-io-agent[bot]` in [#1345](
-https://github.com/crates-lurey-io/retroglyph/pull/1345)
+- [08f22c0](https://github.com/crates-lurey-io/retroglyph/commit/08f22c0b2dbbe2712c8a93783c92d2821e79cf11) _(core)_ Add Color::rgb and Color::hex const constructors by `@crates-lurey-io-agent[bot]` in [#1345](https://github.com/crates-lurey-io/retroglyph/pull/1345)
 
 ### Bug Fixes
 
-- [ca0e5be](
-https://github.com/crates-lurey-io/retroglyph/commit/ca0e5be321da85a44d433576f83955900b8f6b7d) *(software, gl, window)* Warn once on notdef glyph fallback; add glyph-coverage testing helper by `@crates-lurey-io-agent[bot]` in [#1334](
-https://github.com/crates-lurey-io/retroglyph/pull/1334)
+- [ca0e5be](https://github.com/crates-lurey-io/retroglyph/commit/ca0e5be321da85a44d433576f83955900b8f6b7d) _(software, gl, window)_ Warn once on notdef glyph fallback; add glyph-coverage testing helper by `@crates-lurey-io-agent[bot]` in [#1334](https://github.com/crates-lurey-io/retroglyph/pull/1334)
 
-- [215e53f](
-https://github.com/crates-lurey-io/retroglyph/commit/215e53f90f3b72003a2fe8038f1dddabeef38a3c) *(window)* Disable arboard's image-data feature to drop zune-jpeg from the build by `@crates-lurey-io-agent[bot]` in [#1255](
-https://github.com/crates-lurey-io/retroglyph/pull/1255)
+- [215e53f](https://github.com/crates-lurey-io/retroglyph/commit/215e53f90f3b72003a2fe8038f1dddabeef38a3c) _(window)_ Disable arboard's image-data feature to drop zune-jpeg from the build by `@crates-lurey-io-agent[bot]` in [#1255](https://github.com/crates-lurey-io/retroglyph/pull/1255)
 
-- [f262308](
-https://github.com/crates-lurey-io/retroglyph/commit/f262308b9c8193135b1fe3f60e594872e2420e08) *(window, core)* Apply windowed resize to the Terminal eagerly, not just on Event::Resize by `@crates-lurey-io-agent[bot]` in [#1329](
-https://github.com/crates-lurey-io/retroglyph/pull/1329)
+- [f262308](https://github.com/crates-lurey-io/retroglyph/commit/f262308b9c8193135b1fe3f60e594872e2420e08) _(window, core)_ Apply windowed resize to the Terminal eagerly, not just on Event::Resize by `@crates-lurey-io-agent[bot]` in [#1329](https://github.com/crates-lurey-io/retroglyph/pull/1329)
 
 ### Refactor
 
-- [6ee0d30](
-https://github.com/crates-lurey-io/retroglyph/commit/6ee0d30ea1e710c78686ba89eda58ccb2de125dc) *(core)* Add Frame::new, mark Frame #[non_exhaustive] by `@crates-lurey-io-agent[bot]` in [#1360](
-https://github.com/crates-lurey-io/retroglyph/pull/1360)
+- [6ee0d30](https://github.com/crates-lurey-io/retroglyph/commit/6ee0d30ea1e710c78686ba89eda58ccb2de125dc) _(core)_ Add Frame::new, mark Frame #[non_exhaustive] by `@crates-lurey-io-agent[bot]` in [#1360](https://github.com/crates-lurey-io/retroglyph/pull/1360)
 
-- [af7d30a](
-https://github.com/crates-lurey-io/retroglyph/commit/af7d30a955859afa2902b9b00a694f531a9a8e64) *(core)* Replace `Output::needs_full_frame`/`composites_layers` with `Compositing` by `@crates-lurey-io-agent[bot]` in [#1344](
-https://github.com/crates-lurey-io/retroglyph/pull/1344) [**breaking**]
+- [af7d30a](https://github.com/crates-lurey-io/retroglyph/commit/af7d30a955859afa2902b9b00a694f531a9a8e64) _(core)_ Replace `Output::needs_full_frame`/`composites_layers` with `Compositing` by `@crates-lurey-io-agent[bot]` in [#1344](https://github.com/crates-lurey-io/retroglyph/pull/1344) [**breaking**]
 
-- [a325de8](
-https://github.com/crates-lurey-io/retroglyph/commit/a325de8890ff8d5506ec5b85a94b8703d3172656) *(software)* Remove all root re-exports from retroglyph-software by `@crates-lurey-io-agent[bot]` in [#1311](
-https://github.com/crates-lurey-io/retroglyph/pull/1311)
+- [a325de8](https://github.com/crates-lurey-io/retroglyph/commit/a325de8890ff8d5506ec5b85a94b8703d3172656) _(software)_ Remove all root re-exports from retroglyph-software by `@crates-lurey-io-agent[bot]` in [#1311](https://github.com/crates-lurey-io/retroglyph/pull/1311)
 
-- [0f500dc](
-https://github.com/crates-lurey-io/retroglyph/commit/0f500dc9ebbb844ad91f43f8be0fb84440bf8244) *(ui)* Remove all root re-exports from retroglyph-ui by `@crates-lurey-io-agent[bot]` in [#1314](
-https://github.com/crates-lurey-io/retroglyph/pull/1314)
+- [0f500dc](https://github.com/crates-lurey-io/retroglyph/commit/0f500dc9ebbb844ad91f43f8be0fb84440bf8244) _(ui)_ Remove all root re-exports from retroglyph-ui by `@crates-lurey-io-agent[bot]` in [#1314](https://github.com/crates-lurey-io/retroglyph/pull/1314)
 
-- [aa4d1b6](
-https://github.com/crates-lurey-io/retroglyph/commit/aa4d1b6b0905e72880653a384210d35c2934156f) *(window)* Position-indexed charset + one ordered glyph-descriptor table by `@crates-lurey-io-agent[bot]` in [#1443](
-https://github.com/crates-lurey-io/retroglyph/pull/1443)
+- [aa4d1b6](https://github.com/crates-lurey-io/retroglyph/commit/aa4d1b6b0905e72880653a384210d35c2934156f) _(window)_ Position-indexed charset + one ordered glyph-descriptor table by `@crates-lurey-io-agent[bot]` in [#1443](https://github.com/crates-lurey-io/retroglyph/pull/1443)
 
-- [ee927b9](
-https://github.com/crates-lurey-io/retroglyph/commit/ee927b991424915948e0cdfda3041ac3e452234b) *(window)* Remove the redundant translate_pixel_to_cell by `@crates-lurey-io-agent[bot]` in [#1442](
-https://github.com/crates-lurey-io/retroglyph/pull/1442)
+- [ee927b9](https://github.com/crates-lurey-io/retroglyph/commit/ee927b991424915948e0cdfda3041ac3e452234b) _(window)_ Remove the redundant translate_pixel_to_cell by `@crates-lurey-io-agent[bot]` in [#1442](https://github.com/crates-lurey-io/retroglyph/pull/1442)
 
-- [c373500](
-https://github.com/crates-lurey-io/retroglyph/commit/c3735004734d30995b374f3f548f1e6dcbd961b8) *(window)* TilesetBuilder owns a TilesetOptions; compute the atlas SlotLayout once by `@crates-lurey-io-agent[bot]` in [#1439](
-https://github.com/crates-lurey-io/retroglyph/pull/1439)
+- [c373500](https://github.com/crates-lurey-io/retroglyph/commit/c3735004734d30995b374f3f548f1e6dcbd961b8) _(window)_ TilesetBuilder owns a TilesetOptions; compute the atlas SlotLayout once by `@crates-lurey-io-agent[bot]` in [#1439](https://github.com/crates-lurey-io/retroglyph/pull/1439)
 
-- [c3cb9e5](
-https://github.com/crates-lurey-io/retroglyph/commit/c3cb9e5d3aa2accb4e4d7e491fbc075babffc141) *(window)* Make Presenter::geometry the single source of cell pixel size by `@crates-lurey-io-agent[bot]` in [#1416](
-https://github.com/crates-lurey-io/retroglyph/pull/1416)
+- [c3cb9e5](https://github.com/crates-lurey-io/retroglyph/commit/c3cb9e5d3aa2accb4e4d7e491fbc075babffc141) _(window)_ Make Presenter::geometry the single source of cell pixel size by `@crates-lurey-io-agent[bot]` in [#1416](https://github.com/crates-lurey-io/retroglyph/pull/1416)
 
-- [dcb3f0e](
-https://github.com/crates-lurey-io/retroglyph/commit/dcb3f0e24ea508142dc46d13c35b576aead81808) *(window)* DiagnosticLog owns the per-diagnostic dedup sets by `@crates-lurey-io-agent[bot]` in [#1412](
-https://github.com/crates-lurey-io/retroglyph/pull/1412)
+- [dcb3f0e](https://github.com/crates-lurey-io/retroglyph/commit/dcb3f0e24ea508142dc46d13c35b576aead81808) _(window)_ DiagnosticLog owns the per-diagnostic dedup sets by `@crates-lurey-io-agent[bot]` in [#1412](https://github.com/crates-lurey-io/retroglyph/pull/1412)
 
-- [a8169e9](
-https://github.com/crates-lurey-io/retroglyph/commit/a8169e90cdb45dc3adaf3d6f44380367e04791d2) *(window)* Wrap winit::EventLoopError, stop leaking it through WindowedLaunchError by `@crates-lurey-io-agent[bot]` in [#1343](
-https://github.com/crates-lurey-io/retroglyph/pull/1343)
+- [a8169e9](https://github.com/crates-lurey-io/retroglyph/commit/a8169e90cdb45dc3adaf3d6f44380367e04791d2) _(window)_ Wrap winit::EventLoopError, stop leaking it through WindowedLaunchError by `@crates-lurey-io-agent[bot]` in [#1343](https://github.com/crates-lurey-io/retroglyph/pull/1343)
 
-- [deba5f1](
-https://github.com/crates-lurey-io/retroglyph/commit/deba5f179241b7d3e1c8941c833cd05342e1cc94) *(window)* Remove all root re-exports from retroglyph-window by `@crates-lurey-io-agent[bot]` in [#1275](
-https://github.com/crates-lurey-io/retroglyph/pull/1275)
+- [deba5f1](https://github.com/crates-lurey-io/retroglyph/commit/deba5f179241b7d3e1c8941c833cd05342e1cc94) _(window)_ Remove all root re-exports from retroglyph-window by `@crates-lurey-io-agent[bot]` in [#1275](https://github.com/crates-lurey-io/retroglyph/pull/1275)
 
 **Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-window-v0.5.2...retroglyph-window-v0.6.0
-
 
 ## [0.5.2+retroglyph-window](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-window-v0.5.1...retroglyph-window-v0.5.2) - 2026-08-07
 

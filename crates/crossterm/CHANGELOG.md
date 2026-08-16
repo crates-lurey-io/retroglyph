@@ -7,29 +7,21 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
-
 ## [0.4.2+retroglyph-crossterm](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.4.1...retroglyph-crossterm-v0.4.2) - 2026-08-16
 
 ### Features
 
-- [08f22c0](
-https://github.com/crates-lurey-io/retroglyph/commit/08f22c0b2dbbe2712c8a93783c92d2821e79cf11) *(core)* Add Color::rgb and Color::hex const constructors by `@crates-lurey-io-agent[bot]` in [#1345](
-https://github.com/crates-lurey-io/retroglyph/pull/1345)
+- [08f22c0](https://github.com/crates-lurey-io/retroglyph/commit/08f22c0b2dbbe2712c8a93783c92d2821e79cf11) _(core)_ Add Color::rgb and Color::hex const constructors by `@crates-lurey-io-agent[bot]` in [#1345](https://github.com/crates-lurey-io/retroglyph/pull/1345)
 
 ### Refactor
 
-- [95612fd](
-https://github.com/crates-lurey-io/retroglyph/commit/95612fd632ffc1564b90b16737a0900a9e67d552) *(crossterm)* Derive poll_event's remaining time, unify read/poll error policy by `@crates-lurey-io-agent[bot]` in [#1441](
-https://github.com/crates-lurey-io/retroglyph/pull/1441)
+- [95612fd](https://github.com/crates-lurey-io/retroglyph/commit/95612fd632ffc1564b90b16737a0900a9e67d552) _(crossterm)_ Derive poll_event's remaining time, unify read/poll error policy by `@crates-lurey-io-agent[bot]` in [#1441](https://github.com/crates-lurey-io/retroglyph/pull/1441)
 
 ### Testing
 
-- [78ff355](
-https://github.com/crates-lurey-io/retroglyph/commit/78ff355c1eacddd1fd3379bccd78d328447e1f26) *(crossterm)* Shared headless_term() helper for the 14-copy test construction chain by `@crates-lurey-io-agent[bot]` in [#1434](
-https://github.com/crates-lurey-io/retroglyph/pull/1434)
+- [78ff355](https://github.com/crates-lurey-io/retroglyph/commit/78ff355c1eacddd1fd3379bccd78d328447e1f26) _(crossterm)_ Shared headless_term() helper for the 14-copy test construction chain by `@crates-lurey-io-agent[bot]` in [#1434](https://github.com/crates-lurey-io/retroglyph/pull/1434)
 
 **Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.4.1...retroglyph-crossterm-v0.4.2
-
 
 ## [0.4.1+retroglyph-crossterm](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-crossterm-v0.4.0...retroglyph-crossterm-v0.4.1) - 2026-08-07
 
