@@ -36,6 +36,26 @@ pub struct PanelTitle<'a> {
     align: Align,
 }
 
+impl<'a> PanelTitle<'a> {
+    /// Build a title for [`Modal::titles`](super::Modal::titles), the [`Modal`](super::Modal)
+    /// equivalent of a [`Panel::add_title`] call. `Panel` itself never needs this constructor
+    /// directly: [`Panel::add_title`] builds one from its own arguments.
+    #[must_use]
+    pub const fn new(text: &'a str, position: TitlePosition, align: Align) -> Self {
+        Self {
+            text,
+            position,
+            align,
+        }
+    }
+
+    /// This title's fields, for [`Modal::render`](super::Modal::render) to feed into
+    /// [`Panel::add_title`] without exposing them as public fields.
+    pub(super) const fn parts(self) -> (&'a str, TitlePosition, Align) {
+        (self.text, self.position, self.align)
+    }
+}
+
 /// The style/layout fields [`Panel`] and [`Modal`](super::Modal) both carry: title text and
 /// alignment, border/fill style, border glyph set, and padding. Split out so the two widgets'
 /// builder methods, theming, and defaults live once instead of twice; `Panel` additionally holds
