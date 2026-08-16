@@ -23,7 +23,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 # serialized, and `replay_live` shares the same `App`-driving contract `TestHarness::replay`
 # does); `serde` so `InputRecording` (and the `Event` stream it carries) can round-trip through
 # `serde_json`. `std` for `Terminal`/`App::run_on`-shaped driving and this crate's own file I/O.
-retroglyph-core = { path = "../core", version = "0.7.1", default-features = false, features = [
+retroglyph-core = { path = "../core", version = "0.8.0", default-features = false, features = [
   "std",
   "testing",
   "serde",

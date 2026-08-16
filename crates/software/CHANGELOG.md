@@ -7,6 +7,58 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
+
+## [0.7.0+retroglyph-software](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-software-v0.6.2...retroglyph-software-v0.7.0) - 2026-08-16
+
+### Features
+
+- [255e4df](
+https://github.com/crates-lurey-io/retroglyph/commit/255e4df03d25a759d585ddaf3480ef6fb5bc5182) *(core)* Add event::push_coalesced and use it in all four backend queues by `@crates-lurey-io-agent[bot]` in [#1415](
+https://github.com/crates-lurey-io/retroglyph/pull/1415)
+
+- [08f22c0](
+https://github.com/crates-lurey-io/retroglyph/commit/08f22c0b2dbbe2712c8a93783c92d2821e79cf11) *(core)* Add Color::rgb and Color::hex const constructors by `@crates-lurey-io-agent[bot]` in [#1345](
+https://github.com/crates-lurey-io/retroglyph/pull/1345)
+
+### Bug Fixes
+
+- [ca0e5be](
+https://github.com/crates-lurey-io/retroglyph/commit/ca0e5be321da85a44d433576f83955900b8f6b7d) *(software, gl, window)* Warn once on notdef glyph fallback; add glyph-coverage testing helper by `@crates-lurey-io-agent[bot]` in [#1334](
+https://github.com/crates-lurey-io/retroglyph/pull/1334)
+
+### Refactor
+
+- [af7d30a](
+https://github.com/crates-lurey-io/retroglyph/commit/af7d30a955859afa2902b9b00a694f531a9a8e64) *(core)* Replace `Output::needs_full_frame`/`composites_layers` with `Compositing` by `@crates-lurey-io-agent[bot]` in [#1344](
+https://github.com/crates-lurey-io/retroglyph/pull/1344) [**breaking**]
+
+- [cfaa200](
+https://github.com/crates-lurey-io/retroglyph/commit/cfaa200489411300316e6eefddf9c794cbabb74c) *(software)* Consolidate per-frame shadow into Vec<LayerShadow> by `@crates-lurey-io-agent[bot]` in [#1417](
+https://github.com/crates-lurey-io/retroglyph/pull/1417)
+
+- [a325de8](
+https://github.com/crates-lurey-io/retroglyph/commit/a325de8890ff8d5506ec5b85a94b8703d3172656) *(software)* Remove all root re-exports from retroglyph-software by `@crates-lurey-io-agent[bot]` in [#1311](
+https://github.com/crates-lurey-io/retroglyph/pull/1311)
+
+- [aa4d1b6](
+https://github.com/crates-lurey-io/retroglyph/commit/aa4d1b6b0905e72880653a384210d35c2934156f) *(window)* Position-indexed charset + one ordered glyph-descriptor table by `@crates-lurey-io-agent[bot]` in [#1443](
+https://github.com/crates-lurey-io/retroglyph/pull/1443)
+
+- [c3cb9e5](
+https://github.com/crates-lurey-io/retroglyph/commit/c3cb9e5d3aa2accb4e4d7e491fbc075babffc141) *(window)* Make Presenter::geometry the single source of cell pixel size by `@crates-lurey-io-agent[bot]` in [#1416](
+https://github.com/crates-lurey-io/retroglyph/pull/1416)
+
+- [dcb3f0e](
+https://github.com/crates-lurey-io/retroglyph/commit/dcb3f0e24ea508142dc46d13c35b576aead81808) *(window)* DiagnosticLog owns the per-diagnostic dedup sets by `@crates-lurey-io-agent[bot]` in [#1412](
+https://github.com/crates-lurey-io/retroglyph/pull/1412)
+
+- [deba5f1](
+https://github.com/crates-lurey-io/retroglyph/commit/deba5f179241b7d3e1c8941c833cd05342e1cc94) *(window)* Remove all root re-exports from retroglyph-window by `@crates-lurey-io-agent[bot]` in [#1275](
+https://github.com/crates-lurey-io/retroglyph/pull/1275)
+
+**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-software-v0.6.2...retroglyph-software-v0.7.0
+
+
 ## [0.6.2+retroglyph-software](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-software-v0.6.1...retroglyph-software-v0.6.2) - 2026-08-07
 
 ### Documentation

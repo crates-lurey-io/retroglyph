@@ -1,6 +1,6 @@
 [package]
 name = "retroglyph-ui"
-version = "0.4.3"
+version = "0.5.0"
 description = "Immediate-mode terminal UI toolkit for retroglyph: widgets, layout, input/focus, theming, and animation"
 readme = "README.md"
 edition.workspace = true
@@ -51,7 +51,7 @@ std = ["retroglyph-core/std"]
 testing = []
 
 [dependencies]
-retroglyph-core = { path = "../core", version = "0.7.1", default-features = false }
+retroglyph-core = { path = "../core", version = "0.8.0", default-features = false }
 # `Camera::scroll_by`'s signed delta: `Pos<u16>::saturating_add_signed` takes a `Pos<i32>`, and
 # `retroglyph-core` only re-exports the `Pos<u16>` alias, so this needs the crate directly rather
 # than going through `retroglyph-core`.

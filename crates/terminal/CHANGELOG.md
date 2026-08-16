@@ -7,6 +7,24 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
+
+## [0.1.10+retroglyph-terminal](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-v0.1.9...retroglyph-terminal-v0.1.10) - 2026-08-16
+
+### Features
+
+- [08f22c0](
+https://github.com/crates-lurey-io/retroglyph/commit/08f22c0b2dbbe2712c8a93783c92d2821e79cf11) *(core)* Add Color::rgb and Color::hex const constructors by `@crates-lurey-io-agent[bot]` in [#1345](
+https://github.com/crates-lurey-io/retroglyph/pull/1345)
+
+### Refactor
+
+- [a321bb1](
+https://github.com/crates-lurey-io/retroglyph/commit/a321bb1829cd293220e527353d1777b820b66b4b) *(terminal)* Fold cursor_x/cursor_y into a single cursor: Option<Pos> by `@crates-lurey-io-agent[bot]` in [#1407](
+https://github.com/crates-lurey-io/retroglyph/pull/1407)
+
+**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-v0.1.9...retroglyph-terminal-v0.1.10
+
+
 ## [0.1.9+retroglyph-terminal](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-v0.1.8...retroglyph-terminal-v0.1.9) - 2026-08-07
 
 ### Documentation
