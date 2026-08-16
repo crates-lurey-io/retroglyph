@@ -7,6 +7,36 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
+
+## [0.3.3+retroglyph-terminal-wasm](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v0.3.2...retroglyph-terminal-wasm-v0.3.3) - 2026-08-16
+
+### Features
+
+- [255e4df](
+https://github.com/crates-lurey-io/retroglyph/commit/255e4df03d25a759d585ddaf3480ef6fb5bc5182) *(core)* Add event::push_coalesced and use it in all four backend queues by `@crates-lurey-io-agent[bot]` in [#1415](
+https://github.com/crates-lurey-io/retroglyph/pull/1415)
+
+- [08f22c0](
+https://github.com/crates-lurey-io/retroglyph/commit/08f22c0b2dbbe2712c8a93783c92d2821e79cf11) *(core)* Add Color::rgb and Color::hex const constructors by `@crates-lurey-io-agent[bot]` in [#1345](
+https://github.com/crates-lurey-io/retroglyph/pull/1345)
+
+### Refactor
+
+- [6ee0d30](
+https://github.com/crates-lurey-io/retroglyph/commit/6ee0d30ea1e710c78686ba89eda58ccb2de125dc) *(core)* Add Frame::new, mark Frame #[non_exhaustive] by `@crates-lurey-io-agent[bot]` in [#1360](
+https://github.com/crates-lurey-io/retroglyph/pull/1360)
+
+- [b830f8a](
+https://github.com/crates-lurey-io/retroglyph/commit/b830f8aa129e2071c6f59749fbbd2cd0281a4139) *(terminal-wasm)* With_terminal / with_state helpers for the FFI shells by `@crates-lurey-io-agent[bot]` in [#1435](
+https://github.com/crates-lurey-io/retroglyph/pull/1435)
+
+### Documentation
+
+- [48c9282](
+https://github.com/crates-lurey-io/retroglyph/commit/48c9282d0398b0b25da1f1a9e977623162058af3) *(core)* Remove dangling Style modifier-rationale pointer in grid/mod.rs by `@crates-lurey-io-agent[bot]` in [#1315](
+https://github.com/crates-lurey-io/retroglyph/pull/1315)
+
+
 ## [0.3.3+retroglyph-terminal-wasm](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-terminal-wasm-v0.3.2...retroglyph-terminal-wasm-v0.3.3) - 2026-08-16
 
 ### Features
