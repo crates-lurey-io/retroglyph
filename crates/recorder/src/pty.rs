@@ -268,7 +268,7 @@ pub fn capture_pty(
 
         let screen = parser.screen();
         let current = snapshot(screen, cols, rows);
-        if let Some(cells) = diff(previous.as_ref(), &current) {
+        if let Some(cells) = diff(previous.as_deref(), &current) {
             frames.push(CapturedFrame {
                 at: started.elapsed(),
                 cells,
@@ -314,13 +314,16 @@ fn snapshot(screen: &vt100::Screen, cols: u16, rows: u16) -> Vec<Vec<(String, St
 /// nothing changed (mirrors [`FrameRecorder`](crate::FrameRecorder)'s "no frame for an empty
 /// `draw_layers`" convention).
 fn diff(
-    previous: Option<&Vec<Vec<(String, Style)>>>,
+    previous: Option<&[Vec<(String, Style)>]>,
     current: &[Vec<(String, Style)>],
 ) -> Option<Vec<OwnedCell>> {
     let mut cells = Vec::new();
     for (y, row) in current.iter().enumerate() {
         for (x, (contents, style)) in row.iter().enumerate() {
-            let changed = previous.is_none_or(|prev| prev[y][x] != (contents.clone(), *style));
+            let prev_cell = previous.and_then(|p| p.get(y)).and_then(|r| r.get(x));
+            let changed = prev_cell.is_none_or(|(prev_contents, prev_style)| {
+                prev_contents != contents || prev_style != style
+            });
             if !changed {
                 continue;
             }
