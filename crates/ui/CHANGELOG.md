@@ -7,6 +7,80 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
+## [0.5.0+retroglyph-ui](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-ui-v0.4.3...retroglyph-ui-v0.5.0) - 2026-08-16
+
+### Features
+
+- [08f22c0](https://github.com/crates-lurey-io/retroglyph/commit/08f22c0b2dbbe2712c8a93783c92d2821e79cf11) _(core)_ Add Color::rgb and Color::hex const constructors by `@crates-lurey-io-agent[bot]` in [#1345](https://github.com/crates-lurey-io/retroglyph/pull/1345)
+
+- [929048e](https://github.com/crates-lurey-io/retroglyph/commit/929048ee88a92fefff69b4f28a411ae08348d0bd) _(ui)_ Add Modal::titles for bottom/multiple titles by `@crates-lurey-io-agent[bot]` in [#1452](https://github.com/crates-lurey-io/retroglyph/pull/1452)
+
+- [f3035e6](https://github.com/crates-lurey-io/retroglyph/commit/f3035e62305a90867195c130ef0404fcf27cbf5b) _(ui)_ Add MenuBar composed over the anchored Menu popup by `@crates-lurey-io-agent[bot]` in [#1359](https://github.com/crates-lurey-io/retroglyph/pull/1359)
+
+- [32653fa](https://github.com/crates-lurey-io/retroglyph/commit/32653fa9df7491d34698e025fdf29e5da73cebb4) _(ui)_ Add a widget-level test harness alongside TestHarness by `@crates-lurey-io-agent[bot]` in [#1358](https://github.com/crates-lurey-io/retroglyph/pull/1358)
+
+- [22d4cb3](https://github.com/crates-lurey-io/retroglyph/commit/22d4cb3d753f8bffbf274d17dee39fddc5e9b2aa) _(ui)_ Add disabled/danger/success roles to Theme by `@crates-lurey-io-agent[bot]` in [#1316](https://github.com/crates-lurey-io/retroglyph/pull/1316) [**breaking**]
+
+- [ad84df0](https://github.com/crates-lurey-io/retroglyph/commit/ad84df0a4e08cf64f6151be2a7457a842bceadd2) _(ui)_ Ship a Menu/Dropdown widget by `@crates-lurey-io-agent[bot]` in [#1355](https://github.com/crates-lurey-io/retroglyph/pull/1355)
+
+- [4ae8631](https://github.com/crates-lurey-io/retroglyph/commit/4ae8631aa40f377d3ed8773ab2b4a07e7966d569) _(ui)_ Add zoom and multi-cell tile support to Camera by `@crates-lurey-io-agent[bot]` in [#1352](https://github.com/crates-lurey-io/retroglyph/pull/1352)
+
+- [3526a7c](https://github.com/crates-lurey-io/retroglyph/commit/3526a7cbb25a80e3327d69a560b98afcf42ed734) _(ui)_ Implement InteractiveWidget for TextInput by `@crates-lurey-io-agent[bot]` in [#1349](https://github.com/crates-lurey-io/retroglyph/pull/1349)
+
+- [c1bc63a](https://github.com/crates-lurey-io/retroglyph/commit/c1bc63ad29fd93c3ba06215acc91e2dd383413ed) _(ui)_ Implement MinSize for Tabs, Scrollbar, TextInput by `@crates-lurey-io-agent[bot]` in [#1348](https://github.com/crates-lurey-io/retroglyph/pull/1348)
+
+- [d839ea1](https://github.com/crates-lurey-io/retroglyph/commit/d839ea1761647a7e447c3d7789ec5875b24c20f8) _(ui)_ Add MinSize trait, implement for Button by `@crates-lurey-io-agent[bot]` in [#1337](https://github.com/crates-lurey-io/retroglyph/pull/1337)
+
+- [af377d5](https://github.com/crates-lurey-io/retroglyph/commit/af377d592581d8af736bf1f4573d570976556f82) _(ui)_ Add sub-cell canvas layer by `@crates-lurey-io-agent[bot]` in [#1330](https://github.com/crates-lurey-io/retroglyph/pull/1330)
+
+- [72b6c36](https://github.com/crates-lurey-io/retroglyph/commit/72b6c36b36b649b73d6f8ef9f83fa8b4016ce9fa) _(ui)_ Implement InteractiveWidget for Table by `@crates-lurey-io-agent[bot]` in [#1332](https://github.com/crates-lurey-io/retroglyph/pull/1332)
+
+- [183d427](https://github.com/crates-lurey-io/retroglyph/commit/183d427eaee81d4bfec2c403601651278dcee4a3) _(ui)_ Add Sparkline fill_color and glyph ramp overrides by `@crates-lurey-io-agent[bot]` in [#1318](https://github.com/crates-lurey-io/retroglyph/pull/1318)
+
+### Refactor
+
+- [6ee0d30](https://github.com/crates-lurey-io/retroglyph/commit/6ee0d30ea1e710c78686ba89eda58ccb2de125dc) _(core)_ Add Frame::new, mark Frame #[non_exhaustive] by `@crates-lurey-io-agent[bot]` in [#1360](https://github.com/crates-lurey-io/retroglyph/pull/1360)
+
+- [cd506c7](https://github.com/crates-lurey-io/retroglyph/commit/cd506c70247556b8576d0e732454859cae668000) _(core, ui)_ Add #[non_exhaustive] to nine growable enums by `@crates-lurey-io-agent[bot]` in [#1341](https://github.com/crates-lurey-io/retroglyph/pull/1341)
+
+- [22a016f](https://github.com/crates-lurey-io/retroglyph/commit/22a016f7823e027875d3ba3c7179ceeabbd9e449) _(ui)_ Hoist anchored_rect's bounds clamp out of the four-way side match by `@crates-lurey-io-agent[bot]` in [#1427](https://github.com/crates-lurey-io/retroglyph/pull/1427)
+
+- [b5a02fb](https://github.com/crates-lurey-io/retroglyph/commit/b5a02fbbcc33a96104733487c5692cf5c4d24f85) _(ui)_ Give TrackMap a constructor that owns the scrollbar geometry by `@crates-lurey-io-agent[bot]` in [#1436](https://github.com/crates-lurey-io/retroglyph/pull/1436)
+
+- [25d73f8](https://github.com/crates-lurey-io/retroglyph/commit/25d73f8526cea395b76943b56338b77ccaec1574) _(ui)_ Extract TileCamera, remove zoom from Camera by `@crates-lurey-io-agent[bot]` in [#1432](https://github.com/crates-lurey-io/retroglyph/pull/1432) [**breaking**]
+
+- [1b206c3](https://github.com/crates-lurey-io/retroglyph/commit/1b206c3013338e56f6ce2c63ea95c4b24c43fdc5) _(ui)_ Share PanelChrome between Panel and Modal by `@crates-lurey-io-agent[bot]` in [#1430](https://github.com/crates-lurey-io/retroglyph/pull/1430)
+
+- [7120cde](https://github.com/crates-lurey-io/retroglyph/commit/7120cde331665c371bf4c19787611c76602940c3) _(ui)_ Extract a shared Strip helper for the Tabs/MenuBar label row by `@crates-lurey-io-agent[bot]` in [#1431](https://github.com/crates-lurey-io/retroglyph/pull/1431)
+
+- [92bc702](https://github.com/crates-lurey-io/retroglyph/commit/92bc702b52f8f776b9a2be86fe852808c0215697) _(ui)_ One record buffer in layout::solve instead of four parallel scratch buffers by `@crates-lurey-io-agent[bot]` in [#1428](https://github.com/crates-lurey-io/retroglyph/pull/1428)
+
+- [337cdcf](https://github.com/crates-lurey-io/retroglyph/commit/337cdcfd344260ad2809c65cce5b053ab9a6e600) _(ui)_ Make MenuState's selection encode its openness by `@crates-lurey-io-agent[bot]` in [#1426](https://github.com/crates-lurey-io/retroglyph/pull/1426)
+
+- [80e6dbf](https://github.com/crates-lurey-io/retroglyph/commit/80e6dbf69575072883ad78a1445520f6a1d19a4c) _(ui)_ Unify theme response-state resolvers behind WidgetState by `@crates-lurey-io-agent[bot]` in [#1424](https://github.com/crates-lurey-io/retroglyph/pull/1424)
+
+- [5075a7f](https://github.com/crates-lurey-io/retroglyph/commit/5075a7f4a2605a4fd2d5d94bc2e342b95d046436) _(ui)_ Camera::set_viewport_fitted keeps the requested rect by `@crates-lurey-io-agent[bot]` in [#1421](https://github.com/crates-lurey-io/retroglyph/pull/1421)
+
+- [9385568](https://github.com/crates-lurey-io/retroglyph/commit/9385568e0f4cf6cc5900ab1b69c74ba55a32ae02) _(ui)_ Replace ScrollState's Option ring of fling samples with an ordered array + length by `@crates-lurey-io-agent[bot]` in [#1423](https://github.com/crates-lurey-io/retroglyph/pull/1423)
+
+- [8b17b8a](https://github.com/crates-lurey-io/retroglyph/commit/8b17b8aa3249ec868cd2d505c491b2a3e38b6494) _(ui)_ Fold six resolved_* interaction fields into one Pointer snapshot by `@crates-lurey-io-agent[bot]` in [#1406](https://github.com/crates-lurey-io/retroglyph/pull/1406)
+
+- [cf86081](https://github.com/crates-lurey-io/retroglyph/commit/cf8608160dabf896a70c2bc9e52963a08c16deb7) _(ui)_ Trim layout.rs's 12-way split_* cross product by `@crates-lurey-io-agent[bot]` in [#1340](https://github.com/crates-lurey-io/retroglyph/pull/1340)
+
+- [66a7b3e](https://github.com/crates-lurey-io/retroglyph/commit/66a7b3ec7c69bb52334492018db37a4d46c64090) _(ui)_ Drop `PerfOverlayApp` and the `perf/` module by `@crates-lurey-io-agent[bot]` in [#1339](https://github.com/crates-lurey-io/retroglyph/pull/1339) [**breaking**]
+
+- [0f500dc](https://github.com/crates-lurey-io/retroglyph/commit/0f500dc9ebbb844ad91f43f8be0fb84440bf8244) _(ui)_ Remove all root re-exports from retroglyph-ui by `@crates-lurey-io-agent[bot]` in [#1314](https://github.com/crates-lurey-io/retroglyph/pull/1314)
+
+### Documentation
+
+- [5f01625](https://github.com/crates-lurey-io/retroglyph/commit/5f01625623790f5322c8a395a0377231089a15f6) _(ui)_ Cross-reference Panel and BoxStyle box systems by `@crates-lurey-io-agent[bot]` in [#1333](https://github.com/crates-lurey-io/retroglyph/pull/1333)
+
+### Testing
+
+- [7abe186](https://github.com/crates-lurey-io/retroglyph/commit/7abe1861ddd1509a803625648a00f4681b775b02) _(ui)_ Migrate menu.rs's multi-frame click tests onto WidgetHarness by `@crates-lurey-io-agent[bot]` in [#1361](https://github.com/crates-lurey-io/retroglyph/pull/1361)
+
+**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-ui-v0.4.3...retroglyph-ui-v0.5.0
+
 ## [0.4.3+retroglyph-ui](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-ui-v0.4.2...retroglyph-ui-v0.4.3) - 2026-08-07
 
 ### Documentation

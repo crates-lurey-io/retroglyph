@@ -1,6 +1,6 @@
 [package]
 name = "retroglyph-window"
-version = "0.5.2"
+version = "0.6.0"
 description = "Shared winit windowing layer for retroglyph's windowed backends"
 readme = "README.md"
 edition.workspace = true
@@ -56,7 +56,7 @@ testing = []
 winit = ["dep:winit"]
 
 [dependencies]
-retroglyph-core = { path = "../core", version = "0.7.1", default-features = false, features = ["std"] }
+retroglyph-core = { path = "../core", version = "0.8.0", default-features = false, features = ["std"] }
 raw-window-handle = "0.6"
 winit = { version = "0.30", optional = true }
 # Required (not feature-gated): `diagnostics::warn_notdef_glyph` (retroglyph#1292) fires from the
