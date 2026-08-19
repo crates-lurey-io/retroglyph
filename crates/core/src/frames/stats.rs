@@ -37,7 +37,7 @@ use core::time::Duration;
 /// recent sample, unsmoothed: pair it with the windowed [`min`](Self::min)/[`max`](Self::max) for
 /// a "current, min, max" readout, and [`samples`](Self::samples) for a frame-time graph (feed it,
 /// converted to milliseconds, straight into
-/// [`Sparkline`](https://docs.rs/retroglyph-ui/latest/retroglyph_ui/struct.Sparkline.html)).
+/// [`Sparkline`](https://docs.rs/retroglyph-ui/latest/retroglyph_ui/widget/struct.Sparkline.html)).
 #[derive(Debug, Clone)]
 pub struct FrameStats<const N: usize = 120> {
     /// Ring buffer of frame durations.

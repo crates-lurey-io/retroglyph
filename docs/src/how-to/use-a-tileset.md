@@ -22,7 +22,7 @@ four-tile sheet). `Codepage::Cp437` (the default) and `Codepage::Unicode { start
 two options, for sheets authored against one of those existing layouts instead.
 
 Every graphical backend takes a `TilesetOptions` the same way, via
-[`PresenterBuilder::tileset`](https://docs.rs/retroglyph-window/latest/retroglyph_window/trait.PresenterBuilder.html#tymethod.tileset)
+[`PresenterBuilder::tileset`](https://docs.rs/retroglyph-window/latest/retroglyph_window/presenter_builder/trait.PresenterBuilder.html#tymethod.tileset)
 (or, when writing code generic over the three backends, `retroglyph_window::PresenterBuilder`'s
 `configure`-style hook, as `examples/examples/07_sprites_tileset.rs`'s own `configure` function does
 to register the same tilesets across all three builder types).

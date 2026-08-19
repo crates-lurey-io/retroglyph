@@ -99,7 +99,7 @@ Adds `alpha-blend` and forwards to `retroglyph-window`'s `tilesets` feature for 
 
 This builder configures the renderer (font, grid, scale, tilesets) and nothing else. Window title
 and frame rate are windowing concerns, so they belong to
-[`WindowConfig::fit`](https://docs.rs/retroglyph-window/latest/retroglyph_window/winit/struct.WindowConfig.html#method.fit),
+[`WindowConfig::fit`](https://docs.rs/retroglyph-window/latest/retroglyph_window/winit/run/struct.WindowConfig.html#method.fit),
 which takes both:
 
 ```rust,ignore

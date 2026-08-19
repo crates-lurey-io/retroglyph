@@ -292,7 +292,7 @@ include = [
 ### Manual GitHub Releases (without cargo-dist)
 
 If cargo-dist does not fit your needs (e.g., you need to distribute shared libraries rather than
-executables), use a custom workflow. See [Section 10](10-cicd-for-multi-platform-releases) for the
+executables), use a custom workflow. See [Section 6](#6-cicd-for-multi-platform-releases) for the
 full CI config.
 
 [Source: cargo-dist GitHub](https://github.com/axodotdev/cargo-dist)

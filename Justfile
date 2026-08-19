@@ -70,8 +70,11 @@ lint: clippy markdown prose
 # every push/PR. Uses the `cargo bin`-pinned `lychee` (see Cargo.toml's [workspace.metadata.bin])
 # like every other CLI tool `cargo bin` manages in this repo, rather than a manually-installed
 # `lychee` on PATH, so the version is reproducible and identical between local runs and CI.
+# `--timeout 40` over lychee's default 20: a timeout fails the job exactly like a dead link, and
+# 1400 unique URLs checked concurrently is enough load that a live site can answer well past 20s
+# from a runner while responding in under a second by hand (effective-rust.com did exactly that).
 link-check:
-    cargo bin lychee --no-progress --exclude-path target --exclude-path .matan './**/*.md' './crates/**/*.rs'
+    cargo bin lychee --no-progress --timeout 40 --exclude-path target --exclude-path .matan --exclude-path tools/node_modules './**/*.md' './crates/**/*.rs'
 
 # ── Features ─────────────────────────────────────────────────────────────────
 
