@@ -4,7 +4,7 @@ This tutorial builds one small program across six chapters: a `@` that starts on
 learns to move, gets a map to walk around, then a camera, a UI, and finally ships to a browser. Each
 chapter's finished program lives in `examples/tutorial/`, compiled and run headless by CI, so every
 code block below is pulled straight out of a file that actually builds -- there is nothing here that
-can quietly drift out of sync with the library. See the [API documentation](../crates/index.html)
+can quietly drift out of sync with the library. See the [API documentation](../../crates/index.html)
 for the full reference on anything named below.
 
 ## The `Example` trait

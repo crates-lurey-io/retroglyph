@@ -12,8 +12,8 @@ There are two levels to implement at, depending on what you're building:
   [`Cursor`](https://docs.rs/retroglyph-core/latest/retroglyph_core/backend/trait.Cursor.html).
 - A `Presenter`, to drop into the existing `retroglyph-window` `winit` event loop (`run_windowed`)
   and get windowing, input translation, and DPI handling for free: implement
-  [`Presenter`](https://docs.rs/retroglyph-window/latest/retroglyph_window/trait.Presenter.html), an
-  `Output` supertrait.
+  [`Presenter`](https://docs.rs/retroglyph-window/latest/retroglyph_window/presenter/trait.Presenter.html),
+  an `Output` supertrait.
 
 ## `Output`, `Input`, `Cursor`
 
@@ -67,14 +67,14 @@ under 300 lines with no platform dependency at all.
 of its own (the `retroglyph-window` event loop owns input and forwards translated events into its
 own queue). Implement:
 
-- [`init_surface`](https://docs.rs/retroglyph-window/latest/retroglyph_window/trait.Presenter.html#tymethod.init_surface):
+- [`init_surface`](https://docs.rs/retroglyph-window/latest/retroglyph_window/presenter/trait.Presenter.html#tymethod.init_surface):
   create your platform surface (a GPU context, a pixel buffer target) from the
-  [`WindowHandle`](https://docs.rs/retroglyph-window/latest/retroglyph_window/trait.WindowHandle.html)
+  [`WindowHandle`](https://docs.rs/retroglyph-window/latest/retroglyph_window/presenter/trait.WindowHandle.html)
   the loop hands you.
-- [`resize_surface`](https://docs.rs/retroglyph-window/latest/retroglyph_window/trait.Presenter.html#tymethod.resize_surface)
+- [`resize_surface`](https://docs.rs/retroglyph-window/latest/retroglyph_window/presenter/trait.Presenter.html#tymethod.resize_surface)
   and
-  [`present`](https://docs.rs/retroglyph-window/latest/retroglyph_window/trait.Presenter.html#tymethod.present).
-- [`cell_size`](https://docs.rs/retroglyph-window/latest/retroglyph_window/trait.Presenter.html#tymethod.cell_size),
+  [`present`](https://docs.rs/retroglyph-window/latest/retroglyph_window/presenter/trait.Presenter.html#tymethod.present).
+- [`cell_size`](https://docs.rs/retroglyph-window/latest/retroglyph_window/presenter/trait.Presenter.html#tymethod.cell_size),
   in physical pixels, so the windowing layer can convert between window size and grid dimensions.
 
 `retroglyph-software`'s `SoftwareRenderer` is the simplest of the three shipped `Presenter`

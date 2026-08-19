@@ -1,10 +1,10 @@
 # Draw a panel
 
-[`Panel`](https://docs.rs/retroglyph-ui/latest/retroglyph_ui/struct.Panel.html), from
+[`Panel`](https://docs.rs/retroglyph-ui/latest/retroglyph_ui/widget/struct.Panel.html), from
 `retroglyph-ui`, is a bordered, optionally titled, filled rectangle: the box every other widget in
 this crate typically sits inside. It's a plain
-[`Widget`](https://docs.rs/retroglyph-ui/latest/retroglyph_ui/trait.Widget.html) like the rest of
-the crate: build it, then render it into a
+[`Widget`](https://docs.rs/retroglyph-ui/latest/retroglyph_ui/widget/trait.Widget.html) like the
+rest of the crate: build it, then render it into a
 [`Surface`](https://docs.rs/retroglyph-core/latest/retroglyph_core/surface/struct.Surface.html)-shaped
 area, no `Backend` type parameter involved.
 
