@@ -1358,17 +1358,18 @@ mod output_conformance_tests {
     use retroglyph_core::backend::Output;
     use retroglyph_core::grid::HasSize;
     use retroglyph_core::grid::Size;
-    use retroglyph_core::testing::conformance::{Observable, fnv1a};
+    use retroglyph_core::testing::conformance::{Observable, SlotDelta, fnv1a};
 
     /// `Instance` has no `PartialEq` (it's a tightly-packed, `#[repr(C)]` upload buffer, not a
-    /// value type elsewhere in the crate needs to compare), so this compares the fields directly.
-    fn instances_equal(a: &crate::renderer::Instance, b: &crate::renderer::Instance) -> bool {
-        a.glyph == b.glyph
-            && a.flags == b.flags
-            && a.fg == b.fg
-            && a.bg == b.bg
-            && a.dx == b.dx
-            && a.dy == b.dy
+    /// value type elsewhere in the crate needs to compare), so its digest is computed from the
+    /// fields directly.
+    fn instance_digest(instance: &crate::renderer::Instance) -> u64 {
+        fnv1a(&instance.glyph.to_ne_bytes())
+            ^ fnv1a(&[instance.flags])
+            ^ fnv1a(&instance.fg)
+            ^ fnv1a(&instance.bg)
+            ^ fnv1a(&instance.dx.to_ne_bytes())
+            ^ fnv1a(&instance.dy.to_ne_bytes())
     }
 
     fn conformance_renderer(size: Size) -> GlRenderer {
@@ -1386,14 +1387,25 @@ mod output_conformance_tests {
     /// checks (clear/resize/out-of-range handling never touch the GPU at all).
     struct GlObserver {
         renderer: GlRenderer,
-        previous: Vec<Vec<crate::renderer::Instance>>,
+        delta: SlotDelta,
     }
 
     impl GlObserver {
         fn new(size: Size) -> Self {
             let renderer = conformance_renderer(size);
-            let previous = layer_cells(&renderer);
-            Self { renderer, previous }
+            let mut delta = SlotDelta::new();
+            // Seed `delta` with the blank initial layers so the first real `snapshot()` call
+            // diffs against "what a freshly made backend looks like", not against nothing (an
+            // empty `previous` would make every cell of the first draw look changed, even the
+            // ones the caller never touched).
+            delta.digest(
+                b"gl-diff",
+                layer_cells(&renderer)
+                    .into_iter()
+                    .flatten()
+                    .map(|i| instance_digest(&i)),
+            );
+            Self { renderer, delta }
         }
     }
 
@@ -1433,31 +1445,13 @@ mod output_conformance_tests {
 
     impl Observable for GlObserver {
         fn snapshot(&mut self) -> u64 {
-            let current = layer_cells(&self.renderer);
-            let mut hash = fnv1a(b"gl-diff");
-            for (layer, (was, now)) in self.previous.iter().zip(current.iter()).enumerate() {
-                for (index, (was, now)) in was.iter().zip(now.iter()).enumerate() {
-                    if !instances_equal(was, now) {
-                        hash ^= fnv1a(&(layer as u64).to_ne_bytes());
-                        hash ^= fnv1a(&(index as u64).to_ne_bytes());
-                        hash ^= fnv1a(&now.glyph.to_ne_bytes());
-                        hash ^= fnv1a(&[now.flags]);
-                        hash ^= fnv1a(&now.fg);
-                        hash ^= fnv1a(&now.bg);
-                        hash ^= fnv1a(&now.dx.to_ne_bytes());
-                        hash ^= fnv1a(&now.dy.to_ne_bytes());
-                    }
-                }
-            }
-            // A resize changes the number of layers/cells outright: fold that in too, or a
-            // shrink-then-grow back to the same per-cell content would hash identically to no
-            // change at all.
-            hash ^= fnv1a(&(current.len() as u64).to_ne_bytes());
-            for layer in &current {
-                hash ^= fnv1a(&(layer.len() as u64).to_ne_bytes());
-            }
-            self.previous = current;
-            hash
+            self.delta.digest(
+                b"gl-diff",
+                layer_cells(&self.renderer)
+                    .into_iter()
+                    .flatten()
+                    .map(|i| instance_digest(&i)),
+            )
         }
     }
 
