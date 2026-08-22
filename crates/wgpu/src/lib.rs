@@ -1388,7 +1388,7 @@ mod conformance {
     use retroglyph_core::backend::{Compositing, DrawCell, Output};
     use retroglyph_core::grid::HasSize as _;
     use retroglyph_core::grid::Size;
-    use retroglyph_core::testing::conformance::{Observable, fnv1a};
+    use retroglyph_core::testing::conformance::{Observable, SlotDelta, fnv1a};
 
     /// A renderer plus the instance data as of the previous [`snapshot`](Observable::snapshot), so
     /// each call can hash what changed rather than the whole frame.
@@ -1400,7 +1400,7 @@ mod conformance {
     /// GPU at all.
     struct WgpuObserver {
         renderer: WgpuRenderer,
-        previous: Vec<Vec<Cell>>,
+        delta: SlotDelta,
     }
 
     impl WgpuObserver {
@@ -1409,8 +1409,19 @@ mod conformance {
                 .grid_size(size.width().max(1), size.height().max(1))
                 .build()
                 .expect("default-font builds");
-            let previous = layer_cells(&renderer);
-            Self { renderer, previous }
+            let mut delta = SlotDelta::new();
+            // Seed `delta` with the blank initial layers so the first real `snapshot()` call
+            // diffs against "what a freshly made backend looks like", not against nothing (an
+            // empty `previous` would make every cell of the first draw look changed, even the
+            // ones the caller never touched).
+            delta.digest(
+                b"wgpu-diff",
+                layer_cells(&renderer)
+                    .into_iter()
+                    .flatten()
+                    .map(|c| fnv1a(bytemuck::bytes_of(&c))),
+            );
+            Self { renderer, delta }
         }
     }
 
@@ -1454,26 +1465,13 @@ mod conformance {
 
     impl Observable for WgpuObserver {
         fn snapshot(&mut self) -> u64 {
-            let current = layer_cells(&self.renderer);
-            let mut hash = fnv1a(b"wgpu-diff");
-            for (layer, (was, now)) in self.previous.iter().zip(current.iter()).enumerate() {
-                for (index, (was, now)) in was.iter().zip(now.iter()).enumerate() {
-                    if was != now {
-                        hash ^= fnv1a(&(layer as u64).to_ne_bytes());
-                        hash ^= fnv1a(&(index as u64).to_ne_bytes());
-                        hash ^= fnv1a(bytemuck::bytes_of(now));
-                    }
-                }
-            }
-            // A resize changes the number of layers/cells outright: fold that in too, or a
-            // shrink-then-grow back to the same per-cell content would hash identically to no
-            // change at all.
-            hash ^= fnv1a(&(current.len() as u64).to_ne_bytes());
-            for layer in &current {
-                hash ^= fnv1a(&(layer.len() as u64).to_ne_bytes());
-            }
-            self.previous = current;
-            hash
+            self.delta.digest(
+                b"wgpu-diff",
+                layer_cells(&self.renderer)
+                    .into_iter()
+                    .flatten()
+                    .map(|c| fnv1a(bytemuck::bytes_of(&c))),
+            )
         }
     }
 
