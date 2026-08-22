@@ -1,0 +1,17 @@
+# Regex patterns lychee skips. Read automatically from the repo root, which is where
+# `just link-check` runs from.
+
+# The book's links into the rustdoc tree. `just doc` renders the book to target/doc/book/ and
+# rustdoc to target/doc/, so these resolve relative to the built site, not to docs/src/ where
+# lychee reads them from. There is nothing at these source paths for lychee to find, and it
+# cannot tell a correct one from a wrong one. `just book`'s own build is the check that matters.
+file://.*/docs/(src/)?(crates|retroglyph[a-z_]*)/
+
+# Serves 403 to anything that isn't a browser.
+https://bencher\.dev/
+
+# release-plz renders each changelog entry's "Full Changelog" as a compare against the previous
+# tag, and the earliest per-crate releases predate this repo pushing tags at all, so their base
+# side (`v0.0.0-reserved`, or the pre-tagging `v0.1.0`) has nothing to compare against. Those
+# entries are historical and generated; the tags will never exist.
+https://github\.com/crates-lurey-io/retroglyph/compare/[a-z-]+-v(0\.0\.0-reserved|0\.1\.0)\.\.\.

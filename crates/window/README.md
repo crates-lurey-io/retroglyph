@@ -171,9 +171,9 @@ to [`run_windowed`]/[`run_app`] to actually open a window and drive the event lo
 [`Presenter`]:
   https://docs.rs/retroglyph-window/latest/retroglyph_window/presenter/trait.Presenter.html
 [`WindowConfig::fit`]:
-  https://docs.rs/retroglyph-window/latest/retroglyph_window/winit/struct.WindowConfig.html#method.fit
+  https://docs.rs/retroglyph-window/latest/retroglyph_window/winit/run/struct.WindowConfig.html#method.fit
 [`run_windowed`]:
-  https://docs.rs/retroglyph-window/latest/retroglyph_window/winit/fn.run_windowed.html
-[`run_app`]: https://docs.rs/retroglyph-window/latest/retroglyph_window/winit/fn.run_app.html
+  https://docs.rs/retroglyph-window/latest/retroglyph_window/winit/run/fn.run_windowed.html
+[`run_app`]: https://docs.rs/retroglyph-window/latest/retroglyph_window/winit/run/fn.run_app.html
 
 See [docs.rs](https://docs.rs/retroglyph-window) for the API.

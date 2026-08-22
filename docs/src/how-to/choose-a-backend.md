@@ -18,9 +18,9 @@ that.
 ## The decision
 
 **Does it need to run inside an actual terminal emulator (SSH session, `tmux`, a user's shell)?**
-Use [`crossterm`](../../crates/retroglyph_crossterm/index.html). It's the only backend that reads
-and writes a real terminal: raw mode, ANSI escapes, the terminal's own resize events. `software`,
-`gl`, and `wgpu` all open their own window and have nothing to do with a terminal emulator.
+Use [`crossterm`](../../retroglyph_crossterm/index.html). It's the only backend that reads and
+writes a real terminal: raw mode, ANSI escapes, the terminal's own resize events. `software`, `gl`,
+and `wgpu` all open their own window and have nothing to do with a terminal emulator.
 
 **Otherwise, does it need pixel-level rendering: sprites, sub-cell offsets, custom fonts, smooth
 scrolling?** All three windowed backends (`software`, `gl`, `wgpu`) support this equally; a cell
@@ -40,7 +40,7 @@ backend (`crossterm`, `terminal-wasm`) can only ever draw one glyph per cell. Pi
   doesn't need WebGL2 specifically.
 
 **Neither of those, and it's a test?** Use
-[`Headless`](https://docs.rs/retroglyph-core/latest/retroglyph_core/backend/struct.Headless.html),
+[`Headless`](https://docs.rs/retroglyph-core/latest/retroglyph_core/backend/headless/struct.Headless.html),
 part of `retroglyph-core` itself with no extra crate to add. See [Test a game](./test-a-game.md).
 
 ## Mixing backends in one binary

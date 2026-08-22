@@ -1,7 +1,7 @@
 # Changelog
 
 Retroglyph uses per-crate changelogs, maintained by
-[release-plz](../.github/workflows/release-plz.yml)[^1].
+[release-plz](.github/workflows/release-plz.yml)[^1].
 
 [^1]: See the [release workflow](RELEASING.md) for how they're generated.
 

@@ -7,12 +7,12 @@ per-widget, per-state style calls with one shared palette.
 
 ## `Theme`
 
-[`Theme`](https://docs.rs/retroglyph-ui/latest/retroglyph_ui/struct.Theme.html) is a plain struct of
-named color roles (`fg`, `panel_bg`, `hover_bg`, `press_bg`, `accent`, and the rest); build one, or
-start from
-[`Theme::DARK`](https://docs.rs/retroglyph-ui/latest/retroglyph_ui/struct.Theme.html#associatedconstant.DARK)
+[`Theme`](https://docs.rs/retroglyph-ui/latest/retroglyph_ui/theme/struct.Theme.html) is a plain
+struct of named color roles (`fg`, `panel_bg`, `hover_bg`, `press_bg`, `accent`, and the rest);
+build one, or start from
+[`Theme::DARK`](https://docs.rs/retroglyph-ui/latest/retroglyph_ui/theme/struct.Theme.html#associatedconstant.DARK)
 or
-[`Theme::LIGHT`](https://docs.rs/retroglyph-ui/latest/retroglyph_ui/struct.Theme.html#associatedconstant.LIGHT).
+[`Theme::LIGHT`](https://docs.rs/retroglyph-ui/latest/retroglyph_ui/theme/struct.Theme.html#associatedconstant.LIGHT).
 Every widget that draws (`Panel`, `Tabs`, `List`, `Button`, `ProgressBar`, and the rest of the
 [`widget`](https://docs.rs/retroglyph-ui/latest/retroglyph_ui/widget/index.html) module) has a
 `.theme(theme)` builder method that derives every style it needs from that one `Theme` instead of

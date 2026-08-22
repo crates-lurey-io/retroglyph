@@ -857,7 +857,7 @@ swash.
 
 - Kept:
 
-  [glyphon source (text_atlas.rs)](https://docs.rs/glyphon/latest/x86_64-pc-windows-msvc/src/glyphon/text_atlas.rs.html) -
+  [glyphon source (text_atlas.rs)](https://docs.rs/glyphon/latest/src/glyphon/text_atlas.rs.html) -
   production atlas implementation with LRU eviction
 
 - Kept:
@@ -876,7 +876,7 @@ swash.
   original rationale for etagere vs guillotiere
 
 - Kept: [bevy_emoji](https://crates.io/crates/bevy_emoji) - documents swash CBDT panic issue
-- Kept: [resvg color fonts issue](https://github.com/RazrFalcon/resvg/issues/487) - full
+- Kept: [resvg color fonts issue](https://github.com/linebender/resvg/issues/487) - full
 
   breakdown of emoji font table formats
 

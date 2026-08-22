@@ -6,12 +6,12 @@ the resulting `Rect`s for that one frame.
 
 ## `split_h` and `split_v`
 
-[`split_h`](https://docs.rs/retroglyph-ui/latest/retroglyph_ui/fn.split_h.html) divides a `Rect`
-into side-by-side columns;
-[`split_v`](https://docs.rs/retroglyph-ui/latest/retroglyph_ui/fn.split_v.html) divides it into
-stacked rows. Both take the same
-[`Constraint`](https://docs.rs/retroglyph-ui/latest/retroglyph_ui/enum.Constraint.html) list, one
-per resulting pane, and hand back a `Vec<Rect>` in the same order:
+[`split_h`](https://docs.rs/retroglyph-ui/latest/retroglyph_ui/layout/fn.split_h.html) divides a
+`Rect` into side-by-side columns;
+[`split_v`](https://docs.rs/retroglyph-ui/latest/retroglyph_ui/layout/fn.split_v.html) divides it
+into stacked rows. Both take the same
+[`Constraint`](https://docs.rs/retroglyph-ui/latest/retroglyph_ui/layout/enum.Constraint.html) list,
+one per resulting pane, and hand back a `Vec<Rect>` in the same order:
 
 ```rust,ignore
 {{#include ../../../examples/examples/19_weighted_fill.rs:layout}}
@@ -45,7 +45,7 @@ how many levels deep that composes.
 
 ## `Layout`: spacing and `Flex` alignment
 
-[`Layout`](https://docs.rs/retroglyph-ui/latest/retroglyph_ui/struct.Layout.html) wraps
+[`Layout`](https://docs.rs/retroglyph-ui/latest/retroglyph_ui/layout/struct.Layout.html) wraps
 `split_h`/`split_v` with two optional builder calls, for the cases plain `split_h`/`split_v` don't
 cover:
 
@@ -60,9 +60,9 @@ Layout::vertical([Constraint::Fixed(1), Constraint::Fill(1)])
 adjacent pair of panes; `split_with_gaps` returns those gap `Rect`s alongside the panes for drawing
 dividers into. `.flex(Flex)` controls where leftover space goes when constraints don't consume a
 `Rect`'s full extent (every pane is `Fixed`, say, and they don't add up to the whole width):
-[`Flex`](https://docs.rs/retroglyph-ui/latest/retroglyph_ui/enum.Flex.html)'s `Start` (the default,
-matching plain `split_h`/`split_v`: leftover space trails after the last pane), `Center`, `End`, or
-`SpaceBetween`/`SpaceAround` to distribute gaps between panes instead.
+[`Flex`](https://docs.rs/retroglyph-ui/latest/retroglyph_ui/layout/enum.Flex.html)'s `Start` (the
+default, matching plain `split_h`/`split_v`: leftover space trails after the last pane), `Center`,
+`End`, or `SpaceBetween`/`SpaceAround` to distribute gaps between panes instead.
 
 ## See also
 

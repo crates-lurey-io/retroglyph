@@ -785,8 +785,8 @@ Their benchmark files live under `alacritty_terminal/benches/` and cover:
 
 ### termbench
 
-[termbench](https://github.com/gizmo98/termbench) is a simpler terminal benchmark that measures raw
-text output speed by writing large amounts of text and timing how fast the terminal displays it.
+[termbench](https://github.com/cmuratori/termbench) is a simpler terminal benchmark that measures
+raw text output speed by writing large amounts of text and timing how fast the terminal displays it.
 Less sophisticated than vtebench but easier to run.
 
 ### Key Lessons from Terminal Benchmarks
