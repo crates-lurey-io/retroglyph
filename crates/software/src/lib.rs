@@ -1443,6 +1443,7 @@ mod tests {
     use retroglyph_core::color::Color;
     use retroglyph_core::color::Style;
     use retroglyph_core::grid::{Pos, Size};
+    use retroglyph_core::testing::conformance::SlotDelta;
 
     fn test_renderer() -> SoftwareRenderer {
         SoftwareBackendBuilder::new()
@@ -2264,18 +2265,26 @@ mod tests {
 
     /// Wraps [`SoftwareRenderer`] so [`Observable::snapshot`] hashes only the pixels that changed
     /// since the previous call, per that trait's docs: this backend's observable state is its
-    /// pixel buffer (framebuffer-shaped, not a log), so this remembers the previous call's pixels
-    /// and hashes only the `(index, pixel)` pairs that differ from it.
+    /// pixel buffer (framebuffer-shaped, not a log), so [`SlotDelta`] remembers the previous
+    /// call's pixels and hashes only the ones that differ from it.
     struct SoftwareObserver {
         renderer: SoftwareRenderer,
-        previous: Vec<u32>,
+        delta: SlotDelta,
     }
 
     impl SoftwareObserver {
         fn new(size: Size) -> Self {
             let renderer = conformance_renderer(size);
-            let previous = renderer.pixels().to_vec();
-            Self { renderer, previous }
+            let mut delta = SlotDelta::new();
+            // Seed `delta` with the blank initial pixels so the first real `snapshot()` call
+            // diffs against "what a freshly made backend looks like", not against nothing (an
+            // empty `previous` would make every pixel of the first draw look changed, even the
+            // ones the caller never touched).
+            delta.digest(
+                b"software-diff",
+                renderer.pixels().iter().map(|&p| p.into()),
+            );
+            Self { renderer, delta }
         }
     }
 
@@ -2325,17 +2334,10 @@ mod tests {
 
     impl retroglyph_core::testing::conformance::Observable for SoftwareObserver {
         fn snapshot(&mut self) -> u64 {
-            let current = self.renderer.pixels();
-            let mut hash = retroglyph_core::testing::conformance::fnv1a(b"software-diff");
-            for (index, (&was, &now)) in self.previous.iter().zip(current.iter()).enumerate() {
-                if was != now {
-                    hash ^=
-                        retroglyph_core::testing::conformance::fnv1a(&(index as u64).to_ne_bytes());
-                    hash ^= retroglyph_core::testing::conformance::fnv1a(&now.to_ne_bytes());
-                }
-            }
-            self.previous = current.to_vec();
-            hash
+            self.delta.digest(
+                b"software-diff",
+                self.renderer.pixels().iter().map(|&p| p.into()),
+            )
         }
     }
 
