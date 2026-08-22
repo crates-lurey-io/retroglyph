@@ -101,7 +101,7 @@ wasm-bindgen-futures = "0.4"
 # `crates/software`, `crates/terminal-wasm`, `examples`), so this crate's own manifest states the
 # same requirement rather than relying on a sibling crate's pin to hold the lockfile at one version
 # for it.
-wasm-bindgen = "=0.2.126"
+wasm-bindgen = "=0.2.127"
 
 [dev-dependencies]
 # Cross-backend Output conformance harness (retroglyph#763): dev-only, so the `testing` feature's

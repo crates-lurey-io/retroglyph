@@ -129,7 +129,7 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # Version pinned to match the rest of the workspace (crates/window, crates/software, examples):
 # the CLI and the crate version must agree.
-wasm-bindgen = "=0.2.126"
+wasm-bindgen = "=0.2.127"
 web-sys = { version = "0.3", features = [
   "Window",
   "Document",
@@ -150,7 +150,7 @@ web-sys = { version = "0.3", features = [
 # does: 0.3.76 is the wasm-bindgen-test release cut from the same wasm-bindgen-repo tag as
 # wasm-bindgen 0.2.126, so it's the only version that resolves against this crate's pin. If the
 # `wasm-bindgen` pin moves, this must move in lockstep.
-wasm-bindgen-test = "=0.3.76"
+wasm-bindgen-test = "=0.3.77"
 # The context-loss recovery test (src/webgl_recovery.rs) forces a real lost/restored cycle via the
 # `WEBGL_lose_context` extension and awaits the async restore event, so it needs the extension type
 # plus a Promise-based `setTimeout` sleep. `js-sys`/`wasm-bindgen-futures`/the extra `web-sys`

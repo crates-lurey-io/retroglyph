@@ -66,7 +66,7 @@ criterion = "0.8"
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # Version pinned to match the wasm-bindgen dev-dependency in
 # examples/Cargo.toml -- the CLI and the crate version must agree.
-wasm-bindgen = "=0.2.126"
+wasm-bindgen = "=0.2.127"
 # Only used to warn on invalid `wasm_terminal_*` handles (see the `wasm` module below); this
 # crate's non-wasm32 API surface has no fallible operations and stays log-free.
 log = "0.4"
@@ -95,7 +95,7 @@ console_error_panic_hook = "0.1"
 # `just test-wasm`, which wraps `wasm-pack test --node` (Node.js, not a real browser: this crate's
 # FFI has no DOM/xterm.js dependency to exercise, only the handle registry and event decoding --
 # see that test file's own doc comment for what is and isn't reachable through this FFI).
-wasm-bindgen-test = "=0.3.76"
+wasm-bindgen-test = "=0.3.77"
 
 [[bench]]
 name = "take_output"
