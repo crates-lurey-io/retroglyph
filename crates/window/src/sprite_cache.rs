@@ -209,7 +209,7 @@ impl SpriteCache {
 
             // Apply transparent colour key if set.
             if let Some((kr, kg, kb)) = opts.transparent_color {
-                for px in pixels.chunks_exact_mut(4) {
+                for px in pixels.as_chunks_mut::<4>().0 {
                     if px[0] == kr && px[1] == kg && px[2] == kb {
                         px[3] = 0;
                     }

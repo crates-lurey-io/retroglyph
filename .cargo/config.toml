@@ -2,5 +2,13 @@
 bin = ["run", "--package", "cargo-bin", "--"]
 gen-features = ["run", "--package", "gen-features", "--"]
 
+# The MSRV job (`compile 1.88`) resolves from scratch (Cargo.lock is gitignored), and newer
+# registry releases raise rust-version past 1.88. ordered-float 5.5.0 did exactly that (requires
+# 1.90), so plain resolution started failing on the 1.88 matrix arm. This makes cargo prefer the
+# newest version whose rust-version the active toolchain satisfies, which keeps resolution moving
+# forward on stable while the 1.88 arm pins itself to what it can actually compile.
+[resolver]
+incompatible-rust-versions = "fallback"
+
 [target.'cfg(target_family = "wasm")']
 runner = "./.bin/.shims/wasm-server-runner"
