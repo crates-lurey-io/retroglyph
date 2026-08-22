@@ -7,23 +7,17 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
-
 ## [0.7.1+retroglyph-software](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-software-v0.7.0...retroglyph-software-v0.7.1) - 2026-08-22
 
 ### Refactor
 
-- [08167a4](
-https://github.com/crates-lurey-io/retroglyph/commit/08167a4814228f0fbef138fd0c2b91cae5a9c221) *(software)* Use SlotDelta for the Observable conformance snapshot by `@matanlurey` in [#1458](
-https://github.com/crates-lurey-io/retroglyph/pull/1458)
+- [08167a4](https://github.com/crates-lurey-io/retroglyph/commit/08167a4814228f0fbef138fd0c2b91cae5a9c221) _(software)_ Use SlotDelta for the Observable conformance snapshot by `@matanlurey` in [#1458](https://github.com/crates-lurey-io/retroglyph/pull/1458)
 
 ### Documentation
 
-- [71d95aa](
-https://github.com/crates-lurey-io/retroglyph/commit/71d95aa1ff59c8b243d1ba183eab8e8153d03a0f) *(workspace)* Fix rotted doc links and stop lychee flagging book-to-rustdoc links by `@matanlurey` in [#1454](
-https://github.com/crates-lurey-io/retroglyph/pull/1454)
+- [71d95aa](https://github.com/crates-lurey-io/retroglyph/commit/71d95aa1ff59c8b243d1ba183eab8e8153d03a0f) _(workspace)_ Fix rotted doc links and stop lychee flagging book-to-rustdoc links by `@matanlurey` in [#1454](https://github.com/crates-lurey-io/retroglyph/pull/1454)
 
 **Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-software-v0.7.0...retroglyph-software-v0.7.1
-
 
 ## [0.7.0+retroglyph-software](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-software-v0.6.2...retroglyph-software-v0.7.0) - 2026-08-16
 

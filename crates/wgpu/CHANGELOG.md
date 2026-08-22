@@ -7,17 +7,13 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
-
 ## [0.2.1+retroglyph-wgpu](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-wgpu-v0.2.0...retroglyph-wgpu-v0.2.1) - 2026-08-22
 
 ### Refactor
 
-- [ecbc68f](
-https://github.com/crates-lurey-io/retroglyph/commit/ecbc68fa362f62f9f545b17c498b5b89991fb53d) *(wgpu)* Use SlotDelta for the Observable conformance snapshot by `@matanlurey` in [#1460](
-https://github.com/crates-lurey-io/retroglyph/pull/1460)
+- [ecbc68f](https://github.com/crates-lurey-io/retroglyph/commit/ecbc68fa362f62f9f545b17c498b5b89991fb53d) _(wgpu)_ Use SlotDelta for the Observable conformance snapshot by `@matanlurey` in [#1460](https://github.com/crates-lurey-io/retroglyph/pull/1460)
 
 **Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-wgpu-v0.2.0...retroglyph-wgpu-v0.2.1
-
 
 ## [0.2.0+retroglyph-wgpu](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-wgpu-v0.1.2...retroglyph-wgpu-v0.2.0) - 2026-08-16
 

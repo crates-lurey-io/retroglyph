@@ -7,23 +7,17 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
-
 ## [0.6.1+retroglyph-window](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-window-v0.6.0...retroglyph-window-v0.6.1) - 2026-08-22
 
 ### Bug Fixes
 
-- [283db91](
-https://github.com/crates-lurey-io/retroglyph/commit/283db91990d176f1281019f4daec8292ff2bca47) *(window)* Use as_chunks_mut for the colour-key pass by `@matanlurey` in [#1456](
-https://github.com/crates-lurey-io/retroglyph/pull/1456)
+- [283db91](https://github.com/crates-lurey-io/retroglyph/commit/283db91990d176f1281019f4daec8292ff2bca47) _(window)_ Use as_chunks_mut for the colour-key pass by `@matanlurey` in [#1456](https://github.com/crates-lurey-io/retroglyph/pull/1456)
 
 ### Documentation
 
-- [71d95aa](
-https://github.com/crates-lurey-io/retroglyph/commit/71d95aa1ff59c8b243d1ba183eab8e8153d03a0f) *(workspace)* Fix rotted doc links and stop lychee flagging book-to-rustdoc links by `@matanlurey` in [#1454](
-https://github.com/crates-lurey-io/retroglyph/pull/1454)
+- [71d95aa](https://github.com/crates-lurey-io/retroglyph/commit/71d95aa1ff59c8b243d1ba183eab8e8153d03a0f) _(workspace)_ Fix rotted doc links and stop lychee flagging book-to-rustdoc links by `@matanlurey` in [#1454](https://github.com/crates-lurey-io/retroglyph/pull/1454)
 
 **Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-window-v0.6.0...retroglyph-window-v0.6.1
-
 
 ## [0.6.0+retroglyph-window](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-window-v0.5.2...retroglyph-window-v0.6.0) - 2026-08-16
 

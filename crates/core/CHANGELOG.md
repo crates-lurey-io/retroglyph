@@ -7,17 +7,13 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
-
 ## [0.8.1+retroglyph-core](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.8.0...retroglyph-core-v0.8.1) - 2026-08-22
 
 ### Documentation
 
-- [71d95aa](
-https://github.com/crates-lurey-io/retroglyph/commit/71d95aa1ff59c8b243d1ba183eab8e8153d03a0f) *(workspace)* Fix rotted doc links and stop lychee flagging book-to-rustdoc links by `@matanlurey` in [#1454](
-https://github.com/crates-lurey-io/retroglyph/pull/1454)
+- [71d95aa](https://github.com/crates-lurey-io/retroglyph/commit/71d95aa1ff59c8b243d1ba183eab8e8153d03a0f) _(workspace)_ Fix rotted doc links and stop lychee flagging book-to-rustdoc links by `@matanlurey` in [#1454](https://github.com/crates-lurey-io/retroglyph/pull/1454)
 
 **Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.8.0...retroglyph-core-v0.8.1
-
 
 ## [0.8.0+retroglyph-core](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-core-v0.7.1...retroglyph-core-v0.8.0) - 2026-08-16
 
