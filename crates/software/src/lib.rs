@@ -2334,8 +2334,10 @@ mod tests {
 
     impl retroglyph_core::testing::conformance::Observable for SoftwareObserver {
         fn snapshot(&mut self) -> u64 {
-            self.delta
-                .digest(b"software-diff", self.renderer.pixels().iter().map(|&p| p.into()))
+            self.delta.digest(
+                b"software-diff",
+                self.renderer.pixels().iter().map(|&p| p.into()),
+            )
         }
     }
 
