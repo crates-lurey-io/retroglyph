@@ -7,6 +7,14 @@ release-plz (git-cliff); the 0.1.0 entry below was written by hand.
 
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style no-space-in-emphasis no-multiple-blanks -->
 
+## [0.4.1+retroglyph-gl](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-gl-v0.4.0...retroglyph-gl-v0.4.1) - 2026-08-22
+
+### Refactor
+
+- [f57c571](https://github.com/crates-lurey-io/retroglyph/commit/f57c5716e94a463d7c6c8d50c748e31eb7f8beb3) _(gl)_ Use SlotDelta for the Observable conformance snapshot by `@matanlurey` in [#1459](https://github.com/crates-lurey-io/retroglyph/pull/1459)
+
+**Full Changelog**: https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-gl-v0.4.0...retroglyph-gl-v0.4.1
+
 ## [0.4.0+retroglyph-gl](https://github.com/crates-lurey-io/retroglyph/compare/retroglyph-gl-v0.3.2...retroglyph-gl-v0.4.0) - 2026-08-16
 
 ### Features
