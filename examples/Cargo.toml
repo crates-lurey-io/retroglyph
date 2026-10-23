@@ -117,7 +117,7 @@ wasm-terminal = ["retroglyph/terminal-wasm"]
 retroglyph-recorder = { path = "../crates/recorder", version = "0.1.1" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-wasm-bindgen = "=0.2.127"
+wasm-bindgen = "=0.2.129"
 console_error_panic_hook = "0.1"
 # DOM access for the FPS overlay's floating toggle button on wasm (see src/fps.rs). Features
 # unify with retroglyph-window's own web-sys.
@@ -150,7 +150,7 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 retroglyph-recorder = { path = "../crates/recorder", version = "0.1.1", features = ["pty"] }
 # `vt100` SVG rendering of the crossterm backend's ANSI output (`svg_snapshot`) -- the PTY capture
 # itself goes through `retroglyph-recorder`'s `pty` feature above, which brings in its own copy.
-vt100 = "0.16"
+vt100 = "0.18"
 
 [[example]]
 name = "01_hello_world"
