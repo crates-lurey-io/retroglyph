@@ -36,7 +36,7 @@ serde_json = "1"
 # already used elsewhere in this workspace (`examples/Cargo.toml`), so this adds no new licensing
 # question.
 portable-pty = { version = "0.9", optional = true }
-vt100 = { version = "0.16", optional = true }
+vt100 = { version = "0.18", optional = true }
 
 [dev-dependencies]
 insta = "1.34"
